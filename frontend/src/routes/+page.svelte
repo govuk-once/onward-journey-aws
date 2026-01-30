@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { v7 as uuid } from "uuid";
   import type { ListableConversationMessageProps } from "$lib/types/ConversationMessage";
   import ConversationMessageContainer from "$lib/components/ConversationMessageContainer.svelte";
   import QuestionForm from "$lib/components/QuestionForm.svelte";
   import type { SendMessageHandler } from "$lib/components/QuestionForm.svelte";
-  import { v7 as uuid } from "uuid";
   import { GenesysClient } from "$lib/services/genesysClient.js";
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
@@ -235,3 +235,34 @@
     <QuestionForm messageHandler={sendMessageHandler} disabled={isConnecting}/>
   </div>
 </main>
+
+<style>
+.app-conversation-layout__main {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 100px); /* Lock height to viewport [cite: 40] */
+  overflow: hidden; /* Prevent page scroll [cite: 41] */
+}
+
+.app-conversation-layout__wrapper {
+  flex: 1; /* Take all available middle space [cite: 42] */
+  overflow-y: auto; /* Enable internal scrolling [cite: 43] */
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-conversation-layout__fixed-footer {
+  background: white;
+  border-top: 1px solid #b1b4b6;
+  padding: 15px 0;
+}
+
+.handoff-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0;
+  border-color: #1d70b8;
+}
+</style>

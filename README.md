@@ -1,7 +1,7 @@
-# Onward Journey
+# Onward Journey (AWS Hosted)
 
 ## Summary
-A prototype for connecting users to further support after a chat session can't produce a satisfactory answer
+A prototype for connecting users to further support after a chat session can't produce a satisfactory answer, hosted on AWS
 
 ## Getting started
 
@@ -14,10 +14,6 @@ After installing `mise`, you should run `mise activate` from the root of this re
 You should also install all the tools from the [laptop-configuration repo](https://github.com/govuk-once/laptop-configuration)
 
 Install the pre-commit hooks with `pre-commit install`. This will run the hooks listed in `.pre-commit-config.yaml` before each commit
-
-## Running the application
-
-There are instructions for running the prototype application in [the `app` directory README](app/README.md)
 
 ## Deploying infrastructure
 

@@ -25,13 +25,22 @@ data "aws_secretsmanager_secret_version" "dept_contacts_db_password" {
 resource "aws_secretsmanager_secret" "genesys_credentials" {
   name        = "${var.environment}-genesys-mcp-credentials"
   description = "OAuth credentials for Genesys Cloud Platform API"
+  
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The Secret Value (To be populated manually in Console or via CLI for safety)
+# TODO: Add not to readme regarding console update
 resource "aws_secretsmanager_secret_version" "genesys_credentials_val" {
   secret_id = aws_secretsmanager_secret.genesys_credentials.id
   secret_string = jsonencode({
-    client_id     = "GENESYS_CLIENT_ID"
-    client_secret = "GENESYS_CLIENT_SECRET"
+    client_id     = "REPLACE_IN_CONSOLE"
+    client_secret = "REPLACE_IN_CONSOLE"
+    org_id        = "REPLACE_IN_CONSOLE"
   })
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }

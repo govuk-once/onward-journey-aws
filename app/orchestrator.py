@@ -15,7 +15,7 @@ from botocore.config import Config
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from langchain_aws import ChatBedrockConverse
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
@@ -40,10 +40,19 @@ STRICT FILTERING RULES:
 1. IDENTIFY: Determine exactly which government department the user is asking about (e.g., DWP, HMRC, Home Office).
 2. FILTER: When you receive tool results, look at the 'service' and 'info' fields.
 3. OMIT: If a result belongs to a DIFFERENT department than the one requested, you MUST NOT list its details.
-4. TRIAGE CONTACT METHODS:
-   - If a valid 'live_chat_identifier' is present for the requested service, you MUST tell the user that a live agent service is available and provide the ID.
-   - If 'live_chat_identifier' is missing, null, or empty, provide the 'phone_number' as the primary contact method instead.
-5. EXCEPTION: If NO results match the requested department, inform the user you couldn't find a direct match but mention the closest government service available.
+
+ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
+1. CHECK AVAILABILITY: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding.
+2. OFFER CHAT: If agents are available, offer the user the option to connect to a live person.
+3. HANDOVER SUMMARY (BRIEFING NOTE): If the user agrees to connect, you must generate a 2-3 sentence 'summary'.
+   - DESTINATION: A professional 'Briefing Note' for the human advisor via the 'connect_to_live_chat' tool.
+   - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
+   - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
+   - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
+4. PHONE FALLBACK: If 'live_chat_identifier' is missing, null, empty, or if agents are currently OFFLINE, you MUST provide the 'phone_number' as the primary contact method instead.
+
+EXCEPTION RULES:
+1. NO MATCH: If NO results match the requested department, inform the user you couldn't find a direct match but mention the closest government service available based on the database results.
 
 STRICT FORMATTING RULES:
 1. Start your response immediately with the department details or a helpful opening sentence.
@@ -81,74 +90,39 @@ custom_config = Config(
     retries={"max_attempts": 0},
 )
 
-agent_runtime = boto3.client(
-    "bedrock-agentcore",
-    region_name=AWS_REGION,
-    endpoint_url=f"https://{ENDPOINT_URL}" if ENDPOINT_URL else None,
-    config=custom_config,
-)
+# Internal helper for signed MCP Gateway calls
+def signed_gateway_post(payload):
+    """Helper to sign and send requests to the VPC endpoint."""
+    session_http = requests.Session()
+    creds = boto3.Session().get_credentials()
+    public_host = GATEWAY_URL.replace("https://", "").split("/")[0]
+    vpc_destination = f"https://{GATEWAY_ENDPOINT_URL}/mcp"
 
+    req = AWSRequest(
+        method="POST",
+        url=GATEWAY_URL,
+        data=json.dumps(payload),
+        headers={"Content-Type": "application/json", "Host": public_host},
+    )
+    SigV4Auth(creds, "bedrock-agentcore", AWS_REGION).add_auth(req)
+    return session_http.post(
+        vpc_destination, data=req.data, headers=dict(req.headers), timeout=30
+    )
 
 @tool
 def query_department_database(query: str, config: RunnableConfig):
     """Queries the gov department database for contact details via the Gateway MCP endpoint."""
 
-    session_http = requests.Session()
-    creds = boto3.Session().get_credentials()
-    public_host = GATEWAY_URL.replace("https://", "").split("/")[0]
-    # We use the VPC destination we established earlier
-    vpc_destination = f"https://{GATEWAY_ENDPOINT_URL}/mcp"
+    # STEP 1: MCP Handshake
+    signed_gateway_post({
+        "jsonrpc": "2.0", "id": "init-1", "method": "initialize",
+        "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "onward-journey-orchestrator", "version": "1.0.0"}},
+    })
 
-    def signed_post(payload):
-        """Helper to sign and send requests to the VPC endpoint."""
-        req = AWSRequest(
-            method="POST",
-            url=GATEWAY_URL,
-            data=json.dumps(payload),
-            headers={"Content-Type": "application/json", "Host": public_host},
-        )
-        SigV4Auth(creds, "bedrock-agentcore", AWS_REGION).add_auth(req)
-        return session_http.post(
-            vpc_destination, data=req.data, headers=dict(req.headers), timeout=30
-        )
-
-    # STEP 1: MCP Handshake (Initialisation)
-    # The Gateway requires this to "unlock" the tools for your session
-    init_payload = {
-        "jsonrpc": "2.0",
-        "id": "init-1",
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "onward-journey-orchestrator", "version": "1.0.0"},
-        },
-    }
-    signed_post(init_payload)
-
-    # STEP 2: List Tools (Discovery)
-    # This will print the EXACT name to the logs
-    list_payload = {
-        "jsonrpc": "2.0",
-        "id": "list-1",
-        "method": "tools/list",
-        "params": {},
-    }
-    list_resp = signed_post(list_payload)
-    available_tools = list_resp.json().get("result", {}).get("tools", [])
-    tool_names = [t.get("name") for t in available_tools]
-    print(f"📋 AVAILABLE TOOLS IN GATEWAY: {tool_names}")
-
-    # STEP 3: The Actual Call
-    # TODO: Change hardcoded target_name to be populated dynamically
-    target_name = "sw-rds-search-tool__query_department_database"
-    if tool_names:
-        # If the list returned tools, use the first one that matches our logic
-        target_name = tool_names[0]
-
+    # STEP 2: The Call
     call_payload = {
         "jsonrpc": "2.0",
-        "id": f"call-{str(uuid.uuid4())[:8]}",  # Unique ID to help with debugging
+        "id": f"call-{str(uuid.uuid4())[:8]}",
         "method": "tools/call",
         "params": {
             "name": "sw-rds-search-tool___query_department_database",
@@ -156,69 +130,98 @@ def query_department_database(query: str, config: RunnableConfig):
         },
     }
 
-    response = signed_post(call_payload)
-
-    if response.status_code != 200:
-        raise Exception(f"Gateway Error ({response.status_code}): {response.text}")
-
+    response = signed_gateway_post(call_payload)
     result_data = response.json()
-    # MCP result extraction
     content = result_data.get("result", {}).get("content", [])
-    if content and "text" in content[0]:
-        return content[0]["text"]
+    return content[0]["text"] if content else "ERROR: No matching records found."
 
-    return "ERROR: No matching records found in the department database."
+@tool
+def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str = None, summary: str = None):
+    """
+    Handles Genesys Cloud interactions (availability and handoff).
+    'summary' should be a 2-3 sentence Briefing Note from long-term memory.
+    """
+    call_payload = {
+        "jsonrpc": "2.0",
+        "id": f"gen-{str(uuid.uuid4())[:8]}",
+        "method": "tools/call",
+        "params": {
+            "name": f"sw-genesys-tool___{method}",
+            "arguments": {
+                "live_chat_identifier": live_chat_identifier,
+                "reason": reason,
+                "summary": summary
+            },
+        },
+    }
+    response = signed_gateway_post(call_payload)
+    result_data = response.json()
+    content = result_data.get("result", {}).get("content", [])
+    return content[0]["text"] if content else "ERROR: Genesys service unavailable."
 
+# --- ONWARD JOURNEY ROUTER ---
+def onward_journey_router(state: State):
+    """
+    Traffic controller for the Onward Journey.
+    Determines if we should check Genesys after an RDS search.
+    """
+    last_message = state["messages"][-1]
+
+    # If the database search returned a chat ID, move to Genesys Check.
+    # Otherwise, return to the chatbot to present the results (e.g., phone).
+    if isinstance(last_message, ToolMessage) and "live_chat_identifier" in last_message.content:
+        return "check_availability"
+
+    return "finish_response"
 
 # Bind the tools to the LLM
-tools = [query_department_database]
+tools = [query_department_database, genesys_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
-
 
 def chatbot(state: State):
     """Primary reasoning node for the agent that uses the bound tools."""
     sys_msg = SystemMessage(content=SYSTEM_PROMPT)
-
-    # Filter out any existing system messages to prevent 'System Bloat' and ensure the instruction is always at index 0.
-    filtered_messages = [
-        msg for msg in state["messages"] if not isinstance(msg, SystemMessage)
-    ]
-
-    # Construct the final list for this specific invocation
+    filtered_messages = [msg for msg in state["messages"] if not isinstance(msg, SystemMessage)]
     call_history = [sys_msg] + filtered_messages
-
-    # Invoke the model
     response = llm_with_tools.invoke(call_history)
-
     return {"messages": [response]}
-
 
 # Build the Graph
 workflow = StateGraph(State)
 
 # 1. Add Nodes
 workflow.add_node("chatbot", chatbot)
-workflow.add_node("tools", ToolNode(tools))
+workflow.add_node("rds_search", ToolNode([query_department_database]))
+workflow.add_node("genesys_check", ToolNode([genesys_live_chat_tools]))
 
 # 2. Define Flow
 workflow.add_edge(START, "chatbot")
 
-# 3. The Decision Point
+# 3. The LLM Decision Point
 workflow.add_conditional_edges(
     "chatbot",
     tools_condition,
     {
-        "tools": "tools",  # If tools_condition returns "tools", go to our tools node
-        "__end__": END,  # If tools_condition returns "__end__", we are done
+        "tools": "rds_search",  # LLM wants to search RDS
+        "__end__": END,
     },
 )
 
-# 4. The Loop
-# After tools are finished, always go back to chatbot for the final answer
-workflow.add_edge("tools", "chatbot")
+# 4. The Onward Journey Switch
+# Routes the result of the RDS search to either Genesys or back to the bot
+workflow.add_conditional_edges(
+    "rds_search",
+    onward_journey_router,
+    {
+        "check_availability": "genesys_check",
+        "finish_response": "chatbot"
+    }
+)
+
+# 5. Return to Chatbot
+workflow.add_edge("genesys_check", "chatbot")
 
 # Initialise AgentCore Memory (The "Checkpointer")
-# Automatically persists state to the AWS Bedrock Session Management service
 checkpointer = AgentCoreMemorySaver(
     memory_id=MEMORY_ID,
     region_name=AWS_REGION,

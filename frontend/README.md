@@ -25,6 +25,7 @@ npm run dev -- --open
 ## Testing
 
 You can run the jest unit tests by running:
+
 ```sh
 npm run test
 ```

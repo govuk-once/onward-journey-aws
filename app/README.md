@@ -1,5 +1,10 @@
 # Onward Journey Agent System
 
+**DISCLAIMER**: This directory contains the variant of the Onward Journey agent which runs locally from `govuk-once/onward-journey`, and the final version of the agent which runs in AWS is likely to be structured quite differently. Below is the README from the local variant
+
+---
+
+
 This project implements a specialized Multi-Tool RAG Agent built with Amazon Bedrock (Claude 3.7 Sonnet). It is designed to handle conversation handoffs from a general chatbot, providing grounded answers using internal data, public GOV.UK records, or escalating to a live human agent via Genesys Cloud.
 
 ---

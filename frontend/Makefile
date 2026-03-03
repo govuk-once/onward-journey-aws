@@ -1,7 +1,7 @@
 .PHONY: prepare
 
 prepare:
-	mkdir -p static/assets
+	mkdir -p static/assets/images static/assets/fonts static/assets/rebrand
 	cp -r node_modules/govuk-frontend/dist/govuk/assets/images/* static/assets/images
 	cp -r node_modules/govuk-frontend/dist/govuk/assets/fonts/* static/assets/fonts
 	cp -r node_modules/govuk-frontend/dist/govuk/assets/rebrand/* static/assets/rebrand

@@ -24,6 +24,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
 
+ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
 GATEWAY_ENDPOINT_URL = os.environ.get("GATEWAY_ENDPOINT_URL")
 MEMORY_ID = os.environ.get("MEMORY_ID")
@@ -41,15 +42,18 @@ STRICT FILTERING RULES:
 2. FILTER: When you receive tool results, look at the 'service' and 'info' fields.
 3. OMIT: If a result belongs to a DIFFERENT department than the one requested, you MUST NOT list its details.
 
-ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
-1. CHECK AVAILABILITY: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding.
-2. OFFER CHAT: If agents are available, offer the user the option to connect to a live person.
-3. HANDOVER SUMMARY (BRIEFING NOTE): If the user agrees to connect, you must generate a 2-3 sentence 'summary'.
-   - DESTINATION: A professional 'Briefing Note' for the human advisor via the 'connect_to_live_chat' tool.
-   - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
-   - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
-   - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
-4. PHONE FALLBACK: If 'live_chat_identifier' is missing, null, empty, or if agents are currently OFFLINE, you MUST provide the 'phone_number' as the primary contact method instead.
+ONWARD JOURNEY (LIVE CHAT) RULES:
+1. MANDATORY CHECK: If 'live_chat_identifier' is found, you MUST call 'genesys_live_chat_tools' with method='check_chat_availability'.
+2. INTERPRET RESULTS:
+   - If the tool result contains "ONLINE", you MUST explicitly tell the user: "We have agents available right now. Would you like me to connect you to a live person?" If a wait time is available, tell the user what the estimated wait time is.
+   - If the tool result contains "OFFLINE" or an error, provide the phone number only.
+3. STOP AND WAIT: Do not call 'connect_to_live_chat' until the user says "Yes" or "Please connect me".
+4. DO NOT source information outside of the tools available to you.
+
+ONWARD JOURNEY (LIVE CHAT) RULES:
+1. CHECK FIRST: If a 'live_chat_identifier' exists, you MUST call 'genesys_live_chat_tools' with method='check_chat_availability'.
+2. OFFER, DON'T FORCE: If agents are available, inform the user and ASK if they would like to connect.
+3. CONNECT LATER: Call method='connect_to_live_chat' ONLY IF the user explicitly says yes.
 
 EXCEPTION RULES:
 1. NO MATCH: If NO results match the requested department, inform the user you couldn't find a direct match but mention the closest government service available based on the database results.
@@ -140,14 +144,30 @@ def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str 
     """
     Handles Genesys Cloud interactions (availability and handoff).
     'summary' should be a 2-3 sentence Briefing Note from long-term memory.
+    'method' MUST be exactly one of:
+    - 'check_chat_availability': Use this first to see if agents are online.
+    - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
     """
+
+    # Map the method to the specific Gateway Target name defined in Terraform
+    target_map = {
+        "check_chat_availability": f"{ENV_PREFIX}-genesys-availability",
+        "connect_to_live_chat": f"{ENV_PREFIX}-genesys-handoff"
+    }
+
+    target_name = target_map.get(method)
+
+    if not target_name:
+        return f"ERROR: Unknown Genesys method: {method}"
+
     call_payload = {
         "jsonrpc": "2.0",
         "id": f"gen-{str(uuid.uuid4())[:8]}",
         "method": "tools/call",
         "params": {
-            "name": f"sw-genesys-tool___{method}",
+            "name": f"{target_name}___{method}",
             "arguments": {
+                "method": method,
                 "live_chat_identifier": live_chat_identifier,
                 "reason": reason,
                 "summary": summary
@@ -156,34 +176,36 @@ def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str 
     }
     response = signed_gateway_post(call_payload)
     result_data = response.json()
+
+    # Debug: Check for Gateway-level errors (Method not found, etc.)
+    if "error" in result_data:
+        print(f"GATEWAY ERROR: {json.dumps(result_data['error'])}")
+        return f"ERROR: Gateway rejected call: {result_data['error'].get('message')}"
+
     content = result_data.get("result", {}).get("content", [])
     return content[0]["text"] if content else "ERROR: Genesys service unavailable."
 
-# --- ONWARD JOURNEY ROUTER ---
-def onward_journey_router(state: State):
-    """
-    Traffic controller for the Onward Journey.
-    Determines if we should check Genesys after an RDS search.
-    """
-    last_message = state["messages"][-1]
-
-    # If the database search returned a chat ID, move to Genesys Check.
-    # Otherwise, return to the chatbot to present the results (e.g., phone).
-    if isinstance(last_message, ToolMessage) and "live_chat_identifier" in last_message.content:
-        return "check_availability"
-
-    return "finish_response"
 
 # Bind the tools to the LLM
+# Tools are kept separate to allow the AI agent to choose the specific action.
 tools = [query_department_database, genesys_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
     """Primary reasoning node for the agent that uses the bound tools."""
-    sys_msg = SystemMessage(content=SYSTEM_PROMPT)
-    filtered_messages = [msg for msg in state["messages"] if not isinstance(msg, SystemMessage)]
-    call_history = [sys_msg] + filtered_messages
-    response = llm_with_tools.invoke(call_history)
+    messages = state["messages"]
+
+    # --- DEBUG LOOP ---
+    print("\n--- BEGIN HISTORY DEBUG ---", flush=True)
+    for i, m in enumerate(messages):
+        msg_id = getattr(m, 'id', 'No ID')
+        tool_id = getattr(m, 'tool_call_id', 'N/A')
+        print(f"INDEX {i} | Type: {type(m).__name__} | Msg ID: {msg_id} | Tool ID: {tool_id} | Content: {str(m.content)[:50]}", flush=True)
+    print("--- END HISTORY DEBUG ---\n", flush=True)
+
+    # Call the model with the full, unfiltered state history.
+    response = llm_with_tools.invoke(messages)
+
     return {"messages": [response]}
 
 # Build the Graph
@@ -191,8 +213,7 @@ workflow = StateGraph(State)
 
 # 1. Add Nodes
 workflow.add_node("chatbot", chatbot)
-workflow.add_node("rds_search", ToolNode([query_department_database]))
-workflow.add_node("genesys_check", ToolNode([genesys_live_chat_tools]))
+workflow.add_node("execute_tools", ToolNode(tools))
 
 # 2. Define Flow
 workflow.add_edge(START, "chatbot")
@@ -202,24 +223,14 @@ workflow.add_conditional_edges(
     "chatbot",
     tools_condition,
     {
-        "tools": "rds_search",  # LLM wants to search RDS
+        "tools": "execute_tools",
         "__end__": END,
     },
 )
 
-# 4. The Onward Journey Switch
-# Routes the result of the RDS search to either Genesys or back to the bot
-workflow.add_conditional_edges(
-    "rds_search",
-    onward_journey_router,
-    {
-        "check_availability": "genesys_check",
-        "finish_response": "chatbot"
-    }
-)
-
-# 5. Return to Chatbot
-workflow.add_edge("genesys_check", "chatbot")
+# 4. The Return Loop
+# Every tool result must return to the chatbot to sync conversation state.
+workflow.add_edge("execute_tools", "chatbot")
 
 # Initialise AgentCore Memory (The "Checkpointer")
 checkpointer = AgentCoreMemorySaver(
@@ -271,8 +282,17 @@ def lambda_handler(event, context):
         """Generator for real-time LangGraph message streaming."""
         print("Connecting to Bedrock AgentCore...")
 
+        # Define the initial state with the SystemMessage + User Input
+        # This ensures the model always has its rules at Index 0.
+        initial_input = {
+            "messages": [
+                SystemMessage(content=SYSTEM_PROMPT),
+                ("user", str(user_input))
+            ]
+        }
+
         for chunk, metadata in app.stream(
-            {"messages": [("user", str(user_input))]}, config, stream_mode="messages"
+            initial_input, config, stream_mode="messages"
         ):
             if chunk.content:
                 print(f"Received chunk from node: {metadata.get('langgraph_node')}")

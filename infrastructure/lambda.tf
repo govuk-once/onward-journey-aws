@@ -60,7 +60,7 @@ resource "aws_lambda_function" "orchestrator" {
 
   environment {
     variables = {
-
+      ENV_PREFIX = var.environment
       # URL for AgentCore
       AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.bedrock_agentcore.dns_entry[0]["dns_name"]
       # URL for Claude (Inference)

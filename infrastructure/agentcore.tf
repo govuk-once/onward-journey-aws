@@ -56,3 +56,78 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
     gateway_iam_role {} # Use the Gateway's role to invoke the Lambda
   }
 }
+
+
+### AGENTCORE GATEWAY TARGET: GENESYS AVAILABILITY
+resource "aws_bedrockagentcore_gateway_target" "genesys_availability" {
+  name               = "${var.environment}-genesys-availability"
+  gateway_identifier = aws_bedrockagentcore_gateway.tool_interface.gateway_id
+
+  target_configuration {
+    mcp {
+      lambda {
+        lambda_arn = aws_lambda_function.genesys_tool.arn
+        tool_schema {
+          inline_payload {
+            name        = "check_chat_availability"
+            description = "Checks if human advisers are online and gets the estimated wait time."
+            input_schema {
+              type = "object"
+              property {
+                name        = "live_chat_identifier"
+                type        = "string"
+                description = "The unique ID for the department's chat queue."
+                required    = true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  credential_provider_configuration {
+    gateway_iam_role {}
+  }
+}
+
+## AGENTCORE GATEWAY TARGET: GENESYS HANDOFF
+resource "aws_bedrockagentcore_gateway_target" "genesys_handoff" {
+  name               = "${var.environment}-genesys-handoff"
+  gateway_identifier = aws_bedrockagentcore_gateway.tool_interface.gateway_id
+
+  target_configuration {
+    mcp {
+      lambda {
+        lambda_arn = aws_lambda_function.genesys_tool.arn
+        tool_schema {
+          inline_payload {
+            name        = "connect_to_live_chat"
+            description = "Initiates a handoff to a human adviser with a summary of the conversation."
+            input_schema {
+              type = "object"
+              property {
+                name        = "live_chat_identifier"
+                type        = "string"
+                description = "The unique ID for the department's chat queue."
+                required    = true
+              }
+              property {
+                name        = "reason"
+                type        = "string"
+                description = "Short reason for the handoff."
+              }
+              property {
+                name        = "summary"
+                type        = "string"
+                description = "A 2-3 sentence briefing note for the human adviser."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  credential_provider_configuration {
+    gateway_iam_role {}
+  }
+}

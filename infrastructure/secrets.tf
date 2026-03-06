@@ -25,7 +25,7 @@ data "aws_secretsmanager_secret_version" "dept_contacts_db_password" {
 resource "aws_secretsmanager_secret" "genesys_credentials" {
   name        = "${var.environment}-genesys-mcp-credentials"
   description = "OAuth credentials for Genesys Cloud Platform API"
-  
+
   lifecycle {
     prevent_destroy = true
   }

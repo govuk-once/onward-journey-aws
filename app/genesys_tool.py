@@ -140,17 +140,15 @@ def get_queue_status(queue_id: str):
 
 
 def lambda_handler(event: Dict[str, Any], context: Any):
-    print(json.dumps(event)
+    print(json.dumps(event))
 
     # Log the Session ID for tracing with AgentCore Memory
     session_id = event.get("session_id", "UNKNOWN_SESSION")
     print(f"GENESYS TOOL CALL | Session: {session_id} | Event: {json.dumps(event)}")
 
-    params = event.get("params", {})
-    args = params.get("arguments", {})
-
+    args = event
     method = event.get("method")
-    chat_id = args.get("live_chat_identifier")
+    chat_id = event.get("live_chat_identifier")
     request_id = event.get("id")
 
 

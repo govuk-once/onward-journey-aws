@@ -141,10 +141,11 @@ def query_department_database(query: str, config: RunnableConfig):
     return content[0]["text"] if content else "ERROR: No matching records found."
 
 @tool
-def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str = None, summary: str = None):
+def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str):
     """
     Handles Genesys Cloud interactions (availability and handoff).
     'summary' should be a 2-3 sentence Briefing Note from long-term memory.
+    'reason' should be a short explanation for the handoff.
     'method' MUST be exactly one of:
     - 'check_chat_availability': Use this first to see if agents are online.
     - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
@@ -184,6 +185,12 @@ def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str 
         return f"ERROR: Gateway rejected call: {result_data['error'].get('message')}"
 
     content = result_data.get("result", {}).get("content", [])
+    result_text = content[0]["text"] if content else "ERROR: Genesys service unavailable."
+
+    # --- HANDOFF STATUS LOG ---
+    if method == "connect_to_live_chat" and "SIGNAL" in result_text:
+        print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | ID: {call_payload['id']}")
+
     return content[0]["text"] if content else "ERROR: Genesys service unavailable."
 
 
@@ -196,13 +203,6 @@ def chatbot(state: State):
     """Primary reasoning node for the agent that uses the bound tools."""
     messages = state["messages"]
 
-    # --- DEBUG LOOP ---
-    print("\n--- BEGIN HISTORY DEBUG ---", flush=True)
-    for i, m in enumerate(messages):
-        msg_id = getattr(m, 'id', 'No ID')
-        tool_id = getattr(m, 'tool_call_id', 'N/A')
-        print(f"INDEX {i} | Type: {type(m).__name__} | Msg ID: {msg_id} | Tool ID: {tool_id} | Content: {str(m.content)[:50]}", flush=True)
-    print("--- END HISTORY DEBUG ---\n", flush=True)
 
     # Call the model with the full, unfiltered state history.
     response = llm_with_tools.invoke(messages)
@@ -283,8 +283,6 @@ def lambda_handler(event, context):
         """Generator for real-time LangGraph message streaming."""
         print("Connecting to Bedrock AgentCore...")
 
-        # Define the initial state with the SystemMessage + User Input
-        # This ensures the model always has its rules at Index 0.
         initial_input = {
             "messages": [
                 SystemMessage(content=SYSTEM_PROMPT),
@@ -292,24 +290,51 @@ def lambda_handler(event, context):
             ]
         }
 
+        # Tracker to ensure we only print each fully-formed message once
+        logged_message_ids = set()
+
         for chunk, metadata in app.stream(
             initial_input, config, stream_mode="messages"
         ):
-            if chunk.content:
-                print(f"Received chunk from node: {metadata.get('langgraph_node')}")
-                # Only yield if the chunk comes from the 'chatbot' node
-                if metadata.get("langgraph_node") == "chatbot":
-                    # If content is a list (common with Claude 4.5/3.5 content blocks), we need to extract the text.
-                    if chunk.content:
-                        if isinstance(chunk.content, list):
-                            for block in chunk.content:
-                                if (
-                                    isinstance(block, dict)
-                                    and block.get("type") == "text"
-                                ):
-                                    yield block.get("text", "")
-                        else:
-                            yield chunk.content
+            msg_id = getattr(chunk, 'id', None)
+            node = metadata.get('langgraph_node', 'unknown')
+
+            # --- DEBUG LOGGING LOGIC ---
+            # Check if this chunk contains the actual payload we want to log
+            has_content = bool(chunk.content)
+            # IMPORTANT: For tool calls in streams, 'tool_call_chunks' is often used instead of 'tool_calls'
+            has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
+            is_tool_result = isinstance(chunk, ToolMessage)
+
+            # Only log if we have actual data to show (content, tool args, or result)
+            if msg_id and msg_id not in logged_message_ids and (has_content or has_tool_chunks or is_tool_result):
+                msg_type = type(chunk).__name__
+
+                if has_tool_chunks:
+                    # Extract info. from the chunk
+                    t_chunk = chunk.tool_call_chunks[0]
+                    display_content = f"🛠️ TOOL CALL: {t_chunk.get('name')}"
+                elif is_tool_result:
+                    display_content = f"📥 TOOL RESULT: {str(chunk.content)[:100]}"
+                else:
+                    # Capture the start of the final response
+                    text = chunk.content[0].get('text', '') if isinstance(chunk.content, list) else chunk.content
+                    display_content = str(text)[:100].replace('\n', ' ')
+
+                # Only mark as 'logged' if we actually found data, otherwise wait for next chunk of same ID
+                if display_content:
+                    print(f"--- GRAPH STEP | Node: {node} ---", flush=True)
+                    print(f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...", flush=True)
+                    logged_message_ids.add(msg_id)
+
+            # --- YIELDING LOGIC (For the actual response stream) ---
+            if node == "chatbot" and has_content:
+                if isinstance(chunk.content, list):
+                    for block in chunk.content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            yield block.get("text", "")
+                else:
+                    yield chunk.content
 
     # --- TEST CODE ---
     # Currently used for Function URL compatibility without streaming enabled.

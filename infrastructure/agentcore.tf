@@ -114,12 +114,14 @@ resource "aws_bedrockagentcore_gateway_target" "genesys_handoff" {
               property {
                 name        = "reason"
                 type        = "string"
-                description = "Short reason for the handoff."
+                description = "Short reason for the handoff. You MUST provide a professional string here (e.g., 'Assistance with driving licence renewal')."
+                required    = true
               }
               property {
                 name        = "summary"
                 type        = "string"
-                description = "A 2-3 sentence briefing note for the human adviser."
+                description = "A 2-3 sentence briefing note for the human adviser. You MUST provide a string focusing on the current user's unresolved issue or query."
+                required    = true
               }
             }
           }

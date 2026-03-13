@@ -43,7 +43,7 @@ STRICT FILTERING RULES:
 3. OMIT: If a result belongs to a DIFFERENT department than the one requested, you MUST NOT list its details.
 
 ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
-1. MANDATORY CHECK: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding by calling 'genesys_live_chat_tools' with method='check_chat_availability'.
+1. MANDATORY CHECK: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding by calling 'crm_live_chat_tools' with method='check_chat_availability'.
 2. INTERPRET RESULTS & OFFER:
    - If the tool result contains "ONLINE": You MUST explicitly tell the user: "We have agents available right now. Would you like me to connect you to a live person?" If a wait time is available, tell the user what the estimated wait time is.
    - OFFER, DON'T FORCE: Inform the user and ASK if they would like to connect.
@@ -141,9 +141,9 @@ def query_department_database(query: str, config: RunnableConfig):
     return content[0]["text"] if content else "ERROR: No matching records found."
 
 @tool
-def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str):
+def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str):
     """
-    Handles Genesys Cloud interactions (availability and handoff).
+    Handles CRM interactions (availability and handoff).
     'summary' should be a 2-3 sentence Briefing Note from long-term memory.
     'reason' should be a short explanation for the handoff.
     'method' MUST be exactly one of:
@@ -153,14 +153,14 @@ def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str,
 
     # Map the method to the specific Gateway Target name defined in Terraform
     target_map = {
-        "check_chat_availability": f"{ENV_PREFIX}-genesys-availability",
-        "connect_to_live_chat": f"{ENV_PREFIX}-genesys-handoff"
+        "check_chat_availability": f"{ENV_PREFIX}-crm-availability",
+        "connect_to_live_chat": f"{ENV_PREFIX}-crm-handoff"
     }
 
     target_name = target_map.get(method)
 
     if not target_name:
-        return f"ERROR: Unknown Genesys method: {method}"
+        return f"ERROR: Unknown crm method: {method}"
 
     call_payload = {
         "jsonrpc": "2.0",
@@ -185,18 +185,18 @@ def genesys_live_chat_tools(method: str, live_chat_identifier: str, reason: str,
         return f"ERROR: Gateway rejected call: {result_data['error'].get('message')}"
 
     content = result_data.get("result", {}).get("content", [])
-    result_text = content[0]["text"] if content else "ERROR: Genesys service unavailable."
+    result_text = content[0]["text"] if content else "ERROR: crm service unavailable."
 
     # --- HANDOFF STATUS LOG ---
     if method == "connect_to_live_chat" and "SIGNAL" in result_text:
         print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | ID: {call_payload['id']}")
 
-    return content[0]["text"] if content else "ERROR: Genesys service unavailable."
+    return content[0]["text"] if content else "ERROR: crm service unavailable."
 
 
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
-tools = [query_department_database, genesys_live_chat_tools]
+tools = [query_department_database, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):

@@ -58,15 +58,15 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
 }
 
 
-### AGENTCORE GATEWAY TARGET: GENESYS AVAILABILITY
-resource "aws_bedrockagentcore_gateway_target" "genesys_availability" {
-  name               = "${var.environment}-genesys-availability"
+### AGENTCORE GATEWAY TARGET: CRM LIVE CHAT QUEUE AVAILABILITY
+resource "aws_bedrockagentcore_gateway_target" "crm_availability" {
+  name               = "${var.environment}-crm-availability"
   gateway_identifier = aws_bedrockagentcore_gateway.tool_interface.gateway_id
 
   target_configuration {
     mcp {
       lambda {
-        lambda_arn = aws_lambda_function.genesys_tool.arn
+        lambda_arn = aws_lambda_function.crm_tool.arn
         tool_schema {
           inline_payload {
             name        = "check_chat_availability"
@@ -88,17 +88,21 @@ resource "aws_bedrockagentcore_gateway_target" "genesys_availability" {
   credential_provider_configuration {
     gateway_iam_role {}
   }
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation,
+    aws_lambda_permission.allow_bedrock_gateway_crm
+  ]
 }
 
-## AGENTCORE GATEWAY TARGET: GENESYS HANDOFF
-resource "aws_bedrockagentcore_gateway_target" "genesys_handoff" {
-  name               = "${var.environment}-genesys-handoff"
+## AGENTCORE GATEWAY TARGET: CRM HANDOFF
+resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
+  name               = "${var.environment}-crm-handoff"
   gateway_identifier = aws_bedrockagentcore_gateway.tool_interface.gateway_id
 
   target_configuration {
     mcp {
       lambda {
-        lambda_arn = aws_lambda_function.genesys_tool.arn
+        lambda_arn = aws_lambda_function.crm_tool.arn
         tool_schema {
           inline_payload {
             name        = "connect_to_live_chat"
@@ -132,4 +136,8 @@ resource "aws_bedrockagentcore_gateway_target" "genesys_handoff" {
   credential_provider_configuration {
     gateway_iam_role {}
   }
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation,
+    aws_lambda_permission.allow_bedrock_gateway_crm
+  ]
 }

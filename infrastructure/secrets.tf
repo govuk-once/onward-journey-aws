@@ -22,19 +22,45 @@ data "aws_secretsmanager_secret_version" "dept_contacts_db_password" {
   secret_id = aws_secretsmanager_secret.dept_contacts_db_password.id
 }
 
-resource "aws_secretsmanager_secret" "genesys_credentials" {
-  name        = "${var.environment}-genesys-mcp-credentials"
-  description = "OAuth credentials for Genesys Cloud Platform API"
+
+# Home Office CRM Secret
+resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
+  # Naming by Department + Provider
+  name        = "${var.environment}/crm-creds/home-office-genesys"
+  description = "OAuth credentials for the Home Office Genesys Cloud instance"
 
   lifecycle {
     prevent_destroy = true
   }
 }
 
-# The Secret Value (To be populated manually in Console or via CLI for safety)
-# TODO: Add not to readme regarding console update
-resource "aws_secretsmanager_secret_version" "genesys_credentials_val" {
-  secret_id = aws_secretsmanager_secret.genesys_credentials.id
+# The placeholder structure for manual population in Console via CLI for safety
+# TODO: Add note to readme regarding console update
+resource "aws_secretsmanager_secret_version" "ho_crm_val" {
+  secret_id = aws_secretsmanager_secret.ho_genesys_credentials.id
+  secret_string = jsonencode({
+    client_id     = "REPLACE_IN_CONSOLE"
+    client_secret = "REPLACE_IN_CONSOLE"
+    org_id        = "REPLACE_IN_CONSOLE"
+  })
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# DVLA CRM Secret
+resource "aws_secretsmanager_secret" "dvla_genesys_credentials" {
+  name        = "${var.environment}/crm-creds/dvla-genesys"
+  description = "OAuth credentials for the DVLA Genesys Cloud instance"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# The placeholder structure for manual population in Console via CLI for safety
+resource "aws_secretsmanager_secret_version" "dvla_crm_val" {
+  secret_id = aws_secretsmanager_secret.dvla_genesys_credentials.id
   secret_string = jsonencode({
     client_id     = "REPLACE_IN_CONSOLE"
     client_secret = "REPLACE_IN_CONSOLE"

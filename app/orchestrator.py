@@ -54,6 +54,8 @@ ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
    - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
    - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
    - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
+   - ANCHORING THE SIGNAL: Once the tool returns a 'SIGNAL' string, you MUST confirm the connection to the user (e.g., "I'm connecting you now...") and then append the exact 'SIGNAL' string to the very end of your response.
+     The signal is a 'Switchboard Trigger' for the frontend system; you must not modify it or add any text after it.
 5. DO NOT source information outside of the tools available to you.
 
 EXCEPTION RULES:
@@ -333,7 +335,8 @@ def lambda_handler(event, context):
                     for block in chunk.content:
                         if isinstance(block, dict) and block.get("type") == "text":
                             yield block.get("text", "")
-                else:
+                # SAFETY: If the LLM returns a raw string instead of a block list
+                elif isinstance(chunk.content, str):
                     yield chunk.content
 
     # --- TEST CODE ---

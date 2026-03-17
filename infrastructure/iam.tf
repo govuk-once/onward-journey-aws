@@ -251,7 +251,7 @@ resource "aws_iam_role" "crm_tool_role" {
 
 resource "aws_iam_policy" "crm_tool_permissions" {
   name        = "${var.environment}-crm-tool-permissions"
-  description = "Allows the CRM Tool to fetch OAuth credentials and log to CloudWatch."
+  description = "Allows the CRM Tool to fetch OAuth credentials prefixed with its environment and crm-creds/. Can log to CloudWatch."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -270,7 +270,7 @@ resource "aws_iam_policy" "crm_tool_permissions" {
         Sid      = "CRMSecretAccess"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [aws_secretsmanager_secret.genesys_credentials.arn]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.environment}/crm-creds/*"
       }
     ]
   })

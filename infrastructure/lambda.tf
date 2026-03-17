@@ -133,8 +133,7 @@ resource "aws_lambda_function" "crm_tool" {
 
   environment {
     variables = {
-      GENESYS_SECRET_ARN = aws_secretsmanager_secret.genesys_credentials.arn
-      GENESYS_API_REGION = "euw2.pure.cloud"
+      ENV_PREFIX = var.environment
     }
   }
 

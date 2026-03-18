@@ -41,19 +41,17 @@ data "archive_file" "rds_seeder_zip" {
 
 locals {
   orchestrator_dep_install_command = <<EOT
-    # 1. Clean and prepare fresh staging directory for dependencies
+    # 1. Clean and prepare fresh staging directory
     rm -rf ${path.module}/../dist/orchestrator_staging
     mkdir -p ${path.module}/../dist/orchestrator_staging
     cd ${path.module}/../app
 
-    # 2. COMPILE for the exact Lambda architecture (Amazon Linux 2023)
-    # This ensures Alice's Mac/Windows laptop builds a Linux-ready package.
+    # 2. COMPILE & INSTALL
     uv pip compile pyproject.toml \
       --python-platform x86_64-manylinux_2_28 \
       --python-version 3.12 \
       --output-file requirements_lambda.txt
 
-    # 3. INSTALL with strict platform enforcement and no-cache
     uv pip install \
       --target ../dist/orchestrator_staging \
       --python-platform x86_64-manylinux_2_28 \
@@ -63,7 +61,10 @@ locals {
       --no-cache \
       -r requirements_lambda.txt
 
-    # 4. Cleanup temporary requirements file
+    # 3. ATOMIC COPY: Copy the script inside the same resource that wipes the folder
+    cp orchestrator.py ../dist/orchestrator_staging/
+
+    # 4. Cleanup
     [ -f requirements_lambda.txt ] && rm requirements_lambda.txt
   EOT
 }
@@ -71,12 +72,10 @@ locals {
 # 1. DEPENDENCY LAYER: Only runs when libraries or the build logic change.
 resource "null_resource" "install_orchestrator_deps" {
   triggers = {
-    # Re-run ONLY if dependencies change or the install logic is modified
+    # Re-run if dependencies OR the script itself changes
     lock_file    = filemd5("${path.module}/../app/uv.lock")
+    script_hash  = filemd5("${path.module}/../app/orchestrator.py")
     build_script = sha1(local.orchestrator_dep_install_command)
-    # SAFETY: Check for the orchestrator script.
-    # If it's missing, the folder was likely deleted, so force a rebuild.
-    dir_exists = fileexists("${path.module}/../dist/orchestrator_staging/orchestrator.py") ? "exists" : timestamp()
   }
 
   provisioner "local-exec" {
@@ -84,27 +83,14 @@ resource "null_resource" "install_orchestrator_deps" {
   }
 }
 
-# 2. SCRIPT LAYER:
-resource "local_file" "orchestrator_script_sync" {
-  source   = "${path.module}/../app/orchestrator.py"
-  filename = "${path.module}/../dist/orchestrator_staging/orchestrator.py"
-
-  # This ensures that even if 'install_orchestrator_deps' is skipped (because state matches),
-  # this file is written to the disk if it's missing.
-  depends_on = [null_resource.install_orchestrator_deps]
-}
-
-# 3. ZIP ARCHIVE
+# 2.  ZIP ARCHIVE
 data "archive_file" "orchestrator_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../dist/orchestrator_staging"
   output_path = "${path.module}/../dist/orchestrator_payload.zip"
 
-  # This is the "Anchor": It prevents the data source from finishing
-  # until the uv install and script sync are 100% done.
   depends_on = [
-    null_resource.install_orchestrator_deps,
-    local_file.orchestrator_script_sync
+    null_resource.install_orchestrator_deps
   ]
 }
 

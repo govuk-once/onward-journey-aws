@@ -149,10 +149,30 @@ resource "aws_lambda_function_url" "orchestrator_url" {
 
   cors {
     allow_credentials = true
-    allow_origins     = ["*"] # TODO: Restrict to your specific frontend domain in production
-    allow_methods     = ["POST"]
-    allow_headers     = ["content-type"]
+    # TODO: Restrict to your specific frontend domain in production
+    allow_origins = ["http://localhost:5173"] # Local Svelte Dev Server
+    allow_methods = ["POST"]
+    allow_headers = ["content-type"]
+    max_age       = 86400 # Cache permission for 24 hours (86400 seconds) to prevent lag
   }
+}
+
+# PERMISSIONS
+# STATEMENT 1: The "Front Door"
+resource "aws_lambda_permission" "allow_public_url_access" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.orchestrator.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+# STATEMENT 2: The "Streaming Handshake"
+resource "aws_lambda_permission" "allow_url_invoke_fallback" {
+  statement_id   = "FunctionURLInvokeFallback"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.orchestrator.function_name
+  principal      = "*"
+  source_account = var.aws_account_id
 }
 
 output "orchestrator_url" {

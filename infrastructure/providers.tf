@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "6.21.0"
+      version = "6.28.0" # min 6.28 required to enable use of invoked_via_function_url
     }
 
     tls = {

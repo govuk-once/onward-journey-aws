@@ -32,15 +32,40 @@ resource "aws_vpc_endpoint" "secrets" {
 }
 
 # 3. S3 Endpoint (Gateway) - Required to ingest the contacts CSV
+# Run the dynamic check script
+data "external" "s3_check" {
+  program = ["sh", "${path.module}/check_s3_gateway.sh", data.aws_vpc.active.id, var.aws_region, var.environment]
+}
+
+# Prevent destruction
+moved {
+  from = aws_vpc_endpoint.s3
+  to   = aws_vpc_endpoint.s3[0]
+}
+
+# Only create the S3 Gateway if the script says it doesn't exist
 resource "aws_vpc_endpoint" "s3" {
+  # Logic: Create it ONLY if I'm not already the owner AND no one else has one.
+  # OR: If I AM the owner, keep it (count=1).
+  count = (data.external.s3_check.result.is_owner == "true" || data.external.s3_check.result.id == "None") ? 1 : 0
+
   vpc_id            = data.aws_vpc.active.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
 
-  # Gateway endpoints are "routed" via the route table
+  # Link to the private route tables
   route_table_ids = local.private_route_table_ids
 
-  tags = { Name = "${var.environment}-s3-endpoint" }
+  tags = { Name = "${var.environment}-s3-gateway" }
+}
+
+# Associate your route tables with the Gateway (whichever one exists)
+resource "aws_vpc_endpoint_route_table_association" "s3_routing" {
+  for_each       = toset(local.private_route_table_ids)
+  route_table_id = each.value
+
+  # Use my ID if I created/own it, otherwise use the shared ID found by the script
+  vpc_endpoint_id = length(aws_vpc_endpoint.s3) > 0 ? aws_vpc_endpoint.s3[0].id : data.external.s3_check.result.id
 }
 
 # 4. Bedrock AgentCore Endpoint - REQUIRED for Memory/Checkpointer & Gateway

@@ -26,7 +26,7 @@ ENV_NAME=${ENV_NAME:-unknown}
 
 # Check for OUR specific endpoint
 MY_ENDPOINT=$(aws ec2 describe-vpc-endpoints \
-  --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$ENV_NAME-s3-endpoint" \
+  --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$ENV_NAME-s3-gateway" \
   --query "VpcEndpoints[0].VpcEndpointId" --output text --region $REGION)
 
 # Check for ANY S3 Gateway

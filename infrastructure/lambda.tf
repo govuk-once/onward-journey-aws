@@ -168,11 +168,11 @@ resource "aws_lambda_permission" "allow_public_url_access" {
 }
 # STATEMENT 2: The "Streaming Handshake"
 resource "aws_lambda_permission" "allow_url_invoke_fallback" {
-  statement_id   = "FunctionURLInvokeFallback"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.orchestrator.function_name
-  principal      = "*"
-  source_account = var.aws_account_id
+  statement_id             = "FunctionURLInvokeFallback"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.orchestrator.function_name
+  principal                = "*"
+  invoked_via_function_url = true
 }
 
 output "orchestrator_url" {

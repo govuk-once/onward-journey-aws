@@ -147,28 +147,65 @@ class GenesysIntegration(CrmIntegration):
         return f"Live chat is AVAILABLE. Estimated wait: {wait_str}."
 
     def generate_handoff_signal(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Returns a SIGNAL payload consumed by the Svelte frontend."""
+        """
+        Prepares the connection parameters for the Genesys Web Messenger WebSocket.
+        Returns a SIGNAL payload consumed by the Svelte frontend.
+        """
+        region = self.config['api_region']
+        deploy_id = self.config['deploy_id']
+
+        # --- PHASE 1: PREPARE SESSION PARAMETERS ---
+        # Web Messaging identifies sessions using a persistent 'token' (UUID).
+        # We use the thread_id to ensure the CRM session is linked to our AI thread.
+        # NOTE: Ensure the Orchestrator tool passes 'thread_id' in the arguments.
+        token = event.get("thread_id", str(uuid.uuid4()))
+        actor_id = event.get("actor_id", "ANONYMOUS")
+
+        print(f"🔗 [DEBUG] Preparing Web Messaging Signal | Region: {region} | DeployID: {deploy_id}")
+        print(f"🔗 [DEBUG] Session Context | Token (Thread): {token} | Actor: {actor_id}")
+
+        # --- PHASE 2: CONSTRUCT WEBSOCKET ADDRESS ---
+        # The frontend connects directly to this wss:// endpoint to start the chat.
+        websocket_url = f"wss://webmessaging.{region}/v1?deploymentId={deploy_id}"
+
+        # --- PHASE 3: PACKAGE CONTEXT FOR FRONTEND ---
+        # We bundle the context (Summary/Reason) so the Svelte frontend can send
+        # it as 'customAttributes' during the WebSocket 'configureSession' step.
         handoff_config = {
             "action": "initiate_live_handoff",
-            "organizationId": self.creds.get("org_id"),
-            "deploymentId": self.config["deploy_id"],
-            "region": self.config["api_region"],
-            "token": str(uuid.uuid4()), # Maps to sessionToken in frontend
-            "reason": event.get("reason", "AI Handover: Intent not captured"), # Provides a short explanation for routing
-            "summary": event.get("summary", "No summary provided."), # Briefing note from LangGraph/AgentCore
-            "customAttributes": {
-                "externalSessionId": event.get("session_id", "UNKNOWN"),
-                "department": self.chat_id,
-                "source": "onward-journey-ai"
-            }
+            "websocketUrl": websocket_url,
+            "token": token,
+            "deploymentId": deploy_id,
+            "region": region,
+            "summary": event.get("summary", "No summary provided."),
+            "reason": event.get("reason", "Standard AI Handoff"),
+            "actor_id": actor_id
         }
-        return {"content": [{"type": "text", "text": f"SIGNAL: initiate_live_handoff {json.dumps(handoff_config)}"}]}
+
+        # Validation: Verify we have the absolute minimum required to connect
+        if not deploy_id or not region:
+            print(f"❌ [ERROR] Missing critical configuration! DeployID: {bool(deploy_id)}, Region: {bool(region)}")
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": "SERVICE_ERROR: CRM configuration is incomplete."
+                }]
+            }
+
+        print(f"✅ [DEBUG] Web Messaging Signal generated successfully for Token: {token[:8]}...")
+
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"SIGNAL: initiate_live_handoff {json.dumps(handoff_config)}"
+            }]
+        }
 
 
 def lambda_handler(event, context):
-    # Log the Session ID for tracing with AgentCore Memory
-    session_id = event.get("session_id", "UNKNOWN_SESSION")
-    print(f"CRM TOOL CALL | Session: {session_id} | Event: {json.dumps(event)}")
+    # og the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
+    trace_id = event.get("thread_id") or event.get("session_id") or "UNKNOWN_SESSION"
+    print(f"CRM TOOL CALL | Trace: {trace_id} | Event: {json.dumps(event)}")
 
     chat_id = event.get("live_chat_identifier")
     method = event.get("method")
@@ -177,7 +214,8 @@ def lambda_handler(event, context):
     try:
         config = CRM_CONFIG_MAP.get(chat_id)
         if not config:
-            return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": "CONFIG_ERROR: Service configuration not found for identifier."}]}}
+            print(f"❌ [ERROR] No config found for identifier: {chat_id}")
+            return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": "CONFIG_ERROR: Service not found."}]}}
 
         # Selection logic (Platform-agnostic factory)
         integration = GenesysIntegration(chat_id, config) if config["platform"] == "genesys" else None
@@ -189,14 +227,14 @@ def lambda_handler(event, context):
         elif "connect_to_live_chat" in method:
             result = integration.generate_handoff_signal(event)
             # --- HANDOFF STATUS LOG ---
-            print(f"METRIC | LiveHandoffInitiated | Target: {chat_id} | ID: {request_id}")
+            print(f"METRIC | LiveHandoffInitiated | Target: {chat_id} | Trace: {trace_id}")
 
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
     except Exception as e:
-        print(f"CRM GATEWAY ERROR: {str(e)}")
+        print(f"❌ [ERROR] CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
         return {
             "jsonrpc": "2.0",
             "id": request_id,
-            "result": {"content": [{"type": "text", "text": "SERVICE_ERROR: Error connecting to chat service."}]}
+            "result": {"content": [{"type": "text", "text": "SERVICE_ERROR: Internal Tool Error."}]}
         }

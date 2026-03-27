@@ -114,10 +114,11 @@ def lambda_handler(event, context):
 
         print(f"Starting ingestion for {target_table}...")
         for i, row in enumerate(reader):
-            # Map CSV row data to the columns defined in the YAML
+            # Map CSV row data to the columns defined in the YAML - force blank strings to None for SQL NULL conversion
             # 'embedding' is excluded here as it is calculated via Bedrock below
             params = {
-                name: row.get(name) for name in columns.keys() if name != "embedding"
+                name: (row.get(name) if row.get(name) != "" else None)
+                for name in columns.keys() if name != "embedding"
             }
 
             # Semantic Embedding Logic

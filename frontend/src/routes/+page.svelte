@@ -95,8 +95,8 @@
     });
 
     const handoff = payload as HandoffPayload;
-    const websocketUrl = handoff.websocketUrl || env.PUBLIC_SUPPORT_CHAT_URL;
-    const deploymentKey = handoff.deploymentId || env.PUBLIC_DEPLOYMENT_KEY;
+    const websocketUrl = handoff.websocketUrl;
+    const deploymentKey = handoff.deploymentId;
 
     console.log("Genesys Config:", { websocketUrl, deploymentKey, hasToken: !!handoff.token });
 

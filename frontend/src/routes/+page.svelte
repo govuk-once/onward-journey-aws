@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { v7 as uuid } from "uuid";
+  import type { ListableConversationMessageProps } from "$lib/types/ConversationMessage";
+  import ConversationMessageContainer from "$lib/components/ConversationMessageContainer.svelte";
   import QuestionForm from "$lib/components/QuestionForm.svelte";
   import type { SendMessageHandler } from "$lib/components/QuestionForm.svelte";
+  import { v7 as uuid } from "uuid";
   import { GenesysClient } from "$lib/services/genesysClient.js";
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
@@ -233,23 +235,3 @@
     <QuestionForm messageHandler={sendMessageHandler} disabled={isConnecting}/>
   </div>
 </main>
-
-<style>
-/* ... Styles ... */
-.app-conversation-layout__header { padding: 10px 20px;
-   border-bottom: 1px solid #b1b4b6; background: #ffffff; z-index: 10; }
-.handoff-banner { display: flex; justify-content: space-between; align-items: center; margin: 0; border-color: #1d70b8; }
-.app-conversation-layout__wrapper { flex: 1; overflow-y: auto; }
-:global(body) { font-family: "GDS Transport", arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-.app-conversation-layout__main { display: flex; flex-direction: column; height: 100vh; background-color: #ffffff; overflow: hidden; }
-.app-conversation-layout__wrapper { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
-.history-list { max-height: 150px; overflow-y: auto; margin-bottom: 15px; padding-right: 10px; }
-.govuk-body-s { font-size: 16px; margin-bottom: 8px; line-height: 1.3; }
-.app-conversation-layout__fixed-footer { background: white; border-top: 1px solid #b1b4b6; padding: 15px 0; }
-.handoff-banner { display: flex; justify-content: space-between; align-items: center; border-color: #1d70b8; margin-bottom: 20px; }
-.message-feed { display: flex; flex-direction: column; gap: 20px; width: 100%; }
-.message-bubble { padding: 15px; border-radius: 4px; max-width: 80%; line-height: 1.5; }
-.message-bubble.agent { background-color: #f3f2f1; border-left: 4px solid #1d70b8; align-self: flex-start; }
-.message-bubble.user { background-color: #005ea5; color: white; align-self: flex-end; }
-.message-bubble.user :global(strong) { color: white; }
-</style>

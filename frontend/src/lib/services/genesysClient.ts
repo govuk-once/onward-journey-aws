@@ -260,6 +260,8 @@ export class GenesysClient {
   private deploymentKey: string;
   private socket: WebSocket | null = null;
   private token: string | null = null;
+  private isSessionConfigured = false;
+  private sessionResolve: ((response: SessionResponse) => void) | null = null;
   private listeners: Map<
     keyof GenesysClientEvents,
     Set<EventCallback<keyof GenesysClientEvents>>
@@ -286,18 +288,22 @@ export class GenesysClient {
       this.socket = new WebSocket(url.toString());
 
       this.socket.onopen = () => {
+        console.log("[GenesysClient] WebSocket connected");
         this.emit("connected");
         resolve();
       };
 
       this.socket.onclose = (event) => {
+        console.log("[GenesysClient] WebSocket closed:", event.code, event.reason);
+        this.isSessionConfigured = false;
         this.emit("disconnected", event);
       };
 
-      this.socket.onerror = () => {
-        const error = new Error("WebSocket connection error");
-        this.emit("error", error);
-        reject(error);
+      this.socket.onerror = (error) => {
+        console.error("[GenesysClient] WebSocket error:", error);
+        const err = new Error("WebSocket connection error");
+        this.emit("error", err);
+        reject(err);
       };
 
       this.socket.onmessage = (event) => {
@@ -309,26 +315,33 @@ export class GenesysClient {
   /**
    * Configure a new session with the Genesys server
    */
-  configureSession(token?: string): void {
-    this.token = token ?? this.generateToken();
+  configureSession(token?: string): Promise<SessionResponse> {
+    return new Promise((resolve) => {
+      this.token = token ?? this.generateToken();
+      this.sessionResolve = resolve;
 
-    const request: ConfigureSessionRequest = {
-      action: "configureSession",
-      deploymentId: this.deploymentKey,
-      token: this.token,
-      tracingId: this.generateTracingId(),
-    };
+      console.log("[GenesysClient] Configuring session with token:", this.token);
 
-    this.send(request);
+      const request: ConfigureSessionRequest = {
+        action: "configureSession",
+        deploymentId: this.deploymentKey,
+        token: this.token,
+        tracingId: this.generateTracingId(),
+      };
+
+      this.send(request);
+    });
   }
 
   /**
    * Send a text message to the conversation
    */
   sendMessage(text: string, metadata?: Record<string, string>): void {
-    if (!this.token) {
+    if (!this.token || !this.isSessionConfigured) {
       throw new Error("Session not configured. Call configureSession() first.");
     }
+
+    console.log("[GenesysClient] Sending message:", text);
 
     const request: SendMessageRequest = {
       action: "onMessage",
@@ -355,6 +368,7 @@ export class GenesysClient {
       this.socket = null;
     }
     this.token = null;
+    this.isSessionConfigured = false;
   }
 
   /**
@@ -362,6 +376,13 @@ export class GenesysClient {
    */
   isConnected(): boolean {
     return this.socket?.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Check if the session is configured
+   */
+  isConfigured(): boolean {
+    return this.isSessionConfigured;
   }
 
   /**
@@ -412,30 +433,47 @@ export class GenesysClient {
   private handleMessage(data: string): void {
     try {
       const message = JSON.parse(data) as BaseMessage;
+      console.log(`[GenesysClient] Raw message received: class=${message.class}, code=${message.code}`);
       this.emit("rawMessage", message);
 
       switch (message.class) {
-        case "SessionResponse":
-          this.emit("sessionResponse", message.body as SessionResponse);
+        case "SessionResponse": {
+          const body = message.body as SessionResponse;
+          console.log("[GenesysClient] SessionResponse:", body);
+          this.isSessionConfigured = body.connected;
+          if (this.sessionResolve) {
+            this.sessionResolve(body);
+            this.sessionResolve = null;
+          }
+          this.emit("sessionResponse", body);
           break;
+        }
 
         case "StructuredMessage":
+          console.log("[GenesysClient] StructuredMessage:", (message.body as StructuredMessage).text);
           this.emit("message", message.body as StructuredMessage);
           break;
 
         case "ConnectionClosedEvent":
+          console.log("[GenesysClient] ConnectionClosedEvent");
           this.emit("connectionClosed", message.body as ConnectionClosedEvent);
           break;
 
         case "SessionExpiredEvent":
+          console.log("[GenesysClient] SessionExpiredEvent");
           this.emit("sessionExpired", message.body as SessionExpiredEvent);
           break;
 
         case "Error":
+          console.error("[GenesysClient] Error class received:", message.body);
           this.emit("error", new Error(JSON.stringify(message.body)));
           break;
+        
+        default:
+          console.log("[GenesysClient] Message class:", message.class);
       }
     } catch (e) {
+      console.error("[GenesysClient] Handle message error:", e);
       this.emit("error", e instanceof Error ? e : new Error(String(e)));
     }
   }

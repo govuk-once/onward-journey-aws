@@ -5,99 +5,227 @@
   import type { SendMessageHandler } from "$lib/components/QuestionForm.svelte";
   import { v7 as uuid } from "uuid";
   import { GenesysClient } from "$lib/services/genesysClient.js";
+  import { OrchestratorClient } from "$lib/services/orchestratorClient";
+  import { markdownToHtml } from "$lib/utils/markdown";
   import { onMount } from "svelte";
   import { env } from "$env/dynamic/public";
-  import { error } from "@sveltejs/kit";
 
-  const sleep = (time: number) => new Promise(resolve => setTimeout(resolve, time))
+  let connectionType: 'AI' | 'HUMAN' = $state('AI');
+  let isConnecting: boolean = $state(false);
+  let messages: ListableConversationMessageProps[] = $state([]);
+  let showTypingIndicator: boolean = $state(false);
+  let responderName: string = $state("GOV.UK AI");
+  let threadId = uuid();
+  let genesysClient: GenesysClient | null = null;
+  let orchestrator: OrchestratorClient | null = null;
 
-  let sendMessageHandler: SendMessageHandler = $state((message) => {
+  const CONNECTING_MESSAGE_ID = "connecting-to-human-advisor";
+
+  const orchestratorUrl = env.PUBLIC_ORCHESTRATOR_URL;
+  if (!orchestratorUrl) {
+    console.warn("PUBLIC_ORCHESTRATOR_URL not set. AI Chat will not be available.");
+  } else {
+    orchestrator = new OrchestratorClient(orchestratorUrl);
+  }
+
+  const handleAiMessage = async (userInput: string) => {
+    if (connectionType !== 'AI' || !orchestrator) return;
+
+    // Add user message to UI
     messages.push({
-      message,
+      message: await markdownToHtml(userInput),
       isSelf: true,
       id: uuid()
-    })
-  })
+    });
 
-  let showTypingIndicator: boolean = $state(false)
+    responderName = "GOV.UK AI";
+    showTypingIndicator = true;
 
-  onMount(() => {
-    const websocketUrl = env.PUBLIC_SUPPORT_CHAT_URL;
-    const deploymentKey = env.PUBLIC_DEPLOYMENT_KEY;
+    await orchestrator.sendMessage(userInput, threadId, {
+      onResponse: async (response) => {
+        console.log("AI response:", response);
+        // Only show AI responses if we haven't switched to HUMAN mode
+        if (connectionType === 'AI') {
+          showTypingIndicator = false;
+          messages.push({
+            message: await markdownToHtml(response),
+            user: "GOV.UK AI",
+            isSelf: false,
+            id: uuid()
+          });
+        }
+      },
+      onSignal: async (signal, payload) => {
+        if (signal === "initiate_live_handoff") {
+          await switchToHuman(payload);
+        }
+      },
+      onComplete: () => {
+        if (connectionType === 'AI') {
+          showTypingIndicator = false;
+        }
+      },
+      onError: (err) => {
+        console.error("Orchestrator error:", err);
+        showTypingIndicator = false;
+      }
+    });
+  };
+
+  interface HandoffPayload {
+    websocketUrl?: string;
+    deploymentId?: string;
+    region?: string;
+    token?: string;
+  }
+
+  const switchToHuman = async (payload: unknown) => {
+    if (connectionType === 'HUMAN') return;
+
+    console.log("Switching to HUMAN mode", payload);
+    isConnecting = true;
+    connectionType = 'HUMAN';
+    
+    // Add a system message
+    messages.push({
+      message: '', // keep blank to get default message
+      user: "System",
+      isSelf: false,
+      id: CONNECTING_MESSAGE_ID
+    });
+
+    const handoff = payload as HandoffPayload;
+    const websocketUrl = handoff.websocketUrl || env.PUBLIC_SUPPORT_CHAT_URL;
+    const deploymentKey = handoff.deploymentId || env.PUBLIC_DEPLOYMENT_KEY;
+
+    console.log("Genesys Config:", { websocketUrl, deploymentKey, hasToken: !!handoff.token });
 
     if (!websocketUrl || !deploymentKey) {
-      error(500, "Genesys configuration not set. Please set environment variables referenced in README.md");
+        console.error("Missing Genesys configuration");
+        messages = messages.filter(m => m.id !== CONNECTING_MESSAGE_ID);
+        messages.push({
+            message: "Error: Genesys configuration missing. Cannot connect to human advisor.",
+            user: "System",
+            isSelf: false,
+            id: uuid()
+        });
+        isConnecting = false;
+        return;
     }
 
-    const genesysClient = new GenesysClient({ websocketUrl, deploymentKey });
+    genesysClient = new GenesysClient({ websocketUrl, deploymentKey });
 
-    // Log all messages in either direction for easy debugging
-    genesysClient.on("rawMessage", (msg) => {
-      console.log(msg);
+    genesysClient.on("message", async (msg) => {
+      console.log("Genesys message event:", {
+        id: msg.id,
+        direction: msg.direction,
+        type: msg.type,
+        text: msg.text,
+        hasEvents: !!msg.events?.length
+      });
+      
+      if (msg.text) {
+        if (msg.direction === "Inbound") {
+          console.log("Ignoring inbound message (echo)");
+          return;
+        }
+
+        console.log("Processing outbound message from advisor:", msg.text);
+        
+        const newMessage: ListableConversationMessageProps = {
+          message: await markdownToHtml(msg.text),
+          user: msg.channel?.from?.nickname ?? "Advisor",
+          image: msg.channel?.from?.image ?? undefined,
+          isSelf: false,
+          id: msg.id ?? uuid()
+        };
+
+        messages = [
+          ...messages.filter(m => m.id !== CONNECTING_MESSAGE_ID),
+          newMessage
+        ];
+        
+        showTypingIndicator = false;
+      } else if (msg.type == "Event" && msg.events?.find((e) => e.eventType == "Typing")) {
+        console.log("Typing event received");
+        responderName = msg.channel?.from?.nickname ?? "Advisor";
+        showTypingIndicator = true;
+        const typingEvent = msg.events?.find((e) => e.eventType == "Typing");
+        if (typingEvent?.typing?.duration) {
+          setTimeout(() => { showTypingIndicator = false; }, typingEvent.typing.duration);
+        }
+      }
     });
 
-    genesysClient.connect().then(async () => {
-      genesysClient.on("message", (msg) => {
-
-        // When we receive a new message from the agent, show it on the page
-        if (msg.direction == "Outbound" && msg.text) {
-          messages.push({
-            message: msg.text!,
-            user: msg.channel?.from?.nickname ?? "Unknown " + msg.originatingEntity,
-            image: msg.channel?.from?.image,
-            isSelf: false,
-            id: msg.id!
-          })
-
-          // Immediately expire the typing indicator
-          showTypingIndicator = false
-        }
-
-        // When we receive a typing indicator event, show the typing indicator for the duration specified
-        if (msg.type == "Event" && msg.events?.find((e) => e.eventType == "Typing")) {
-          const typingEvent = msg.events?.find((e) => e.eventType == "Typing")
-          showTypingIndicator = true
-          if (typingEvent && typingEvent.typing.duration) {
-            setTimeout(() => {
-              showTypingIndicator = false
-            }, typingEvent.typing.duration)
-          }
-        }
-      })
-
-      const addToPage = sendMessageHandler;
-      sendMessageHandler = (message) => {
-        addToPage(message);
-        genesysClient.sendMessage(message);
+    try {
+      console.log("Attempting to connect to Genesys WebSocket...");
+      await genesysClient.connect();
+      console.log("WebSocket connected. Configuring session...");
+      
+      const sessionResponse = await genesysClient.configureSession(handoff.token);
+      console.log("Session configured:", sessionResponse);
+      
+      if (!sessionResponse.connected) {
+        throw new Error("Session response indicated not connected");
       }
 
-      genesysClient.configureSession();
-      await sleep(500);
-      // We need to send an initial message to start the bot triage
-      genesysClient.sendMessage("I am being transferred from Onward Journey");
-    });
+      console.log("Sending initial context message to advisor...");
+      genesysClient.sendMessage("User transferred from AI. Thread ID: " + threadId);
+      console.log("Initial message sent.");
+      
+      isConnecting = false;
+      showTypingIndicator = false;
+    } catch (err) {
+      console.error("Failed to connect to Genesys:", err);
+      messages = messages.filter(m => m.id !== CONNECTING_MESSAGE_ID);
+      messages.push({
+        message: `Error: Failed to connect to a human advisor (${err instanceof Error ? err.message : 'Unknown error'}).`,
+        user: "System",
+        isSelf: false,
+        id: uuid()
+      });
+      isConnecting = false;
+    }
+  };
 
-    // Cleanup on component destroy
-    return () => {
-      genesysClient.disconnect();
-    };
+  const handleHumanMessage = async (userInput: string) => {
+    if (isConnecting) return;
+
+    messages.push({
+      message: await markdownToHtml(userInput),
+      isSelf: true,
+      id: uuid()
+    });
+    genesysClient?.sendMessage(userInput);
+  };
+
+  let sendMessageHandler: SendMessageHandler = $state((message) => {
+    if (connectionType === 'AI') {
+      handleAiMessage(message);
+    } else {
+      handleHumanMessage(message);
+    }
   });
 
-  // Static initial message to demonstrate what a handover might look like
-  let messages: ListableConversationMessageProps[] = $state([
-    {
-      message: "I am connecting you to a support agent",
-      user: "GOV.UK Onward Journey Agent",
-      isSelf: false,
-      id: uuid()
-    }
-  ]);
+  onMount(() => {
+    (async () => {
+      messages.push({
+        message: await markdownToHtml("Hello! I'm the GOV.UK Onward Journey AI. How can I help you today?"),
+        user: "GOV.UK AI",
+        isSelf: false,
+        id: uuid()
+      });
+    })();
+
+    return () => {
+      genesysClient?.disconnect();
+    };
+  });
 </script>
 
 <main class="app-conversation-layout__main" id="main-content">
   <div class="app-conversation-layout__wrapper app-conversation-layout__width-restrictor">
-    <ConversationMessageContainer messages={messages} showTypingIndicator={showTypingIndicator}/>
-
-    <QuestionForm messageHandler={sendMessageHandler}/>
+    <ConversationMessageContainer messages={messages} showTypingIndicator={showTypingIndicator} responderName={responderName}/>
+    <QuestionForm messageHandler={sendMessageHandler} disabled={isConnecting}/>
   </div>
 </main>

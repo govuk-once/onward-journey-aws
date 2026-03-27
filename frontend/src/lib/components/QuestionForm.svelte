@@ -2,18 +2,21 @@
   export type SendMessageHandler = (message: string) => void;
 
   interface Props {
-    messageHandler: SendMessageHandler
+    messageHandler: SendMessageHandler;
+    disabled?: boolean;
   }
 
-  let { messageHandler }: Props = $props()
+  let { messageHandler, disabled = false }: Props = $props()
   let message = $state("")
 </script>
 
 <div class="app-conversation-layout__form-region">
   <div class="app-c-question-form">
     <form class="app-c-question-form__form" onsubmit={() => {
-      messageHandler(message)
-      message = ""
+      if (!disabled && message.trim()) {
+        messageHandler(message)
+        message = ""
+      }
     }}>
 
       <div class="app-c-question-form__form-group">
@@ -24,10 +27,11 @@
             placeholder="Enter your question or message"
             rows=1
             bind:value={message}
+            {disabled}
             onkeydown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                if (message.trim()) {
+                if (!disabled && message.trim()) {
                   messageHandler(message)
                   message = ""
                 }
@@ -36,7 +40,7 @@
           ></textarea>
         </div>
         <div class="app-c-question-form__button-wrapper">
-          <button class="app-c-blue-button govuk-button app-c-blue-button--question-form">
+          <button class="app-c-blue-button govuk-button app-c-blue-button--question-form" {disabled}>
             Start
           </button>
         </div>

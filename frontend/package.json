@@ -21,8 +21,11 @@
     "@sveltejs/adapter-auto": "^7.0.0",
     "@sveltejs/kit": "^2.48.5",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@types/dompurify": "^3.0.5",
     "@types/jest": "^29.5.14",
     "@types/node": "^24",
+    "@types/sanitize-html": "^2.16.1",
+    "@types/showdown": "^2.0.6",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.13.1",
@@ -44,6 +47,9 @@
     "npm": "^11.6.2"
   },
   "dependencies": {
-    "govuk-frontend": "^5.14.0"
+    "dompurify": "^3.3.3",
+    "govuk-frontend": "^5.14.0",
+    "sanitize-html": "^2.17.2",
+    "showdown": "^2.1.0"
   }
 }

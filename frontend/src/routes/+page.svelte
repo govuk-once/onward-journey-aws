@@ -1,334 +1,237 @@
 <script lang="ts">
-  import { v7 as uuid } from "uuid";
+  import type { ListableConversationMessageProps } from "$lib/types/ConversationMessage";
+  import ConversationMessageContainer from "$lib/components/ConversationMessageContainer.svelte";
   import QuestionForm from "$lib/components/QuestionForm.svelte";
-  import SvelteMarkdown from "svelte-markdown";
-  // --- Interfaces ---
-  interface GenesysHandoff {
-    action: string;
-    deploymentId: string;
-    region: string;
-    token: string;
-    reason: string; 
+  import type { SendMessageHandler } from "$lib/components/QuestionForm.svelte";
+  import { v7 as uuid } from "uuid";
+  import { GenesysClient } from "$lib/services/genesysClient.js";
+  import { OrchestratorClient } from "$lib/services/orchestratorClient";
+  import { markdownToHtml } from "$lib/utils/markdown";
+  import { onMount } from "svelte";
+  import { env } from "$env/dynamic/public";
+
+  let connectionType: 'AI' | 'HUMAN' = $state('AI');
+  let isConnecting: boolean = $state(false);
+  let messages: ListableConversationMessageProps[] = $state([]);
+  let showTypingIndicator: boolean = $state(false);
+  let responderName: string = $state("GOV.UK AI");
+  let threadId = uuid();
+  let genesysClient: GenesysClient | null = null;
+  let orchestrator: OrchestratorClient | null = null;
+
+  const CONNECTING_MESSAGE_ID = "connecting-to-human-advisor";
+
+  const orchestratorUrl = env.PUBLIC_ORCHESTRATOR_URL;
+  if (!orchestratorUrl) {
+    console.warn("PUBLIC_ORCHESTRATOR_URL not set. AI Chat will not be available.");
+  } else {
+    orchestrator = new OrchestratorClient(orchestratorUrl);
   }
 
-  interface Message {
-    id: string;
-    user: string;
-    message: string;
-    isSelf: boolean;
-    timestamp?: string;
-    agentId?: string;
-  }
-  
+  const handleAiMessage = async (userInput: string) => {
+    if (connectionType !== 'AI' || !orchestrator) return;
 
-  interface Message {
-    id: string;
-    user: string;
-    message: string;
-    isSelf: boolean;
-    timestamp?: string;
-    agentId?: string;
-  }
-
-
-
-  // --- State ---
-  let scrollContainer: HTMLElement | undefined = $state();
-
-let { data }: { data: { messages?: Message[] } } = $props();
-let chatMessages = $state<Message[]>(data.messages ?? []);
-
-  let isLoading = $state(false);
-  let isLiveChat = $state(false);
-  let socket: WebSocket | null = $state(null);
-  let sessionToken = $state("");
-  let handoffProcessed = $state(false);
-
-  let handoffPackage = $state({
-      final_conversation_history: [
-        { role: "user", content: [{ type: "text", text: "I'm trying to find the line for Pension Schemes." }] },
-        { role: "assistant", content: [{ type: "text", text: "I don't have the specific phone number for HMRC Pension Schemes Services in the guidance provided.The guidance shows that you \
-    'can contact HMRC Pension Schemes Services by: using the online contact form writing to: Pension Schemes Services, HM Revenue and Customs, \
-    'BX9 1GH, United Kingdom. You can find phone contact details for other HMRC services on the Contact HMRC page. GOV.UK Chat can make mistakes. \
-    'Check GOV.UK pages for important information. GOV.UK pages used in this answer (links open in a new tab)'" }] },
-      ]
+    // Add user message to UI
+    messages.push({
+      message: await markdownToHtml(userInput),
+      isSelf: true,
+      id: uuid()
     });
 
-  // --- Actions ---
-  function autoScroll(node: HTMLElement) {
-    const observer = new ResizeObserver(() => {
-      node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+    responderName = "GOV.UK AI";
+    showTypingIndicator = true;
+
+    await orchestrator.sendMessage(userInput, threadId, {
+      onResponse: async (response) => {
+        console.log("AI response:", response);
+        // Only show AI responses if we haven't switched to HUMAN mode
+        if (connectionType === 'AI') {
+          showTypingIndicator = false;
+          messages.push({
+            message: await markdownToHtml(response),
+            user: "GOV.UK AI",
+            isSelf: false,
+            id: uuid()
+          });
+        }
+      },
+      onSignal: async (signal, payload) => {
+        if (signal === "initiate_live_handoff") {
+          await switchToHuman(payload);
+        }
+      },
+      onComplete: () => {
+        if (connectionType === 'AI') {
+          showTypingIndicator = false;
+        }
+      },
+      onError: (err) => {
+        console.error("Orchestrator error:", err);
+        showTypingIndicator = false;
+      }
     });
-    observer.observe(node);
-    return {
-      destroy() { observer.disconnect(); }
-    };
+  };
+
+  interface HandoffPayload {
+    websocketUrl?: string;
+    deploymentId?: string;
+    region?: string;
+    token?: string;
   }
 
-  async function manualHandBack() {
-    if (!socket) return;
-    socket.close();
-  }
+  const switchToHuman = async (payload: unknown) => {
+    if (connectionType === 'HUMAN') return;
 
-  async function returnToAIAgent() {
-    const transcript = chatMessages
-      .filter( (m: Message) => (m.user === "Live Agent" || m.user === "You") && m.message)
-      .map( (m: Message) => ({
-        role: m.user === "You" ? "user" : "assistant",
-        text: m.message
-      }));
+    console.log("Switching to HUMAN mode", payload);
+    isConnecting = true;
+    connectionType = 'HUMAN';
+    
+    // Add a system message
+    messages.push({
+      message: '', // keep blank to get default message
+      user: "System",
+      isSelf: false,
+      id: CONNECTING_MESSAGE_ID
+    });
 
-    if (transcript.length === 0) {
-      isLiveChat = false;
-      return;
+    const handoff = payload as HandoffPayload;
+    const websocketUrl = handoff.websocketUrl;
+    const deploymentKey = handoff.deploymentId;
+
+    console.log("Genesys Config:", { websocketUrl, deploymentKey, hasToken: !!handoff.token });
+
+    if (!websocketUrl || !deploymentKey) {
+        console.error("Missing Genesys configuration");
+        messages = messages.filter(m => m.id !== CONNECTING_MESSAGE_ID);
+        messages.push({
+            message: "Error: Genesys configuration missing. Cannot connect to human advisor.",
+            user: "System",
+            isSelf: false,
+            id: uuid()
+        });
+        isConnecting = false;
+        return;
     }
 
-    try {
-      const res = await fetch("http://localhost:8000/handoff/back", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript })
-      });
-      if (!res.ok) throw new Error("Server Error");
+    genesysClient = new GenesysClient({ websocketUrl, deploymentKey });
 
-      const data = await res.json();
-      chatMessages = [...chatMessages, {
-        message: data.summary || "I'm back. How can I help you further?",
-        user: "GOV.UK Onward Journey Agent",
-        isSelf: false,
-        id: uuid()
-      }];
-    } catch {
-      chatMessages = [...chatMessages, {
-        message: "I've reconnected, but I couldn't summarize the previous chat.",
+    genesysClient.on("message", async (msg) => {
+      console.log("Genesys message event:", {
+        id: msg.id,
+        direction: msg.direction,
+        type: msg.type,
+        text: msg.text,
+        hasEvents: !!msg.events?.length
+      });
+      
+      if (msg.text) {
+        if (msg.direction === "Inbound") {
+          console.log("Ignoring inbound message (echo)");
+          return;
+        }
+
+        console.log("Processing outbound message from advisor:", msg.text);
+        
+        const newMessage: ListableConversationMessageProps = {
+          message: await markdownToHtml(msg.text),
+          user: msg.channel?.from?.nickname ?? "Advisor",
+          image: msg.channel?.from?.image ?? undefined,
+          isSelf: false,
+          id: msg.id ?? uuid()
+        };
+
+        messages = [
+          ...messages,
+          newMessage
+        ];
+        
+        showTypingIndicator = false;
+      } else if (msg.type == "Event" && msg.events?.find((e) => e.eventType == "Typing")) {
+        console.log("Typing event received");
+        responderName = msg.channel?.from?.nickname ?? "Advisor";
+        showTypingIndicator = true;
+        const typingEvent = msg.events?.find((e) => e.eventType == "Typing");
+        if (typingEvent?.typing?.duration) {
+          setTimeout(() => { showTypingIndicator = false; }, typingEvent.typing.duration);
+        }
+      }
+    });
+
+    try {
+      console.log("Attempting to connect to Genesys WebSocket...");
+      await genesysClient.connect();
+      console.log("WebSocket connected. Configuring session...");
+      
+      const sessionResponse = await genesysClient.configureSession(handoff.token);
+      console.log("Session configured:", sessionResponse);
+      
+      if (!sessionResponse.connected) {
+        throw new Error("Session response indicated not connected");
+      }
+
+      console.log("Sending initial context message to advisor...");
+      genesysClient.sendMessage("User transferred from AI. Thread ID: " + threadId);
+      console.log("Initial message sent.");
+      
+      messages = messages.map(m => 
+        m.id === CONNECTING_MESSAGE_ID 
+        ? { ...m, message: "Connected to a human advisor." } 
+        : m
+      );
+
+      isConnecting = false;
+      showTypingIndicator = false;
+    } catch (err) {
+      console.error("Failed to connect to Genesys:", err);
+      messages = messages.filter(m => m.id !== CONNECTING_MESSAGE_ID);
+      messages.push({
+        message: `Error: Failed to connect to a human advisor (${err instanceof Error ? err.message : 'Unknown error'}).`,
         user: "System",
         isSelf: false,
         id: uuid()
-      }];
-    } finally {
-      isLiveChat = false;
+      });
+      isConnecting = false;
     }
-  }
+  };
 
-  async function triggerHandoffAnalysis() {
-    isLoading = true;
-    try {
-      const res = await fetch("http://localhost:8000/handoff/process", { method: "POST" });
-      if (!res.ok) throw new Error("Server error");
-      const data = await res.json();
-      chatMessages = [...chatMessages, {
-        message: data.response,
-        user: "GOV.UK Onward Journey Agent",
+  const handleHumanMessage = async (userInput: string) => {
+    if (isConnecting) return;
+
+    messages.push({
+      message: await markdownToHtml(userInput),
+      isSelf: true,
+      id: uuid()
+    });
+    genesysClient?.sendMessage(userInput);
+  };
+
+  let sendMessageHandler: SendMessageHandler = $state((message) => {
+    if (connectionType === 'AI') {
+      handleAiMessage(message);
+    } else {
+      handleHumanMessage(message);
+    }
+  });
+
+  onMount(() => {
+    (async () => {
+      messages.push({
+        message: await markdownToHtml("Hello! I'm the GOV.UK Onward Journey AI. How can I help you today?"),
+        user: "GOV.UK AI",
         isSelf: false,
         id: uuid()
-      }];
-      handoffProcessed = true;
-    } catch {
-      chatMessages = [...chatMessages, { message: "Error processing context.", user: "System", isSelf: false, id: uuid() }];
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  function setupGenesysSocket(config: GenesysHandoff) {
-    if (socket) {
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onclose = null;
-      socket.close();
-    }
-
-    isLiveChat = true;
-    sessionToken = config.token;
-    const uri = `wss://webmessaging.${config.region}/v1?deploymentId=${config.deploymentId}`;
-    const newSocket = new WebSocket(uri);
-    socket = newSocket;
-
-    newSocket.onopen = () => {
-      newSocket.send(JSON.stringify({
-        action: "configureSession",
-        deploymentId: config.deploymentId,
-        token: sessionToken
-      }));
-    };
-
-    newSocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.class === "SessionResponse" && data.code === 200) {
-          const currentSessionHistory = chatMessages
-            .map((m: Message) => {
-              const time = m.timestamp ? `[${m.timestamp}] ` : "";
-              const agentId = m.agentId ? ` (Agent: ${m.agentId})` : "";
-              return `${time}${m.user}${agentId}: ${m.message}`;
-            })
-            .join('\n');
-
-          const fullContext = `--- SYSTEM: CONTINUED HANDOFF CONTEXT ---\n` +
-                              `REASON: ${config.reason}\n\n` +
-                              `PREVIOUS INTERACTION LOG:\n${currentSessionHistory}`;
-
-          newSocket.send(JSON.stringify({
-            action: "onMessage",
-            token: sessionToken,
-            message: { type: "Text", text: fullContext }
-          }));
-
-          chatMessages = [...chatMessages, {
-            message: "All previous history (including prior advisors) has been shared.",
-            user: "System",
-            isSelf: false,
-            id: uuid(),
-            timestamp: new Date().toLocaleTimeString()
-          }];
-      }
-
-      if (data.class === "StructuredMessage" && data.body?.text && data.body.direction === "Outbound") {
-        chatMessages = [...chatMessages, {
-          message: data.body.text,
-          user: "Live Agent",
-          agentId: data.metadata?.externalContactId || "Advisor",
-          isSelf: false,
-          id: uuid(),
-          timestamp: new Date().toLocaleTimeString()
-        }];
-      }
-    };
-
-    newSocket.onclose = () => {
-      isLiveChat = false;
-      socket = null;
-      sessionToken="";
-      returnToAIAgent();
-    };
-  }
-
-  async function handleSendMessage(userText: string) {
-    if (!userText.trim() || isLoading) return;
-    chatMessages = [...chatMessages, { message: userText, user: "You", isSelf: true, id: uuid() }];
-
-    if (isLiveChat && socket?.readyState === 1) {
-      socket.send(JSON.stringify({
-        action: "onMessage",
-        token: sessionToken,
-        message: { type: "Text", text: userText }
-      }));
-      return;
-    }
-
-    isLoading = true;
-    try {
-      const res = await fetch("http://localhost:8000/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userText })
       });
-      const data = await res.json();
-      const responseText = data.response;
+    })();
 
-      if (responseText?.includes("initiate_live_handoff")) {
-        const jsonStart = responseText.indexOf('{');
-        const jsonEnd = responseText.lastIndexOf('}') + 1;
-        const config: GenesysHandoff = JSON.parse(responseText.substring(jsonStart, jsonEnd));
-        chatMessages = [...chatMessages, { message: "Transferring to a live agent...", user: "System", isSelf: false, id: uuid() }];
-        setupGenesysSocket(config);
-      } else {
-        chatMessages = [...chatMessages, {
-          message: responseText,
-          user: "GOV.UK Onward Journey Agent",
-          isSelf: false,
-          id: uuid()
-        }];
-      }
-    } catch {
-      chatMessages = [...chatMessages, { message: "Connection error.", user: "System", isSelf: false, id: uuid() }];
-    } finally {
-      isLoading = false;
-    }
-  }
+    return () => {
+      genesysClient?.disconnect();
+    };
+  });
 </script>
 
-<main class="app-conversation-layout__main">
-  {#if isLiveChat}
-    <div class="app-conversation-layout__header handoff-banner">
-      <div class="banner-content">
-        <p class="govuk-body"><strong>Live Chat:</strong> Connected to advisor.</p>
-      </div>
-      <div class="banner-actions">
-        <button class="govuk-button govuk-button--small govuk-!-margin-right-2" onclick={manualHandBack}>
-          Return to AI
-        </button>
-        <button class="govuk-button govuk-button--warning govuk-button--small" onclick={() => { socket?.close(); isLiveChat = false; }}>
-          End Session
-        </button>
-      </div>
-    </div>
-  {/if}
-
-  <div bind:this={scrollContainer} use:autoScroll class="app-conversation-layout__wrapper app-conversation-layout__width-restrictor">
-
-    {#if handoffPackage.final_conversation_history.length > 0}
-      <details class="govuk-details handoff-details">
-        <summary class="govuk-details__summary">
-          <span class="govuk-details__summary-text">View Previous Conversation (GOV.UK Chat)</span>
-        </summary>
-        <div class="govuk-details__text handoff-dropdown-container">
-          <div class="history-list">
-            {#each handoffPackage.final_conversation_history as history, i (i)}
-              <p class="govuk-body-s">
-                <strong>{history.role === 'user' ? 'User' : 'GOV.UK Chat'}:</strong>
-                {history.content[0].text}
-              </p>
-            {/each}
-          </div>
-          <div class="govuk-button-group govuk-!-margin-top-2">
-            {#if !handoffProcessed}
-              <button class="govuk-button govuk-button--small" onclick={triggerHandoffAnalysis} disabled={isLoading}>
-                {isLoading ? 'Analyzing...' : 'Trigger Onward Journey'}
-              </button>
-            {:else}
-              <strong class="govuk-tag govuk-tag--blue">Context Shared</strong>
-            {/if}
-          </div>
-        </div>
-      </details>
-    {/if}
-
-    <div class="message-feed">
-      {#each chatMessages as m (m.id)}
-        <div class="message-bubble {m.isSelf ? 'user' : 'agent'}">
-          <p class="govuk-body-s"><strong>{m.user}:</strong></p>
-            <div class="markdown-content">
-            <SvelteMarkdown source={m.message || ""} />
-          </div>
-        </div>
-      {/each}
-    </div>
-  </div>
-
-  <div class="app-conversation-layout__fixed-footer app-conversation-layout__width-restrictor">
-    {#if isLoading}
-      <div class="govuk-body govuk-hint govuk-!-margin-bottom-2">GOV.UK Onward Journey Agent is typing...</div>
-    {/if}
-    <QuestionForm onSend={handleSendMessage} />
+<main class="app-conversation-layout__main" id="main-content">
+  <div class="app-conversation-layout__wrapper app-conversation-layout__width-restrictor">
+    <ConversationMessageContainer messages={messages} showTypingIndicator={showTypingIndicator} responderName={responderName}/>
+    <QuestionForm messageHandler={sendMessageHandler} disabled={isConnecting}/>
   </div>
 </main>
-
-<style>
-/* ... Styles ... */
-.app-conversation-layout__header { padding: 10px 20px;
-   border-bottom: 1px solid #b1b4b6; background: #ffffff; z-index: 10; }
-.handoff-banner { display: flex; justify-content: space-between; align-items: center; margin: 0; border-color: #1d70b8; }
-.app-conversation-layout__wrapper { flex: 1; overflow-y: auto; }
-:global(body) { font-family: "GDS Transport", arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-.app-conversation-layout__main { display: flex; flex-direction: column; height: 100vh; background-color: #ffffff; overflow: hidden; }
-.app-conversation-layout__wrapper { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
-.history-list { max-height: 150px; overflow-y: auto; margin-bottom: 15px; padding-right: 10px; }
-.govuk-body-s { font-size: 16px; margin-bottom: 8px; line-height: 1.3; }
-.app-conversation-layout__fixed-footer { background: white; border-top: 1px solid #b1b4b6; padding: 15px 0; }
-.handoff-banner { display: flex; justify-content: space-between; align-items: center; border-color: #1d70b8; margin-bottom: 20px; }
-.message-feed { display: flex; flex-direction: column; gap: 20px; width: 100%; }
-.message-bubble { padding: 15px; border-radius: 4px; max-width: 80%; line-height: 1.5; }
-.message-bubble.agent { background-color: #f3f2f1; border-left: 4px solid #1d70b8; align-self: flex-start; }
-.message-bubble.user { background-color: #005ea5; color: white; align-self: flex-end; }
-.message-bubble.user :global(strong) { color: white; }
-</style>

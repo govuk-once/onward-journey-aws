@@ -28,7 +28,7 @@ $slide-in-out-translation-px: 67px;
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
 
   @media print {
     overflow-y: unset;
@@ -41,9 +41,11 @@ $slide-in-out-translation-px: 67px;
   justify-content: space-between;
   flex: 1;
   min-height: 100px;
+  overflow: hidden;
 }
 
 .app-conversation-layout__message-container {
+  flex: 1;
   overflow-y: auto;
   position: relative;
   @media (prefers-reduced-motion: no-preference) {
@@ -66,10 +68,12 @@ $slide-in-out-translation-px: 67px;
 .app-conversation-layout__form-region {
   overflow: hidden;
   flex: 0 0 auto;
+  position: relative;
 
   &::before {
     content: "";
     position: absolute;
+    top: 0;
     left: 0;
     width: 100%;
     border-top: 1px solid govuk-colour("mid-grey");

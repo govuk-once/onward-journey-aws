@@ -18,7 +18,22 @@
         {/if}
       </div>
       {/if}
-      <div class="govuk-body-m govuk-!-margin-bottom-0">{message}</div>
+      <div class="govuk-body-m govuk-!-margin-bottom-0">
+        {#if message}
+          {@html message}
+        {:else}
+          <span class="app-c-conversation-message__loading-text">
+            {#if user === 'System'}
+              Connecting you to a human advisor
+            {:else if user === 'GOV.UK AI'}
+              Thinking
+            {:else}
+              Typing
+            {/if}
+            <span class="app-c-conversation-message__loading-ellipsis" aria-hidden="true">...</span>
+          </span>
+        {/if}
+      </div>
     </div>
   </div>
 </li>

@@ -141,7 +141,7 @@
         };
 
         messages = [
-          ...messages.filter(m => m.id !== CONNECTING_MESSAGE_ID),
+          ...messages,
           newMessage
         ];
         
@@ -173,6 +173,12 @@
       genesysClient.sendMessage("User transferred from AI. Thread ID: " + threadId);
       console.log("Initial message sent.");
       
+      messages = messages.map(m => 
+        m.id === CONNECTING_MESSAGE_ID 
+        ? { ...m, message: "Connected to a human advisor." } 
+        : m
+      );
+
       isConnecting = false;
       showTypingIndicator = false;
     } catch (err) {

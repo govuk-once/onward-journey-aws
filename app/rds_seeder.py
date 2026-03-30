@@ -79,11 +79,13 @@ def lambda_handler(event, context):
     )
 
     try:
-        # Wrap everything in a transaction for atomicity
-        conn.run("BEGIN")
-
         # Ensure pgvector extension is available in the database
+        # This is performed outside the transaction to prevent parallel race conditions
+        # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
+
+        # Wrap data ingestion in a transaction for atomicity
+        conn.run("BEGIN")
 
         # 1. TABLE INITIALIZATION
         # To ensure the database matches the latest YAML/CSV schema, we drop

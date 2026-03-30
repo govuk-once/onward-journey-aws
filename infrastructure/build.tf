@@ -1,3 +1,10 @@
+# This ensures the dist folders exist so the Data Sources don't crash during the Plan phase.
+resource "null_resource" "ensure_dist_folders" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${path.module}/../dist/seeder_staging ${path.module}/../dist/orchestrator_staging ${path.module}/../dist/rds_tool_staging ${path.module}/../dist/crm_tool_staging"
+  }
+}
+
 ## LAMBDA BUILD PIPELINE: RDS SEEDER
 # Automates dependency installation using 'uv' and zipping for the Data Ingestion layer.
 

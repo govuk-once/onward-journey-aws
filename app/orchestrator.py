@@ -127,12 +127,15 @@ def query_department_database(query: str, config: RunnableConfig):
     })
 
     # STEP 2: The Call
+    # Construct the tool name dynamically using the Environment Prefix
+    tool_name = f"{ENV_PREFIX}-rds-search-tool___query_department_database"
+
     call_payload = {
         "jsonrpc": "2.0",
         "id": f"call-{str(uuid.uuid4())[:8]}",
         "method": "tools/call",
         "params": {
-            "name": "sw-rds-search-tool___query_department_database",
+            "name": tool_name,
             "arguments": {"query": query},
         },
     }
@@ -206,13 +209,13 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
 tools = [query_department_database, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
-def chatbot(state: State):
+def chatbot(state: State, config: RunnableConfig):
     """Primary reasoning node for the agent that uses the bound tools."""
     messages = state["messages"]
 
 
     # Call the model with the full, unfiltered state history.
-    response = llm_with_tools.invoke(messages)
+    response = llm_with_tools.invoke(messages, config)
 
     return {"messages": [response]}
 
@@ -344,9 +347,10 @@ def lambda_handler(event, context):
                 elif isinstance(chunk.content, str):
                     yield chunk.content
 
-    # --- TEST CODE ---
+    # --- MVP RESPONSE (NON-STREAMING) ---
     # Currently used for Function URL compatibility without streaming enabled.
     # Consumes the generator and returns a standard JSON object for testing.
+    # NOTE: Disable this block when enabling the TODO Streaming mode below.
     print("⚡ Starting stream consumption...")
     full_response = "".join(list(generate_stream()))
     print("Stream finished successfully")
@@ -359,14 +363,6 @@ def lambda_handler(event, context):
         ),
     }
 
-    # --- FURURE CODE: TOKEN STREAMING ---
-    # Enable this when using Lambda Web Adapter or InvokeWithResponseStream.
-    # return {
-    #     "statusCode": 200,
-    #     "headers": {
-    #         "Content-Type": "text/event-stream",
-    #         "Cache-Control": "no-cache",
-    #         "Connection": "keep-alive",
-    #     },
-    #     "body": generate_stream(),
-    # }
+    #  --- TODO: TOKEN STREAMING IMPLEMENTATION ---
+    # The infrastructure is 'Streaming Ready' (see Terraform: invoke_mode = RESPONSE_STREAM).
+    # Next Step: Enable real-time response streaming for the Svelte frontend to reduce latency and improve UI responsiveness.

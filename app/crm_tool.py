@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 # --- CONFIGURATION MAPPING ---
 # This acts as the 'glue' between RDS metadata and Genesys specific routing.
-# TODO: Future enhancement: These IDs will be moved to an RDS table.
+# TODO: Future enhancement: These IDs could be moved to an RDS table.
 CRM_CONFIG_MAP = {
     "gate-ho-passport-004": {
         "platform": "genesys",
@@ -203,7 +203,7 @@ class GenesysIntegration(CrmIntegration):
 
 
 def lambda_handler(event, context):
-    # og the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
+    # Log the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
     trace_id = event.get("thread_id") or event.get("session_id") or "UNKNOWN_SESSION"
     print(f"CRM TOOL CALL | Trace: {trace_id} | Event: {json.dumps(event)}")
 

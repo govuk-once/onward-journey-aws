@@ -144,7 +144,7 @@ resource "aws_lambda_function" "crm_tool" {
 # Enables the RESPONSE_STREAM mode for real-time interaction with the Svelte frontend.
 resource "aws_lambda_function_url" "orchestrator_url" {
   function_name      = aws_lambda_function.orchestrator.function_name
-  authorization_type = "NONE" # TODO: Recommend using AWS_IAM for production environments
+  authorization_type = "NONE" # TODO: Using AWS_IAM for production environments is recommended
   invoke_mode        = "RESPONSE_STREAM"
 
   cors {

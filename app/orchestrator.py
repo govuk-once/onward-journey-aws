@@ -28,13 +28,12 @@ ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
 GATEWAY_ENDPOINT_URL = os.environ.get("GATEWAY_ENDPOINT_URL")
 MEMORY_ID = os.environ.get("MEMORY_ID")
-# TODO: Make naming of endpoint URLs consistent
-ENDPOINT_URL = os.environ.get("AGENT_RUNTIME_ENDPOINT_URL")
+AGENT_RUNTIME_URL = os.environ.get("AGENT_RUNTIME_ENDPOINT_URL")
 BEDROCK_RUNTIME_URL = os.environ.get("BEDROCK_RUNTIME_ENDPOINT")
 SECRETS_ENDPOINT_URL = os.environ.get("SECRETS_ENDPOINT_URL")
 AWS_REGION = "eu-west-2"
 
-SYSTEM_PROMPT = """You are a specialized GOV.UK Contact Assistant.
+SYSTEM_PROMPT = """You are a specialised GOV.UK Contact Assistant.
 Your primary duty is to provide contact details for specific government departments while filtering out irrelevant search results.
 
 STRICT FILTERING RULES:
@@ -50,7 +49,7 @@ ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
    - STOP AND WAIT: Do not call 'connect_to_live_chat' until the user explicitly says "Yes", "Please connect me", or similar.
 3. PHONE FALLBACK: If 'live_chat_identifier' is missing, null, empty, or if agents are currently OFFLINE or an error occurs, you MUST provide the 'phone_number' as the primary contact method instead.
 4. HANDOVER SUMMARY (BRIEFING NOTE): If the user agrees to connect, you must call method='connect_to_live_chat' and generate a 2-3 sentence 'summary'.
-   - DESTINATION: A professional 'Briefing Note' for the human advisor via the 'connect_to_live_chat' tool.
+   - DESTINATION: A professional 'Briefing Note' for the human adviser via the 'connect_to_live_chat' tool.
    - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
    - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
    - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
@@ -247,7 +246,7 @@ workflow.add_edge("execute_tools", "chatbot")
 checkpointer = AgentCoreMemorySaver(
     memory_id=MEMORY_ID,
     region_name=AWS_REGION,
-    endpoint_url=f"https://{ENDPOINT_URL}" if ENDPOINT_URL else None,
+    endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
 )
 app = workflow.compile(checkpointer=checkpointer)
 
@@ -285,7 +284,7 @@ def lambda_handler(event, context):
     config = {"configurable": {"thread_id": thread_id, "actor_id": actor_id}}
 
     # Network Checks
-    check_connection(ENDPOINT_URL, 443)
+    check_connection(AGENT_RUNTIME_URL, 443)
     check_connection(BEDROCK_RUNTIME_URL, 443)
     check_connection(SECRETS_ENDPOINT_URL, 443)
 

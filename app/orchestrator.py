@@ -143,7 +143,7 @@ def query_department_database(query: str, config: RunnableConfig):
     return content[0]["text"] if content else "ERROR: No matching records found."
 
 @tool
-def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str):
+def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str, config: RunnableConfig):
     """
     Handles CRM interactions (availability and handoff).
     'summary' should be a 2-3 sentence Briefing Note from long-term memory.
@@ -152,6 +152,9 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
     - 'check_chat_availability': Use this first to see if agents are online.
     - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
     """
+
+    actor_id = config["configurable"].get("actor_id")
+    thread_id = config["configurable"].get("thread_id")
 
     # Map the method to the specific Gateway Target name defined in Terraform
     target_map = {
@@ -174,7 +177,9 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
                 "method": method,
                 "live_chat_identifier": live_chat_identifier,
                 "reason": reason,
-                "summary": summary
+                "summary": summary,
+                "actor_id": actor_id,
+                "thread_id": thread_id
             },
         },
     }

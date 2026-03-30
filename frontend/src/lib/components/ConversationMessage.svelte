@@ -20,6 +20,8 @@
       {/if}
       <div class="govuk-body-m govuk-!-margin-bottom-0">
         {#if message}
+         <!-- the html passed here is sanitised -->
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html message}
         {:else}
           <span class="app-c-conversation-message__loading-text">

@@ -468,7 +468,7 @@ export class GenesysClient {
           console.error("[GenesysClient] Error class received:", message.body);
           this.emit("error", new Error(JSON.stringify(message.body)));
           break;
-        
+
         default:
           console.log("[GenesysClient] Message class:", message.class);
       }

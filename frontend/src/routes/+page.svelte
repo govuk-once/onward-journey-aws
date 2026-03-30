@@ -85,7 +85,7 @@
     console.log("Switching to HUMAN mode", payload);
     isConnecting = true;
     connectionType = 'HUMAN';
-    
+
     // Add a system message
     messages.push({
       message: '', // keep blank to get default message
@@ -123,7 +123,7 @@
         text: msg.text,
         hasEvents: !!msg.events?.length
       });
-      
+
       if (msg.text) {
         if (msg.direction === "Inbound") {
           console.log("Ignoring inbound message (echo)");
@@ -131,7 +131,7 @@
         }
 
         console.log("Processing outbound message from advisor:", msg.text);
-        
+
         const newMessage: ListableConversationMessageProps = {
           message: await markdownToHtml(msg.text),
           user: msg.channel?.from?.nickname ?? "Advisor",
@@ -144,7 +144,7 @@
           ...messages,
           newMessage
         ];
-        
+
         showTypingIndicator = false;
       } else if (msg.type == "Event" && msg.events?.find((e) => e.eventType == "Typing")) {
         console.log("Typing event received");
@@ -161,10 +161,10 @@
       console.log("Attempting to connect to Genesys WebSocket...");
       await genesysClient.connect();
       console.log("WebSocket connected. Configuring session...");
-      
+
       const sessionResponse = await genesysClient.configureSession(handoff.token);
       console.log("Session configured:", sessionResponse);
-      
+
       if (!sessionResponse.connected) {
         throw new Error("Session response indicated not connected");
       }
@@ -172,10 +172,10 @@
       console.log("Sending initial context message to advisor...");
       genesysClient.sendMessage("User transferred from AI. Thread ID: " + threadId);
       console.log("Initial message sent.");
-      
-      messages = messages.map(m => 
-        m.id === CONNECTING_MESSAGE_ID 
-        ? { ...m, message: "Connected to a human advisor." } 
+
+      messages = messages.map(m =>
+        m.id === CONNECTING_MESSAGE_ID
+        ? { ...m, message: "Connected to a human advisor." }
         : m
       );
 

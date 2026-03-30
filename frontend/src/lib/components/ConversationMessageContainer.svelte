@@ -22,8 +22,8 @@
   };
 
   $effect(() => {
-    const _track = JSON.stringify(messages);
-    const _typing = showTypingIndicator;
+    void JSON.stringify(messages);
+    void showTypingIndicator;
 
     untrack(() => {
       scrollToBottom('instant');

@@ -54,7 +54,7 @@ export class OrchestratorClient {
                     // Extract SIGNAL if present: SIGNAL: signalName {payload}
                     const signalRegex = /SIGNAL:\s+(\w+)\s+(.*)$/s;
                     const match = responseText.match(signalRegex);
-                    
+
                     let cleanResponseText = responseText;
                     let signalData: { name: string; payload: unknown } | null = null;
 
@@ -62,10 +62,10 @@ export class OrchestratorClient {
                         const signalName = match[1];
                         const signalPayloadStr = match[2];
                         let signalPayload: unknown = signalPayloadStr;
-                        
+
                         try {
                             signalPayload = JSON.parse(signalPayloadStr);
-                        } catch (_e) {
+                        } catch {
                             // If not valid JSON, keep it as a string
                         }
 

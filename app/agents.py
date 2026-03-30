@@ -285,9 +285,9 @@ class BaseAgent:
 def _compose_system_instrutions(self, latest_user_prompts: str) -> str:
     if not self.prompt_guidance:
         return self.system_instructions
-    
+
     try:
-        
+
         return self.prompt_guidance.compose_system_instrutions(
             base_system_instrutions=self.system_instruction,
             latest_user_prompts=latest_user_prompts,

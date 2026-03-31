@@ -3,6 +3,8 @@
 ## Summary
 A prototype for connecting users to further support after a chat session can't produce a satisfactory answer, hosted on AWS
 
+For detailed information on the infrastructure architecture, environment isolation, and database management, please refer to the [Infrastructure README](infrastructure/README.md).
+
 ## Getting started
 
 ### Pre-requisites
@@ -32,6 +34,21 @@ You need to initialise the terraform in the `infrastructure/` directory before y
 ```shell
 # Run within an authenticated session from from `gds aws`
 terraform init -reconfigure -backend-config=environments/<environment name>.config
+```
+
+When running `terraform init` for the first time, you will be prompted via the CLI to provide backend configuration values to locate the existing TF state bucket. Enter them in the following format, replacing the account number and environment name (usually your initials for dev):
+
+```text
+Initializing the backend...
+bucket
+  The name of the S3 bucket
+
+  Enter a value: govuk-once-onwardjourney-development-<aws account number>-tfstate
+
+key
+  The path to the state file inside the bucket
+
+  Enter a value: environment/<environment name>
 ```
 
 You can switch workspaces to deploy an entirely different instance, for example to test changes in an isolated environment without affecting the default workspace:

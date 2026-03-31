@@ -4,12 +4,32 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "6.21.0"
+      version = "6.28.0" # min 6.28 required to enable use of invoked_via_function_url
     }
 
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.0"
+    }
+
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
+
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
+
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
     }
   }
 

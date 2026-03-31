@@ -10,7 +10,10 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# Ignore everything in dist except for .gitkeep files
+dist/**
+!dist/**/
+!dist/**/.gitkeep
 downloads/
 eggs/
 .eggs/
@@ -233,3 +236,7 @@ errored.tfstate
 __pycache__/
 *.pyc
 tmp/
+
+# Test artifacts
+tests/response.json
+

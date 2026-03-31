@@ -25,7 +25,7 @@ To simplify connectivity and manage quotas, the networking layer is **shared and
 We use the `var.environment` variable (set in your `local.auto.tfvars`) to prefix resources. This ensures that your work does not conflict with others.
 
 - **Unique Resources:** IAM Roles, Security Groups, RDS Instances, and Bedrock AgentCore modules.
-- **Naming Convention:** `[initials]-[resource-name]` (e.g., `ab-orchestrator-sg`).
+- **Naming Convention:** `[initials]-[resource-name]` (e.g. `ab-orchestrator-sg`).
 
 ### 3. Managed Agent Capabilities (AgentCore)
 
@@ -34,7 +34,9 @@ We leverage Amazon Bedrock’s managed "AgentCore" to handle the complexities of
 - **`agent_chat_context`**: This is the managed memory store. It can persist the history handed over from GOV.UK chat and will maintain the ongoing conversation state during the Onward Journey.
 - **`tool_interface`**: A standardised gateway using the Model Context Protocol (MCP) that allows the Orchestrator to securely query tools (like the Department Contacts database). **Note:** Inbound traffic is secured via AWS_IAM (SigV4) authentication.
 
-**⚠️ Naming Note:** Due to inconsistent AWS validation rules, Memory resources use underscores (e.g., `agent_chat_context`) while Gateway resources use hyphens (e.g., `tool-interface`). Terraform handles this via the agentcore.tf file, but be mindful if renaming.
+**⚠️ Naming Note:** Due to inconsistent AWS validation rules, Memory resources use underscores (e.g. `agent_chat_context`) while Gateway resources use hyphens (e.g. `tool-interface`).
+
+**Crucial:** Bedrock appends a 10-character unique hash to Memory IDs (e.g. `-yq9yRQ5h7z`). If you need to manually import a memory resource into your state, you must use the full ID found in the AWS Console.
 
 ### 4. Database & Secrets Management
 
@@ -50,10 +52,12 @@ The **Government Department Contacts Store** (RDS PostgreSQL 17.6) is our primar
 We use a configuration-driven pipeline to populate the RDS database. This is managed via `infrastructure/seed_config.yaml`.
 
 - **CSV to RDS:** Adding a new table is as simple as dropping a CSV into `mock_data/` and adding a table entry into the YAML.
-- **Development & Mock Data:** The `interaction_memory.csv` and its YAML entry are provided for testing purposes. You can:
+- **Development and Mock Data:** The `interaction_memory.csv` and its YAML entry are provided for testing purposes. You can:
   - Replace the existing file and update its YAML entry.
   - Add entirely new files and YAML entries as required for development.
-- **Automatic Vectorization:** If a table in the YAML defines an `embedding` column and `embedding_source_cols`, the Seeder Lambda will automatically call Bedrock Titan v2 to generate vectors for those rows during ingestion.
+The `dept_contacts_v2` table powers the primary RAG search via `mock_rag_data_v2.csv`.
+- **Parallel-Safe Ingestion:** The Seeder Lambda is designed to handle parallel execution. It verifies and installs the `pgvector` extension outside of the main data transaction to prevent race conditions when multiple tables are seeded simultaneously.
+- **Automatic Vectorisation:** If a table in the YAML defines an `embedding` column and `embedding_source_cols`, the Seeder Lambda will automatically call Bedrock Titan v2 to generate vectors for those rows during ingestion.
 - **Automatic Triggers:** Terraform monitors the `filemd5` hash of your CSV files and the YAML config. Any change will automatically trigger a targeted Lambda invocation to refresh that specific table.
 
 ---
@@ -61,21 +65,37 @@ We use a configuration-driven pipeline to populate the RDS database. This is man
 ### Troubleshooting & Maintenance
 
 #### When the Seeder Fails
-
 If your data isn't appearing in RDS after an apply, check the following:
 
 1.  **CloudWatch Logs:** Navigate to `/aws/lambda/[initials]-rds-seeder`. Look for "Connection Timeout" or Bedrock "Access Denied" errors.
-2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table. The seeder requires this to fetch the CSV files from S3 without internet access.
+2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table.
 3.  **Secrets Format:** Ensure the DB password in Secrets Manager is saved as a **Plaintext** string, not a JSON key-pair.
 
 #### Manual Table Refresh
-
-If you need to force-rebuild a table (e.g., if you manually deleted data or want to re-run the vectorization without changing the CSV), use the following targeted replace command:
+To force-rebuild a table without changing the CSV, use a targeted replace command. Example for the v2 contact table:
 
 ```bash
-terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data.csv"]'
+terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data_v2.csv"]'
 ```
 
+#### Manual Build/Rebuild (Lambda Packaging)
+If a Lambda build is unsuccessful or staging folders are corrupted, use the `taint` command.
+
+```bash
+# Force a rebuild of the Orchestrator package
+terraform taint null_resource.install_orchestrator_deps
+```
+
+Or to rebuild everything at once, you can run:
+
+```bash
+# Force a rebuild of all packages
+terraform apply \
+  -replace="null_resource.install_orchestrator_deps" \
+  -replace="null_resource.install_seeder_deps" \
+  -replace="null_resource.install_rds_tool_deps" \
+  -replace="null_resource.install_crm_tool_deps"
+  ```
 ---
 
 ### Developer Quick Start
@@ -83,8 +103,10 @@ terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data.csv"]'
 1.  **Initialise Terraform:** `terraform init`
 2.  **Create/Select your workspace:** `terraform workspace new [initials]` / `terraform workspace select [initials]`
 3.  **Validate:** Run `terraform validate` to ensure your specific environment names meet Bedrock's regex requirements.
-4.  **First Deployment (Expected Failure):** `terraform apply`
+4.  **Build Folders:** The `dist/` directory contains staging folders for Lambda builds. These contain `.gitkeep` files to ensure the directory structure exists for Terraform. **Do not delete these hidden files**, as they are required for the `terraform plan` phase to succeed.
+5.  **First Deployment (Expected Failure):** `terraform apply`
     - **Note:** This will create the Secret container for the database password but will fail at the RDS creation step with a 'couldn't find resource' error for the secret version. This is expected.
-5.  **Important:** Navigate to the **AWS Console** -> **Secrets Manager** (Ensure region is `eu-west-2`) and set the value for your `${var.environment}-dept-contacts-db-password` as a **Plaintext** value (no brackets required) so the stack can connect to the database.
-6.  **Second Deployment & RDS Data Seeding:** Run `terraform apply` again.
-    - Terraform will provision the RDS instance and immediately trigger the Seeder Lambda to populate your tables.
+6.  **Set Password:** Navigate to the **AWS Console** -> **Secrets Manager** and set the plaintext value for `${var.environment}-dept-contacts-db-password`.
+7. **Set CRM Secrets:** Navigate to the **AWS Console** -> **Secrets Manager** and set the key values for `${var.environment}/crm-creds/*`.
+8.  **Final Deployment:** Run `terraform apply` again to provision the RDS instance and trigger the Seeder.
+9. **Integration Testing:** Once the stack is green, follow the [Backend Integration Testing Guide](tests/README.md) to verify the deployment via the CLI.

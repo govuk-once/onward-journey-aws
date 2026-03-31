@@ -16,7 +16,6 @@ resource "aws_db_instance" "dept_contacts_metadata" {
   username          = "onward_admin"
 
   # Reference the specific password from Secrets Manager
-  # TODO: Add password to Secrets Manager
   password = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_string
 
   # Network and Security placement

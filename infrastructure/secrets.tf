@@ -35,7 +35,6 @@ resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
 }
 
 # The placeholder structure for manual population in Console via CLI for safety
-# TODO: Add note to readme regarding console update
 resource "aws_secretsmanager_secret_version" "ho_crm_val" {
   secret_id = aws_secretsmanager_secret.ho_genesys_credentials.id
   secret_string = jsonencode({

@@ -15,7 +15,7 @@ locals {
     mkdir -p ${path.module}/../dist/layer/python/utils
 
     # 2. INSTALL DEPENDENCIES
-    # We install everything from pyproject.toml to ensure a consistent runtime environment.
+    # We install from pyproject.toml but explicitly EXCLUDE boto3/botocore (pre-installed in Lambda)
     cd ${path.module}/../app
     uv pip install \
       --target ../dist/layer/python \
@@ -26,8 +26,13 @@ locals {
       --no-cache \
       -r pyproject.toml
 
-    # 3. COPY SHARED UTILS
-    # These must be under python/ so they are available in the Lambda sys.path
+    # 3. OPTIMIZE SIZE: Remove boto3, botocore, and cache files to stay under 250MB limit
+    rm -rf ${path.module}/../dist/layer/python/boto3*
+    rm -rf ${path.module}/../dist/layer/python/botocore*
+    find ${path.module}/../dist/layer/python -name "__pycache__" -type d -exec rm -rf {} +
+    find ${path.module}/../dist/layer/python -name "*.pyc" -delete
+
+    # 4. COPY SHARED UTILS
     cp shared/utils/*.py ../dist/layer/python/utils/
   EOT
 }

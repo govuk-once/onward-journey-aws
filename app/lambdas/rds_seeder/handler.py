@@ -7,23 +7,10 @@ generating vector embeddings via Amazon Bedrock Titan v2 for RAG capabilities.
 import csv
 import json
 import os
-
 import boto3
-import pg8000.native
 
-
-SECRETS_URL = os.environ.get("SECRETS_ENDPOINT_URL")
-BEDROCK_URL = os.environ.get("BEDROCK_RUNTIME_ENDPOINT")
-
-
-def get_db_password():
-    """Retrieves the DB password from Secrets Manager using the ARN."""
-    client = boto3.client(
-        "secretsmanager", region_name="eu-west-2", endpoint_url=f"https://{SECRETS_URL}"
-    )
-    response = client.get_secret_value(SecretId=os.environ["DB_SECRET_ARN"])
-    return response["SecretString"]
-
+from utils.db import get_db_connection
+from utils.aws import get_bedrock_client
 
 def get_embedding(bedrock_client, text):
     """
@@ -60,23 +47,10 @@ def lambda_handler(event, context):
 
     # Initialise service clients
     s3 = boto3.client("s3")
-    bedrock = boto3.client(
-        "bedrock-runtime",
-        region_name="eu-west-2",
-        endpoint_url=f"https://{BEDROCK_URL}",
-    )
+    bedrock = get_bedrock_client()
 
-    # Establish database connection using environment variables
-    print(f"Connecting to {os.environ['DB_HOST']}...")
-    conn = pg8000.native.Connection(
-        password=get_db_password(),
-        host=os.environ["DB_HOST"],
-        database=os.environ["DB_NAME"],
-        user=os.environ["DB_USER"],
-        port=5432,
-        timeout=120,
-        tcp_keepalive=True,  # Prevents VPC timeouts on long-running ingestions
-    )
+    # Establish database connection using shared utility
+    conn = get_db_connection()
 
     try:
         # Ensure pgvector extension is available in the database

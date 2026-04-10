@@ -35,7 +35,7 @@ locals {
 resource "null_resource" "build_shared_layer" {
   triggers = {
     lock_file    = filemd5("${path.module}/../app/uv.lock")
-    shared_logic = sha1(join("", [for f in glob("${path.module}/../app/shared/utils/*.py") : filemd5(f)]))
+    shared_logic = sha1(join("", [for f in fileset("${path.module}/../app/shared/utils/", "*.py") : filemd5("${path.module}/../app/shared/utils/${f}")]))
     build_script = sha1(local.layer_build_command)
   }
 

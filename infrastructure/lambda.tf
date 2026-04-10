@@ -1,3 +1,11 @@
+## SHARED LOGIC LAYER
+resource "aws_lambda_layer_version" "shared_logic" {
+  filename            = data.archive_file.shared_layer_zip.output_path
+  layer_name          = "${var.environment}-shared-logic"
+  source_code_hash    = data.archive_file.shared_layer_zip.output_base64sha256
+  compatible_runtimes = ["python3.12"]
+}
+
 ## DATA INGESTION: RDS SEEDER
 resource "aws_cloudwatch_log_group" "rds_seeder" {
   name              = "/aws/lambda/${var.environment}-rds-seeder"
@@ -9,8 +17,9 @@ resource "aws_lambda_function" "rds_seeder" {
   source_code_hash = data.archive_file.rds_seeder_zip.output_base64sha256
   function_name    = "${var.environment}-rds-seeder"
   role             = aws_iam_role.rds_seeder_role.arn
-  handler          = "rds_seeder.lambda_handler"
+  handler          = "handler.lambda_handler"
   runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_logic.arn]
   memory_size      = 512
   timeout          = 300
 
@@ -48,8 +57,9 @@ resource "aws_lambda_function" "orchestrator" {
   source_code_hash = data.archive_file.orchestrator_zip.output_base64sha256
   function_name    = "${var.environment}-orchestrator"
   role             = aws_iam_role.inference.arn
-  handler          = "orchestrator.lambda_handler"
+  handler          = "handler.lambda_handler"
   runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_logic.arn]
   memory_size      = 1024
   timeout          = 120
 
@@ -90,8 +100,9 @@ resource "aws_lambda_function" "rds_tool" {
   source_code_hash = data.archive_file.rds_tool_zip.output_base64sha256
   function_name    = "${var.environment}-rds-tool"
   role             = aws_iam_role.rds_tool_role.arn # Requires access to Bedrock and RDS
-  handler          = "rds_tool.lambda_handler"
+  handler          = "handler.lambda_handler"
   runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_logic.arn]
   memory_size      = 512
   timeout          = 120
 
@@ -126,8 +137,9 @@ resource "aws_lambda_function" "crm_tool" {
   source_code_hash = data.archive_file.crm_tool_zip.output_base64sha256
   function_name    = "${var.environment}-crm-tool"
   role             = aws_iam_role.crm_tool_role.arn
-  handler          = "crm_tool.lambda_handler"
+  handler          = "handler.lambda_handler"
   runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_logic.arn]
   memory_size      = 512
   timeout          = 30
 

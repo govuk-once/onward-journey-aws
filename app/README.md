@@ -1,142 +1,50 @@
-# Onward Journey Agent System
+# Onward Journey - Lambda Application Code
 
-**DISCLAIMER**: This directory contains the variant of the Onward Journey agent which runs locally from `govuk-once/onward-journey`, and the final version of the agent which runs in AWS is likely to be structured quite differently. Below is the README from the local variant
-
----
-
-
-This project implements a specialized Multi-Tool RAG Agent built with Amazon Bedrock (Claude 3.7 Sonnet). It is designed to handle conversation handoffs from a general chatbot, providing grounded answers using internal data, public GOV.UK records, or escalating to a live human agent via Genesys Cloud.
+This directory contains Python code for the Onward Journey AWS Lambda functions. The system has been refactored from a local prototype into a modular, AWS-native architecture.
 
 ---
 
-## Project Structure
+## Architecture Overview
 
-The project is organized into the following Python files:
+The application is structured to support efficient AWS Lambda deployments using a **Shared Lambda Layer** for common dependencies and utility logic.
 
-| File Name          | Description                                                                                                                                    |
-| :----------------- | :-------------------------------------------------
-| `main.py`          | Sets up the environment, loads data, initializes the agent, and runs a sample conversation loop.                                               |
-| `agents.py`        | Contains the `OnwardJourneyAgent` class, which handles LLM configuration, tool declaration, RAG implementation, and the interactive chat loop. |
-| `data.py`          | Contains the `container` class and utility functions (`df_to_text_chunks`) for loading CSV data, chunking it, and generating embeddings.       |
-| `preprocessing.py` | Contains utility functions for data preparation, specifically for transforming raw conversation logs into structured JSON formats.             |
-| `test.py`          | *Evaluator*: Logic for running batch test cases and mapping results to topics for analysis. |
-| `metrics.py`       | *Analytics*: Calculates the Clarification Success Gain (CSG) score |
-| `helpers.py`       | *Utilities*: Standardizes UK phone numbers and maps labels for confusion matrices. |
-| `plotting.py`      | *Visuals*: Generates Seaborn-based heatmaps for performance reporting.|
+### Directory Structure
+
+| Path | Description |
+| :--- | :--- |
+| `lambdas/` | Contains the entry points (`handler.py`) for each individual AWS Lambda function. |
+| `lambdas/orchestrator/` | The core **LangGraph State Machine** that coordinates the agent's reasoning and tool calls. |
+| `lambdas/rds_seeder/` | Handles S3-to-RDS data ingestion and vector embedding generation. |
+| `lambdas/rds_tool/` | MCP-compatible tool for performing semantic searches against the RDS database. |
+| `lambdas/crm_tool/` | MCP-compatible tool for checking human agent availability and initiating handoffs. |
+| `shared/utils/` | Common logic (DB connectors, AWS client builders) shared across all Lambdas via the Layer. |
 
 ---
 
-## Setup and Installation
+## Development & Deployment
 
-Follow these steps to set up and run the project locally.
+### No Local Runtime
+**Important:** There is currently no local "interactive" mode or server in this directory. The system is designed to run exclusively within the AWS Lambda environment.
 
-### 1. Prerequisites
+### Deployment via Terraform
+Follow the [instructions here to deploy terraform](../README.md#deploying-infrastructure) in the root README.md file.
 
-- Make sure you have the repository pre-requisites from [the root README](../README.MD) installed.
-- **AWS Account** with configured **IAM credentials** (via CLI or environment variables).
-- Model Access Granted for the desired Claude model (e.g., Claude 3.7 Sonnet) in your target AWS region.
-- Environment: A .env file required in the app directory to store API credentials and service URLs.
+The build process (defined in `infrastructure/build.tf`) automatically:
+*   Creates a **Shared Layer** containing all dependencies (from `pyproject.toml`) and the `shared/utils/` code.
+*   Packages each Lambda function into a "thin" zip file containing only its specific handler.
 
-### 2. .env Configuration
-Ensure your .env file contains the following variables for OpenSearch and Genesys Cloud integration:
-```bash
-# OpenSearch (GOV.UK Knowledge Base)
-OPENSEARCH_URL=your_opensearch_url
-OPENSEARCH_USERNAME=your_username
-OPENSEARCH_PASSWORD=your_password
+### Shared Logic & Utilities
+To maintain consistency and reduce duplication, all common operations should be added to `app/shared/utils/`:
+*   `aws.py`: Centralized Boto3 client factory (handles VPC endpoints).
+*   `db.py`: RDS/PostgreSQL connection management.
 
-# Genesys Cloud (Live Agent Handoff)
-GENESYS_DEPLOYMENT_ID=your_deployment_id
-GENESYS_REGION=euw2.pure.cloud
+---
 
-# Local Knowledge Base
-KB_PATH=../mock_data/mock_rag_data.csv
-```
-### 2. Data Preparation
+## Testing
 
-You will need a mock CSV file to simulate your internal data source for the RAG tool.
-
-Mock data source files should be added to `../mock_data`. This will ensure that the file is added as an object to the datasets S3 bucket following a Terraform build (for future prototyping use).
-
-`mock_rag_data.csv` has already been added to the `mock_data` folder.
-
-It contains the columns expected by the df_to_text_chunks function in data.py: `uid`, `service_name`, `department`, `phone_number`, `topic`, `user_type`, `tags`, `url`, `last_update`, and `description`.
-
-Example `mock` Structure:
+Verification of the Lambda logic should be performed after deployment using the integration tests located in the root `tests/` directory:
 
 ```bash
-uid,service_name,department,phone_number,topic,user_type,tags,url,last_update,description
-1001,Childcare Tax Credit,HMRC,0300 123 4567,childcare,Individual,"tax, benefit",/childcare-tax,2024-01-15,"Information about claiming tax credits for childcare costs."
-1002,Self Assessment Help,HMRC,0300 987 6543,self assessment,Individual,"tax, self employed",/self-assessment-guide,2024-02-01,"Guide to filing your annual Self Assessment tax return."
-# Add more rows of relevant data...
+# From the project root
+./tests/test_integration.sh
 ```
-
-
-
-### 3. Usage
-
-#### A. Interactive Mode (Conversation Demo)
-
-Use this to see the agent handle the initial handoff and subsequent chat turns.
-(Run from ../onward-journey/app)
-
-```shell
-gds-cli aws once-onwardjourney-development-admin -- uv run main.py interactive
-```
-
-#### B. Testing Mode (Performance Analysis)
-
-Use this to run the agent against a suite of pre-defined queries and generate the performance report and confusion matrix plot.
-
-```shell
-gds-cli aws once-onwardjourney-development-admin -- uv run main.py test \
-    --output_dir path/to/output \
-    --test_data ./ \
-uv run main.py test \
-    --kb_path ../mock_data/mock_rag_data.csv \
-    --test_data ../test_data/prototype2/test_queries_large_80.json \
-```
-
-#### C. Frontend Chat Interaction (Demo-ing)
-
-You will need two terminal windows; one to run the backend and the other for the frontend.
-
-In the first, navigate to the "app" folder and run:
-```shell
-gds-cli aws once-onwardjourney-development-admin -- uv run uvicorn chat_server:app --reload
-```
-In the second, navigate to the "frontend" folder and run:
-```shell
-npm run dev
-```
-Once these have been run and are hosted, go to a browser and go to http://localhost:6173/ . There you can interact with the Onward Journey Agent as a user.
-
-#### Key Components and AWS Integration
-
-##### 1. Bedrock Integration (`agents.py`)
-
-- **Client Initialization**: The agent uses `boto3.client('bedrock-runtime', region_name=...)` for secure authentication and connection to the Bedrock service. You can pass the ARN of an IAM role to assume for calls to Bedrock via the `--role_arn` command line argument
-
-- **Tool Declaration**: Functions are declared using the JSON Schema format required by Anthropic's models on Bedrock.
-
-- **Inference Pipeline**: The agent uses `client.invoke_model()` to send requests. The tool-use logic involves a multi-step loop where the agent sends the prompt, receives the tool call, executes the local Python `query_csv_rag` function, and sends the results back to Bedrock as a subsequent user message for final answer generation.
-
-##### 2. RAG Implementation (`agents.py` and `data.py`)
-
-The RAG tool (query_internal_kb) remains the core component that operates locally to:
-
-- Encode the user query using `Amazon Titan Text Embeddings v2` model.
-
-- Performs Cosine Similarity against pre-computed embeddings.
-
-- Augment the LLM's prompt with the top 3 relevant text chunks.
-
-##### 3. Expected Output Flow
-
-- **Agent Initialization**: Prints confirmation of successful boto3 client connection and tool declaration.
-
-- **Handoff Processing**: The agent sends the initial conversation context to the Bedrock model.
-
-- **First Response**: The Bedrock model calls its tools (depending on strategy - e.g. govuk kb, oj kb or both), receives the RAG context, and generates a specialized, grounded response.
-
-- **Interactive Loop**: The console enters an interactive chat where each user turn triggers a new invoke_model call, potentially engaging the RAG tool.

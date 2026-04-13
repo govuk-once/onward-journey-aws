@@ -14,6 +14,8 @@ import requests
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
+from utils.aws import get_secrets_client
+
 # --- CONFIGURATION MAPPING ---
 # This acts as the 'glue' between RDS metadata and Genesys specific routing.
 # TODO: Future enhancement: These IDs could be moved to an RDS table.
@@ -42,7 +44,7 @@ CRM_CONFIG_MAP = {
 }
 
 # Initialise AWS Clients
-secrets_client = boto3.client("secretsmanager", region_name="eu-west-2")
+secrets_client = get_secrets_client()
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
 
 # --- BASE CRM INTEGRATION INTERFACE ---

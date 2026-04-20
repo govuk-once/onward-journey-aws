@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 1. Path to your Terraform config (adjust if your folder name is different)
-TFVARS_FILE="infrastructure/local.auto.tfvars"
+TFVARS_FILE="infrastructure/services/local.auto.tfvars"
 
 # 2. Extract the environment value
 # Looks for a line starting with 'environment', grabs the part after '=',

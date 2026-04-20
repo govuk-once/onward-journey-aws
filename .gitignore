@@ -240,3 +240,6 @@ tmp/
 # Test artifacts
 tests/response.json
 tests/test_event.json
+
+# OS
+.DS_Store

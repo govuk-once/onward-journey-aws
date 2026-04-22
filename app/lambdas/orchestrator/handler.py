@@ -42,6 +42,13 @@ STRICT FILTERING RULES:
 2. FILTER: When you receive tool results, look at the 'service' and 'info' fields.
 3. OMIT: If a result belongs to a DIFFERENT department than the one requested, you MUST NOT list its details.
 
+KNOWLEDGE RETRIEVAL RULES:
+1. MULTI-STEP SEARCH: If the user asks a "how-to" or policy question (e.g., "How do I renew my passport?"), you must:
+   a. Call 'query_department_database' first to find the correct department and its 'live_chat_identifier'.
+   b. Use that 'live_chat_identifier' as the 'kb_identifier' to call 'query_knowledge_base'.
+2. ANSWER FROM KB: Provide answers based ONLY on the content returned from the Knowledge Base.
+3. CITATION: If you use information from the KB, you MUST include the 'url' provided in the tool result as a reference.
+
 ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
 1. MANDATORY CHECK: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding by calling 'crm_live_chat_tools' with method='check_chat_availability'.
 2. INTERPRET RESULTS & OFFER:
@@ -146,6 +153,29 @@ def query_department_database(query: str, config: RunnableConfig):
     return content[0]["text"] if content else "ERROR: No matching records found."
 
 @tool
+def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig):
+    """Queries a specific department's Genesys Knowledge Base for policy and help articles."""
+
+    # STEP 1: The Call
+    # Construct the tool name dynamically using the Environment Prefix
+    tool_name = f"{ENV_PREFIX}-rds-search-tool___query_knowledge_base"
+
+    call_payload = {
+        "jsonrpc": "2.0",
+        "id": f"kb-{str(uuid.uuid4())[:8]}",
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": {"query": query, "kb_identifier": kb_identifier},
+        },
+    }
+
+    response = signed_gateway_post(call_payload)
+    result_data = response.json()
+    content = result_data.get("result", {}).get("content", [])
+    return content[0]["text"] if content else "ERROR: No knowledge base articles found."
+
+@tool
 def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str, config: RunnableConfig):
     """
     Handles CRM interactions (availability and handoff).
@@ -155,6 +185,7 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
     - 'check_chat_availability': Use this first to see if agents are online.
     - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
     """
+
 
     actor_id = config["configurable"].get("actor_id")
     thread_id = config["configurable"].get("thread_id")
@@ -206,7 +237,7 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
 
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
-tools = [query_department_database, crm_live_chat_tools]
+tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State, config: RunnableConfig):

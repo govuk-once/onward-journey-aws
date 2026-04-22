@@ -15,17 +15,111 @@ from utils.aws import get_bedrock_client
 def get_embedding(bedrock_client, text):
     """
     Invokes the Amazon Titan Text Embeddings v2 model via Bedrock.
-    Returns a 1024-dimension numerical vector for the provided text.
+    Matches the local prototype configuration (1024 dimensions, normalized).
     """
-    body = json.dumps({"inputText": text, "dimensions": 1024})
+    dimensions = 1024
+    body = json.dumps({
+        "inputText": text,
+        "dimensions": dimensions,
+        "normalize": True
+    })
 
-    response = bedrock_client.invoke_model(
-        body=body,
-        modelId="amazon.titan-embed-text-v2:0",
-        contentType="application/json",
-    )
+    try:
+        response = bedrock_client.invoke_model(
+            body=body,
+            modelId="amazon.titan-embed-text-v2:0",
+            contentType="application/json",
+            accept="application/json"
+        )
+        return json.loads(response.get("body").read())["embedding"]
+    except Exception as e:
+        print(f"Embedding API Error: {e}")
+        # Return a zero-vector fallback to prevent the entire batch from failing,
+        # matching the error handling style of the local prototype.
+        return [0.0] * dimensions
 
-    return json.loads(response.get("body").read())["embedding"]
+
+def sync_knowledge_base(conn, bedrock):
+    """
+    Dedicated logic for Knowledge Base Sync-on-Change.
+    Iterates through configured CRM KBs and updates RDS if remote changes are detected.
+    This function is intended to be called by a scheduled EventBridge trigger or manually.
+    """
+    lambda_client = boto3.client("lambda")
+    crm_tool_arn = os.environ.get("CRM_TOOL_LAMBDA_ARN")
+
+    # 1. Ensure Metadata and KB Tables exist
+    conn.run("CREATE TABLE IF NOT EXISTS sync_kb_metadata (kb_identifier TEXT PRIMARY KEY, last_modified TEXT);")
+    conn.run("CREATE TABLE IF NOT EXISTS genesys_kb (id SERIAL PRIMARY KEY, external_id TEXT UNIQUE, title TEXT, content TEXT, kb_identifier TEXT, external_url TEXT, embedding vector(1024));")
+
+    # 2. Dynamically fetch identifiers from the contacts database.
+    # This ensures any new service added to the database is automatically synced.
+    try:
+        rows = conn.run("SELECT DISTINCT live_chat_identifier FROM dept_contacts_v2 WHERE live_chat_identifier IS NOT NULL;")
+        identifiers = [r[0] for r in rows]
+        print(f"Sync Engine: Identified {len(identifiers)} sources from dept_contacts_v2.")
+    except Exception as e:
+        print(f"WARNING: Could not fetch identifiers from dept_contacts_v2 (perhaps table is empty?): {e}")
+        # Fallback to empty list to prevent crash
+        identifiers = []
+
+    for kb_id in identifiers:
+        try:
+            # A. Fetch Remote Version from CRM Tool
+            meta_payload = {"method": "fetch_kb_metadata", "live_chat_identifier": kb_id, "id": f"sync-meta-{kb_id}"}
+            meta_resp = lambda_client.invoke(FunctionName=crm_tool_arn, Payload=json.dumps(meta_payload))
+
+            # Parse the response from CRM tool
+            payload_content = json.loads(meta_resp["Payload"].read().decode())
+            if "error" in payload_content.get("result", {}):
+                print(f"SKIPPING {kb_id}: CRM tool reported error: {payload_content['result']['error']}")
+                continue
+
+            remote_meta = payload_content["result"]
+            remote_date = remote_meta.get("dateModified")
+
+            # B. Check Local Version in RDS
+            local_meta = conn.run("SELECT last_modified FROM sync_kb_metadata WHERE kb_identifier = :id", id=kb_id)
+            local_date = local_meta[0][0] if local_meta else None
+
+            if local_date == remote_date:
+                print(f"SKIPPING: KB {kb_id} is up to date (Modified: {remote_date})")
+                continue
+
+            print(f"SYNCING: KB {kb_id} (Remote: {remote_date} | Local: {local_date})")
+
+            # C. Fetch Full Flattened Articles
+            art_payload = {"method": "fetch_kb_articles", "live_chat_identifier": kb_id, "id": f"sync-art-{kb_id}"}
+            art_resp = lambda_client.invoke(FunctionName=crm_tool_arn, Payload=json.dumps(art_payload))
+            articles = json.loads(art_resp["Payload"].read().decode())["result"]
+
+            # D. Atomic Upsert with Vector Embedding
+            conn.run("BEGIN")
+            for art in articles:
+                # Construct descriptive context string for high-quality vector embeddings
+                text_to_embed = f"Title: {art['title']}. Content: {art['content']}"
+                vector = get_embedding(bedrock, text_to_embed)
+                vector_str = "[" + ",".join(map(str, vector)) + "]"
+
+                conn.run("""
+                    INSERT INTO genesys_kb (external_id, title, content, kb_identifier, external_url, embedding)
+                    VALUES (:eid, :title, :content, :kb, :url, :emb::vector)
+                    ON CONFLICT (external_id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        content = EXCLUDED.content,
+                        embedding = EXCLUDED.embedding;
+                """,
+                eid=art["external_id"], title=art["title"], content=art["content"],
+                kb=kb_id, url=art["external_url"], emb=vector_str)
+
+            # E. Update Metadata to reflect successful sync
+            conn.run("INSERT INTO sync_kb_metadata (kb_identifier, last_modified) VALUES (:id, :date) ON CONFLICT (kb_identifier) DO UPDATE SET last_modified = EXCLUDED.last_modified;", id=kb_id, date=remote_date)
+            conn.run("COMMIT")
+            print(f"SUCCESS: Synced {len(articles)} articles for {kb_id}")
+
+        except Exception as e:
+            conn.run("ROLLBACK")
+            print(f"ERROR: Failed to sync KB {kb_id}: {str(e)}")
 
 
 def lambda_handler(event, context):
@@ -34,19 +128,10 @@ def lambda_handler(event, context):
     Processes a specific S3 CSV file and performs an atomic update on its
     corresponding PostgreSQL table, including vector embedding generation.
     """
-    target_file = event["file_name"]
-    target_table = event["table_name"]
-
-    # Load the master configuration provided by Terraform as a JSON string
-    config = json.loads(os.environ["DB_CONFIG"])
-
-    # Locate the specific table definition from our YAML configuration
-    table_conf = next((t for t in config["tables"] if t["name"] == target_table), None)
-    if not table_conf:
-        raise Exception(f"Configuration for table '{target_table}' not found in YAML.")
+    # Check for independent Knowledge Base sync trigger (e.g. from EventBridge or Manual)
+    sync_type = event.get("sync_type")
 
     # Initialise service clients
-    s3 = boto3.client("s3")
     bedrock = get_bedrock_client()
 
     # Establish database connection using shared utility
@@ -57,6 +142,26 @@ def lambda_handler(event, context):
         # This is performed outside the transaction to prevent parallel race conditions
         # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
+
+        # Route to dedicated KB sync logic if requested
+        if sync_type == "kb_sync":
+            sync_knowledge_base(conn, bedrock)
+            return {"status": "success", "mode": "kb_sync"}
+
+        # --- EXISTING CSV SEEDING LOGIC ---
+        target_file = event["file_name"]
+        target_table = event["table_name"]
+
+        # Load the master configuration provided by Terraform as a JSON string
+        config = json.loads(os.environ["DB_CONFIG"])
+
+        # Locate the specific table definition from our YAML configuration
+        table_conf = next((t for t in config["tables"] if t["name"] == target_table), None)
+        if not table_conf:
+            raise Exception(f"Configuration for table '{target_table}' not found in YAML.")
+
+        # Initialise service clients
+        s3 = boto3.client("s3")
 
         # Wrap data ingestion in a transaction for atomicity
         conn.run("BEGIN")

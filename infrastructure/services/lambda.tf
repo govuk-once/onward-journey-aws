@@ -21,7 +21,7 @@ resource "aws_lambda_function" "rds_seeder" {
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]
   memory_size      = 512
-  timeout          = 300
+  timeout          = 900
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -37,6 +37,7 @@ resource "aws_lambda_function" "rds_seeder" {
       DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
       SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
+      LAMBDA_ENDPOINT_URL      = aws_vpc_endpoint.lambda.dns_entry[0]["dns_name"]
       BUCKET_NAME              = aws_s3_bucket.dataset_storage.id
       CRM_TOOL_LAMBDA_ARN      = aws_lambda_function.crm_tool.arn
     }

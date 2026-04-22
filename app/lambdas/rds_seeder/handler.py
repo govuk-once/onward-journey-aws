@@ -157,6 +157,14 @@ def lambda_handler(event, context):
         # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
 
+        # Route to dedicated KB reset logic
+        if sync_type == "kb_reset":
+            print("RESET: Clearing Knowledge Base sync metadata...")
+            conn.run("DELETE FROM sync_kb_metadata;")
+            count = conn.run("SELECT COUNT(*) FROM genesys_kb;")[0][0]
+            print(f"RESET: Metadata cleared. Current article count in 'genesys_kb': {count}")
+            return {"status": "reset_success", "article_count": count}
+
         # Route to dedicated KB sync logic if requested
         if sync_type == "kb_sync":
             sync_knowledge_base(conn, bedrock)

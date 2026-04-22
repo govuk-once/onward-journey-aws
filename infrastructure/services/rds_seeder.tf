@@ -7,8 +7,10 @@ locals {
   seed_config = yamldecode(file("${path.module}/seed_config.yaml"))
 
   # Dynamically build the trigger map: { "mock_rag_data.csv" = "dept_contacts" }
+  # Only include tables that have a defined source_file for CSV-based seeding.
   data_sources = {
     for table in local.seed_config.tables : table.source_file => table.name
+    if lookup(table, "source_file", null) != null
   }
 }
 

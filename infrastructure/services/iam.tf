@@ -336,6 +336,12 @@ resource "aws_iam_policy" "rds_seeder_permissions" {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      },
+      {
+        Sid      = "CrmToolInvocation"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = aws_lambda_function.crm_tool.arn
       }
     ]
   })

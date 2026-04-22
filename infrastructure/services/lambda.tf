@@ -38,6 +38,7 @@ resource "aws_lambda_function" "rds_seeder" {
       SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
       BUCKET_NAME              = aws_s3_bucket.dataset_storage.id
+      CRM_TOOL_LAMBDA_ARN      = aws_lambda_function.crm_tool.arn
     }
   }
 

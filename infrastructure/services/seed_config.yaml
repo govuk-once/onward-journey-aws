@@ -52,7 +52,6 @@ tables:
       ]
 
   - name: "genesys_kb"
-    source_file: "genesys_kb_mock.csv"
     primary_key: "id"
     columns:
       external_id: "TEXT UNIQUE"

@@ -47,6 +47,28 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
               }
             }
           }
+          inline_payload {
+            name        = "query_knowledge_base"
+            description = "Searches the department knowledge base for policy and how-to articles."
+
+            input_schema {
+              type        = "object"
+              description = "Input for the knowledge base search tool"
+
+              property {
+                name        = "query"
+                type        = "string"
+                description = "The search query for the knowledge base."
+                required    = true
+              }
+              property {
+                name        = "kb_identifier"
+                type        = "string"
+                description = "The unique identifier for the department knowledge base."
+                required    = true
+              }
+            }
+          }
         }
       }
     }

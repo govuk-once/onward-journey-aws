@@ -1,6 +1,8 @@
 """
 RDS Tool Lambda (MCP Server).
 Handles semantic search requests forwarded by the AgentCore Gateway.
+- query_department_database: Searches for contact details.
+- query_knowledge_base: Searches for specific department policy/guidance.
 """
 
 import os
@@ -13,42 +15,67 @@ def lambda_handler(event, context):
 
     print(f"📥 GATEWAY CALL: {json.dumps(event)}")
 
-    # 1. Extract Query and Request ID
-    query = (
-        event.get("arguments", {}).get("query")
-        or event.get("query")
-        or "No query provided"
-    )
+    # 1. Extract Method, Query and Request ID
+    # AgentCore Gateway (MCP) passes the full target name as the method,
+    # but our orchestrator usually appends the specific tool name with ___
+    full_method = event.get("method", "")
+    method = full_method.split("___")[-1] if "___" in full_method else full_method
+
+    args = event.get("arguments", {})
+    query = args.get("query") or event.get("query") or "No query provided"
+    kb_id = args.get("kb_identifier")
     request_id = event.get("id")
 
     # 2. Generate Vector Embedding using Amazon Titan v2
-    # We use 1024 dimensions to match our RDS pgvector settings
+    # We use 1024 dimensions and normalization to match our RDS pgvector settings
     bedrock = get_bedrock_client()
     embed_body = json.dumps({"inputText": query, "dimensions": 1024, "normalize": True})
     embed_resp = bedrock.invoke_model(
-        modelId="amazon.titan-embed-text-v2:0", body=embed_body
+        modelId="amazon.titan-embed-text-v2:0",
+        body=embed_body,
+        contentType="application/json",
+        accept="application/json"
     )
     embedding = json.loads(embed_resp["body"].read())["embedding"]
 
     # 3. Connect and Query RDS using pgvector similarity
     conn = get_db_connection()
 
-    results = conn.run(
-        """
-        SELECT service_name, phone_number, live_chat_identifier, description
-        FROM dept_contacts_v2
-        ORDER BY embedding <=> :embed::vector LIMIT 3
-        """,
-        embed=str(embedding),
-    )
-    conn.close()
+    try:
+        if "query_knowledge_base" in method:
+            # KB Search: Filter by the specific department KB identifier
+            results = conn.run(
+                """
+                SELECT title, content, external_url
+                FROM genesys_kb
+                WHERE kb_identifier = :kb_id
+                ORDER BY embedding <=> :embed::vector LIMIT 3
+                """,
+                kb_id=kb_id,
+                embed=str(embedding),
+            )
+            formatted_results = [
+                {"title": r[0], "content": r[1], "url": r[2]}
+                for r in results
+            ]
+        else:
+            # Default to Contact Search
+            results = conn.run(
+                """
+                SELECT service_name, phone_number, live_chat_identifier, description
+                FROM dept_contacts_v2
+                ORDER BY embedding <=> :embed::vector LIMIT 3
+                """,
+                embed=str(embedding),
+            )
+            formatted_results = [
+                {"service": r[0], "phone": r[1], "live_chat_identifier": r[2], "info": r[3]}
+                for r in results
+            ]
+    finally:
+        conn.close()
 
     # 4. Format results for the MCP-compatible response
-    formatted_results = [
-        {"service": r[0], "phone": r[1], "live_chat_identifier": r[2], "info": r[3]}
-        for r in results
-    ]
-
     return {
         "jsonrpc": "2.0",
         "id": request_id,

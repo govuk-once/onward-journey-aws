@@ -12,7 +12,7 @@ import uuid
 import boto3
 import requests
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from utils.aws import get_secrets_client
 
@@ -68,6 +68,12 @@ class CrmIntegration(ABC):
 
     @abstractmethod
     def generate_handoff_signal(self, event: Dict[str, Any]) -> Dict[str, Any]: pass
+
+    @abstractmethod
+    def fetch_kb_metadata(self) -> Dict[str, Any]: pass
+
+    @abstractmethod
+    def fetch_kb_articles(self) -> List[Dict[str, Any]]: pass
 
 
 # --- GENESYS IMPLEMENTATION ---
@@ -203,6 +209,77 @@ class GenesysIntegration(CrmIntegration):
             }]
         }
 
+    def _parse_blocks(self, blocks: List[Dict[str, Any]]) -> str:
+        """Flattens Genesys Knowledge blocks into a single string."""
+        text_parts = []
+        for block in blocks:
+            if block.get("type") == "Text" and block.get("text"):
+                text_parts.append(block["text"].get("content", ""))
+            elif block.get("type") == "Paragraph" and block.get("paragraph"):
+                if "blocks" in block["paragraph"]:
+                    text_parts.append(self._parse_blocks(block["paragraph"]["blocks"]))
+        return " ".join(filter(None, text_parts))
+
+    def fetch_kb_metadata(self) -> Dict[str, Any]:
+        """Fetches the latest version/modification info for the Knowledge Base."""
+        token = self._refresh_oauth_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        region = self.config['api_region']
+
+        kb_id = self.creds.get("kb_id")
+        if not kb_id:
+            raise Exception("KB_ID missing from CRM secrets.")
+
+        url = f"https://api.{region}/api/v2/knowledge/knowledgebases/{kb_id}"
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
+    def fetch_kb_articles(self) -> List[Dict[str, Any]]:
+        """Fetches and flattens all active articles from the Knowledge Base."""
+        token = self._refresh_oauth_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        region = self.config['api_region']
+
+        kb_id = self.creds.get("kb_id")
+        if not kb_id:
+            raise Exception("KB_ID missing from CRM secrets.")
+
+        # 1. Get all document metadata
+        url = f"https://api.{region}/api/v2/knowledge/knowledgebases/{kb_id}/documents"
+        all_content = []
+
+        while url:
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+            for doc in data.get("entities", []):
+                # 2. Get variations for actual text
+                var_url = f"https://api.{region}/api/v2/knowledge/knowledgebases/{kb_id}/documents/{doc['id']}/variations"
+                var_resp = requests.get(var_url, headers=headers, timeout=10)
+                var_data = var_resp.json()
+
+                if var_data.get("entities"):
+                    # Use the _parse_blocks logic from the original prototype
+                    raw_text = self._parse_blocks(var_data["entities"][0].get("body", {}).get("blocks", []))
+                    all_content.append({
+                        "title": doc["title"],
+                        "content": raw_text,
+                        "kb_identifier": self.chat_id,
+                        "external_id": doc["id"],
+                        "external_url": f"https://genesys.cloud/kb/{kb_id}/article/{doc['id']}"
+                    })
+
+            url = data.get("nextUri")
+            if url:
+                url = f"https://api.{region}{url}"
+
+        # TEMPORARY LOG: Display all data pulled from the KB for verification
+        print(f"DEBUG: KB Data Pulled for {self.chat_id}: {json.dumps(all_content)}")
+
+        return all_content
+
 
 def lambda_handler(event, context):
     # Log the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
@@ -230,6 +307,12 @@ def lambda_handler(event, context):
             result = integration.generate_handoff_signal(event)
             # --- HANDOFF STATUS LOG ---
             print(f"METRIC | LiveHandoffInitiated | Target: {chat_id} | Trace: {trace_id}")
+
+        elif "fetch_kb_metadata" in method:
+            result = integration.fetch_kb_metadata()
+
+        elif "fetch_kb_articles" in method:
+            result = integration.fetch_kb_articles()
 
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 

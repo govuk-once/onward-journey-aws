@@ -76,22 +76,26 @@ def sync_knowledge_base(conn, bedrock):
             print(f"TRACE [{kb_id}]: Invoking fetch_kb_metadata...")
             meta_payload = {"method": "fetch_kb_metadata", "live_chat_identifier": kb_id, "id": f"sync-meta-{kb_id}"}
             meta_resp = lambda_client.invoke(FunctionName=crm_tool_arn, Payload=json.dumps(meta_payload))
-            print(f"TRACE [{kb_id}]: Received response from fetch_kb_metadata")
 
             # Parse the response from CRM tool
             payload_content = json.loads(meta_resp["Payload"].read().decode())
-            if "error" in payload_content.get("result", {}):
-                print(f"SKIPPING {kb_id}: CRM tool reported error: {payload_content['result']['error']}")
+            remote_meta = payload_content.get("result", {})
+
+            # Check if the CRM tool returned a standard error message (usually in 'content')
+            if "content" in remote_meta:
+                error_msg = remote_meta["content"][0].get("text", "Unknown Error")
+                print(f"SKIPPING {kb_id}: CRM tool reported: {error_msg}")
                 continue
 
-            remote_meta = payload_content["result"]
             remote_date = remote_meta.get("dateModified")
 
             # B. Check Local Version in RDS
             local_meta = conn.run("SELECT last_modified FROM sync_kb_metadata WHERE kb_identifier = :id", id=kb_id)
             local_date = local_meta[0][0] if local_meta else None
 
-            if local_date == remote_date:
+            # STRICT COMPARISON: Only skip if we have a valid remote date AND it matches our local one.
+            # If remote_date is None, it means the KB is empty or Genesys had an issue - we should try to sync anyway.
+            if remote_date and local_date == remote_date:
                 print(f"SKIPPING: KB {kb_id} is up to date (Modified: {remote_date})")
                 continue
 

@@ -45,8 +45,15 @@ def sync_knowledge_base(conn, bedrock):
     Iterates through configured CRM KBs and updates RDS if remote changes are detected.
     This function is intended to be called by a scheduled EventBridge trigger or manually.
     """
-    lambda_client = boto3.client("lambda")
+    # Initialize Lambda client using the VPC Endpoint URL to bypass unreachable public internet
+    lambda_endpoint = os.environ.get("LAMBDA_ENDPOINT_URL")
+    print(f"TRACE: Initializing Lambda client with endpoint: {lambda_endpoint}")
+    lambda_client = boto3.client(
+        "lambda",
+        endpoint_url=f"https://{lambda_endpoint}" if lambda_endpoint else None
+    )
     crm_tool_arn = os.environ.get("CRM_TOOL_LAMBDA_ARN")
+    print(f"TRACE: CRM Tool ARN: {crm_tool_arn}")
 
     # 1. Ensure Metadata and KB Tables exist
     conn.run("CREATE TABLE IF NOT EXISTS sync_kb_metadata (kb_identifier TEXT PRIMARY KEY, last_modified TEXT);")
@@ -66,8 +73,10 @@ def sync_knowledge_base(conn, bedrock):
     for kb_id in identifiers:
         try:
             # A. Fetch Remote Version from CRM Tool
+            print(f"TRACE [{kb_id}]: Invoking fetch_kb_metadata...")
             meta_payload = {"method": "fetch_kb_metadata", "live_chat_identifier": kb_id, "id": f"sync-meta-{kb_id}"}
             meta_resp = lambda_client.invoke(FunctionName=crm_tool_arn, Payload=json.dumps(meta_payload))
+            print(f"TRACE [{kb_id}]: Received response from fetch_kb_metadata")
 
             # Parse the response from CRM tool
             payload_content = json.loads(meta_resp["Payload"].read().decode())
@@ -89,11 +98,14 @@ def sync_knowledge_base(conn, bedrock):
             print(f"SYNCING: KB {kb_id} (Remote: {remote_date} | Local: {local_date})")
 
             # C. Fetch Full Flattened Articles
+            print(f"TRACE [{kb_id}]: Invoking fetch_kb_articles...")
             art_payload = {"method": "fetch_kb_articles", "live_chat_identifier": kb_id, "id": f"sync-art-{kb_id}"}
             art_resp = lambda_client.invoke(FunctionName=crm_tool_arn, Payload=json.dumps(art_payload))
+            print(f"TRACE [{kb_id}]: Received response from fetch_kb_articles")
             articles = json.loads(art_resp["Payload"].read().decode())["result"]
 
             # D. Atomic Upsert with Vector Embedding
+            print(f"TRACE [{kb_id}]: Processing {len(articles)} articles...")
             conn.run("BEGIN")
             for i, art in enumerate(articles):
                 # Construct descriptive context string for high-quality vector embeddings
@@ -123,7 +135,6 @@ def sync_knowledge_base(conn, bedrock):
         except Exception as e:
             conn.run("ROLLBACK")
             print(f"ERROR: Failed to sync KB {kb_id}: {str(e)}")
-
 
 def lambda_handler(event, context):
     """

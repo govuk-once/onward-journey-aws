@@ -31,6 +31,19 @@ resource "aws_vpc_endpoint" "secrets" {
   tags = { Name = "${var.environment}-secrets-endpoint" }
 }
 
+# 3. Lambda Endpoint - Required for rds_seeder to invoke crm_tool from within the VPC
+resource "aws_vpc_endpoint" "lambda" {
+  vpc_id            = local.vpc_id
+  service_name      = "com.amazonaws.${var.aws_region}.lambda"
+  vpc_endpoint_type = "Interface"
+
+  subnet_ids          = local.private_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = false
+
+  tags = { Name = "${var.environment}-lambda-endpoint" }
+}
+
 # # 3. S3 Endpoint (Gateway) - Required to ingest the contacts CSV
 # # Run the dynamic check script
 # data "external" "s3_check" {

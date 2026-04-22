@@ -95,7 +95,7 @@ def sync_knowledge_base(conn, bedrock):
 
             # D. Atomic Upsert with Vector Embedding
             conn.run("BEGIN")
-            for art in articles:
+            for i, art in enumerate(articles):
                 # Construct descriptive context string for high-quality vector embeddings
                 text_to_embed = f"Title: {art['title']}. Content: {art['content']}"
                 vector = get_embedding(bedrock, text_to_embed)
@@ -112,6 +112,9 @@ def sync_knowledge_base(conn, bedrock):
                 eid=art["external_id"], title=art["title"], content=art["content"],
                 kb=kb_id, url=art["external_url"], emb=vector_str)
 
+                # PROGRESS LOG: Print every article to confirm work is happening
+                if i % 5 == 0:
+                    print(f"[{kb_id}] Synced {i+1}/{len(articles)} articles...")
             # E. Update Metadata to reflect successful sync
             conn.run("INSERT INTO sync_kb_metadata (kb_identifier, last_modified) VALUES (:id, :date) ON CONFLICT (kb_identifier) DO UPDATE SET last_modified = EXCLUDED.last_modified;", id=kb_id, date=remote_date)
             conn.run("COMMIT")

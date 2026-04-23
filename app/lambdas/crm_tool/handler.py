@@ -35,15 +35,15 @@ CRM_CONFIG_MAP = {
         "platform": "genesys",
         "secret_path": "crm-creds/home-office-genesys",
         "api_region": "euw2.pure.cloud",
-        "queue_id": sandbox_queue_id,
-        "deploy_id": sandbox_deploy_id
+        "queue_id": "ho-visa-queue-uuid",
+        "deploy_id": "ho-visa-deploy-uuid"
     },
     "gate-dvla-renew-003": {
         "platform": "genesys",
         "secret_path": "crm-creds/dvla-genesys",
         "api_region": "euw2.pure.cloud",
-        "queue_id": sandbox_queue_id,
-        "deploy_id": sandbox_deploy_id
+        "queue_id": "dvla-renew-uuid",
+        "deploy_id": "dvla-renew-deploy-uuid"
     }
 }
 

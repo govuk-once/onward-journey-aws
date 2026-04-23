@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
 from utils.aws import get_secrets_client
+from utils.genesys_parser import parse_genesys_blocks
 
 # --- CONFIGURATION MAPPING ---
 # This acts as the 'glue' between RDS metadata and Genesys specific routing.
@@ -209,17 +210,6 @@ class GenesysIntegration(CrmIntegration):
             }]
         }
 
-    def _parse_blocks(self, blocks: List[Dict[str, Any]]) -> str:
-        """Flattens Genesys Knowledge blocks into a single string."""
-        text_parts = []
-        for block in blocks:
-            if block.get("type") == "Text" and block.get("text"):
-                text_parts.append(block["text"].get("content", ""))
-            elif block.get("type") == "Paragraph" and block.get("paragraph"):
-                if "blocks" in block["paragraph"]:
-                    text_parts.append(self._parse_blocks(block["paragraph"]["blocks"]))
-        return " ".join(filter(None, text_parts))
-
     def fetch_kb_metadata(self) -> Dict[str, Any]:
         """Fetches the latest version/modification info for the Knowledge Base."""
         token = self._refresh_oauth_token()
@@ -261,8 +251,7 @@ class GenesysIntegration(CrmIntegration):
                 var_data = var_resp.json()
 
                 if var_data.get("entities"):
-                    # Use the _parse_blocks logic from the original prototype
-                    raw_text = self._parse_blocks(var_data["entities"][0].get("body", {}).get("blocks", []))
+                    raw_text = parse_genesys_blocks(var_data["entities"][0].get("body", {}).get("blocks", []))
                     all_content.append({
                         "title": doc["title"],
                         "content": raw_text,

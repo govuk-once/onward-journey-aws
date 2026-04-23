@@ -20,27 +20,30 @@ from utils.genesys_parser import parse_genesys_blocks
 # --- CONFIGURATION MAPPING ---
 # This acts as the 'glue' between RDS metadata and Genesys specific routing.
 # TODO: Future enhancement: These IDs could be moved to an RDS table.
+sandbox_queue_id = "7c1702bc-8f49-4cd6-96d4-51b6542b26f5"
+sandbox_deploy_id = "a548193a-6a74-474d-8e2d-f0adb0f291b1"
+
 CRM_CONFIG_MAP = {
-    "gate-ho-passport-004": {
+    "gate-hmp-track-001": {
         "platform": "genesys",
         "secret_path": "crm-creds/home-office-genesys",
         "api_region": "euw2.pure.cloud",
-        "queue_id": "ho-passport-queue-uuid",
-        "deploy_id": "ho-passport-deploy-uuid"
+        "queue_id": sandbox_queue_id,
+        "deploy_id": sandbox_deploy_id
     },
-    "gate-ho-visas-002": {
+    "gate-ho-visas-005": {
         "platform": "genesys",
         "secret_path": "crm-creds/home-office-genesys",
         "api_region": "euw2.pure.cloud",
-        "queue_id": "ho-visas-queue-uuid",
-        "deploy_id": "ho-visas-deploy-uuid"
+        "queue_id": sandbox_queue_id,
+        "deploy_id": sandbox_deploy_id
     },
     "gate-dvla-renew-003": {
         "platform": "genesys",
         "secret_path": "crm-creds/dvla-genesys",
         "api_region": "euw2.pure.cloud",
-        "queue_id": "7c1702bc-8f49-4cd6-96d4-51b6542b26f5",
-        "deploy_id": "a548193a-6a74-474d-8e2d-f0adb0f291b1"
+        "queue_id": sandbox_queue_id,
+        "deploy_id": sandbox_deploy_id
     }
 }
 

@@ -31,7 +31,7 @@ CRM_CONFIG_MAP = {
         "queue_id": sandbox_queue_id,
         "deploy_id": sandbox_deploy_id
     },
-    "gate-ho-visas-005": {
+    "gate-ho-visa-005": {
         "platform": "genesys",
         "secret_path": "crm-creds/home-office-genesys",
         "api_region": "euw2.pure.cloud",

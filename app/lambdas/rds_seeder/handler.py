@@ -164,11 +164,11 @@ def lambda_handler(event, context):
 
         # Route to dedicated KB reset logic
         if sync_type == "kb_reset":
-            print("RESET: Clearing Knowledge Base sync metadata...")
+            print("RESET: Clearing Knowledge Base sync metadata and article data...")
             conn.run("DELETE FROM sync_kb_metadata;")
-            count = conn.run("SELECT COUNT(*) FROM genesys_kb;")[0][0]
-            print(f"RESET: Metadata cleared. Current article count in 'genesys_kb': {count}")
-            return {"status": "reset_success", "article_count": count}
+            conn.run("DELETE FROM genesys_kb;")
+            print("RESET: Database cleared and ready for fresh sync.")
+            return {"status": "reset_success"}
 
         # Route to dedicated KB sync logic if requested
         if sync_type == "kb_sync":

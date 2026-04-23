@@ -123,7 +123,8 @@ def sync_knowledge_base(conn, bedrock):
                     ON CONFLICT (external_id) DO UPDATE SET
                         title = EXCLUDED.title,
                         content = EXCLUDED.content,
-                        embedding = EXCLUDED.embedding;
+                        embedding = EXCLUDED.embedding,
+                        kb_identifier = EXCLUDED.kb_identifier;
                 """,
                 eid=art["external_id"], title=art["title"], content=art["content"],
                 kb=kb_id, url=art["external_url"], emb=vector_str)

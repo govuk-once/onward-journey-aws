@@ -34,7 +34,11 @@ terraform {
   }
 
   # Configured per-environment in environments/<environment name>.config
-  backend "s3" {}
+  backend "s3" {
+    # We leave bucket and key empty to be filled by .config files,
+    # but we force the prefix structure here.
+    workspace_key_prefix = "environment"
+  }
 }
 
 provider "aws" {

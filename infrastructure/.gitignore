@@ -2,7 +2,7 @@
 .terraform
 
 # Ignore environment-specific tf backend config files
-environments/*.config
+*/environments/*.config
 
 # Ignore local tfvars files
-local.auto.tfvars
+*/local.auto.tfvars

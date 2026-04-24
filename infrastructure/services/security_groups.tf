@@ -10,7 +10,7 @@
 resource "aws_security_group" "orchestrator" {
   name        = "${var.environment}-orchestrator-sg"
   description = "Security group for the Orchestration Layer for environment: ${var.environment}"
-  vpc_id      = data.aws_vpc.active.id
+  vpc_id      = local.vpc_id
 
   # Allow all outbound traffic for calling Bedrock APIs and querying tool endpoints.
   egress {
@@ -31,7 +31,15 @@ resource "aws_security_group" "orchestrator" {
 resource "aws_security_group" "vpc_endpoints" {
   name        = "${var.environment}-vpc-endpoints-sg"
   description = "Private interface for the Orchestrator to reach Bedrock and Secrets Manager"
-  vpc_id      = data.aws_vpc.active.id
+  vpc_id      = local.vpc_id
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   tags = {
     Name = "${var.environment}-vpc-endpoints-sg"
@@ -54,7 +62,7 @@ resource "aws_security_group_rule" "allow_orchestrator_to_endpoints" {
 resource "aws_security_group" "rds_metadata" {
   name        = "${var.environment}-rds-metadata-sg-v2"
   description = "Allows authorized data services to query the Department Contacts database"
-  vpc_id      = data.aws_vpc.active.id
+  vpc_id      = local.vpc_id
 
   egress {
     description = "Allow all outbound"
@@ -85,7 +93,7 @@ resource "aws_security_group_rule" "allow_data_services_to_rds" {
 resource "aws_security_group" "rds_seeder_sg" {
   name        = "${var.environment}-rds-seeder-sg"
   description = "Allows Data Services to reach RDS and AWS Services"
-  vpc_id      = data.aws_vpc.active.id
+  vpc_id      = local.vpc_id
 
   egress {
     description = "Allow all outbound traffic"

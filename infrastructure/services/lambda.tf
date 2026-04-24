@@ -24,7 +24,7 @@ resource "aws_lambda_function" "rds_seeder" {
   timeout          = 300
 
   vpc_config {
-    subnet_ids         = data.aws_subnets.private.ids
+    subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.rds_seeder_sg.id]
   }
 
@@ -64,7 +64,7 @@ resource "aws_lambda_function" "orchestrator" {
   timeout          = 120
 
   vpc_config {
-    subnet_ids         = data.aws_subnets.private.ids
+    subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.orchestrator.id]
   }
 
@@ -107,7 +107,7 @@ resource "aws_lambda_function" "rds_tool" {
   timeout          = 120
 
   vpc_config {
-    subnet_ids         = data.aws_subnets.private.ids
+    subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.rds_seeder_sg.id] # Reuse seeder SG for DB access
   }
 

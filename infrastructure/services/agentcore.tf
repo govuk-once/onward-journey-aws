@@ -55,6 +55,9 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
   credential_provider_configuration {
     gateway_iam_role {} # Use the Gateway's role to invoke the Lambda
   }
+  depends_on = [
+    aws_lambda_permission.allow_bedrock_gateway
+  ]
 }
 
 

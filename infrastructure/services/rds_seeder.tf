@@ -23,8 +23,8 @@ resource "terraform_data" "rds_sync_trigger" {
   }
 
   triggers_replace = [
-    filemd5("${path.module}/../mock_data/${each.key}"), # Re-seed if the hash of the local file changes
-    filemd5("${path.module}/seed_config.yaml")          # Re-seed if the YAML definition changes
+    filemd5("${path.module}/mock_data/${each.key}"), # Re-seed if the hash of the local file changes
+    filemd5("${path.module}/seed_config.yaml")       # Re-seed if the YAML definition changes
   ]
 
   # Targeted invocation: passing the specific file and table as a JSON payload

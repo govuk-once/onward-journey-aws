@@ -6,7 +6,7 @@ This directory contains the terraform code to deploy an instance of the onwards 
 
 We utilise a model where foundational networking is **shared** across the account, while application resources are **isolated** per developer environment.
 
-- **How:** A single, persistent **Shared VPC** is provisioned once. Individual developer resources (Orchestrators, Databases, etc.) are then deployed into this VPC using Terraform workspaces.
+- **How:** A single, persistent **Shared VPC** is provisioned once in the `default` workspace. Individual developer resources (Orchestrators, Databases, etc.) are then deployed into this VPC using dedicated Terraform workspaces.
 - **Why:** This approach avoids hitting AWS VPC limits and reduces deployment times by reusing the heavy networking infrastructure. It ensures a consistent network configuration across the team while maintaining total security and data isolation for each developer.
 
 ---
@@ -18,7 +18,7 @@ To simplify connectivity and manage quotas, the networking layer is **shared and
 - **Shared Resources:** `main-vpc`, `app-pvt-2a/b` (Private), and `dmz-pub-2a` (Public).
 - **VPC Endpoints:** We provision interface and gateway endpoints for **Bedrock**, **Secrets Manager**, and **S3**. This allows the isolated stack to communicate with AWS services securely without leaving the private network.
 - **Protection:** These resources use the `prevent_destroy = true` lifecycle guardrail to prevent accidental network disruption.
-- **⚠️ Tear Down Warning:** If you must destroy the VPC, you must first manually comment out the `prevent_destroy` lines in `infrastructure/vpc.tf`. **Do not do this unless you are certain no other developer is using the network.**
+- **⚠️ Tear Down Warning:** If you must destroy the VPC, you must first manually comment out the `prevent_destroy` lines in `infrastructure/vpc/vpc.tf`. **Do not do this unless you are certain no other developer is using the network.**
 
 ### 2. Environment Isolation
 
@@ -68,7 +68,7 @@ The `dept_contacts_v2` table powers the primary RAG search via `mock_rag_data_v2
 If your data isn't appearing in RDS after an apply, check the following:
 
 1.  **CloudWatch Logs:** Navigate to `/aws/lambda/[initials]-rds-seeder`. Look for "Connection Timeout" or Bedrock "Access Denied" errors.
-2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table.
+2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table in the VPC layer.
 3.  **Secrets Format:** Ensure the DB password in Secrets Manager is saved as a **Plaintext** string, not a JSON key-pair.
 
 #### Manual Table Refresh
@@ -95,18 +95,4 @@ terraform apply \
   -replace="null_resource.install_seeder_deps" \
   -replace="null_resource.install_rds_tool_deps" \
   -replace="null_resource.install_crm_tool_deps"
-  ```
----
-
-### Developer Quick Start
-
-1.  **Initialise Terraform:** `terraform init`
-2.  **Create/Select your workspace:** `terraform workspace new [initials]` / `terraform workspace select [initials]`
-3.  **Validate:** Run `terraform validate` to ensure your specific environment names meet Bedrock's regex requirements.
-4.  **Build Folders:** The `dist/` directory contains staging folders for Lambda builds. These contain `.gitkeep` files to ensure the directory structure exists for Terraform. **Do not delete these hidden files**, as they are required for the `terraform plan` phase to succeed.
-5.  **First Deployment (Expected Failure):** `terraform apply`
-    - **Note:** This will create the Secret container for the database password but will fail at the RDS creation step with a 'couldn't find resource' error for the secret version. This is expected.
-6.  **Set Password:** Navigate to the **AWS Console** -> **Secrets Manager** and set the plaintext value for `${var.environment}-dept-contacts-db-password`.
-7. **Set CRM Secrets:** Navigate to the **AWS Console** -> **Secrets Manager** and set the key values for `${var.environment}/crm-creds/*`.
-8.  **Final Deployment:** Run `terraform apply` again to provision the RDS instance and trigger the Seeder.
-9. **Integration Testing:** Once the stack is green, follow the [Backend Integration Testing Guide](tests/README.md) to verify the deployment via the CLI.
+```

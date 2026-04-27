@@ -62,11 +62,11 @@ def sync_knowledge_base(conn, bedrock):
     # 2. Dynamically fetch identifiers from the contacts database.
     # This ensures any new service added to the database is automatically synced.
     try:
-        rows = conn.run("SELECT DISTINCT live_chat_identifier FROM dept_contacts_v2 WHERE live_chat_identifier IS NOT NULL;")
+        rows = conn.run("SELECT DISTINCT knowledge_base_identifier FROM dept_contacts_v3 WHERE knowledge_base_identifier IS NOT NULL;")
         identifiers = [r[0] for r in rows]
-        print(f"Sync Engine: Identified {len(identifiers)} sources from dept_contacts_v2.")
+        print(f"Sync Engine: Identified {len(identifiers)} sources from dept_contacts_v3.")
     except Exception as e:
-        print(f"WARNING: Could not fetch identifiers from dept_contacts_v2 (perhaps table is empty?): {e}")
+        print(f"WARNING: Could not fetch identifiers from dept_contacts_v3 (perhaps table is empty?): {e}")
         # Fallback to empty list to prevent crash
         identifiers = []
 

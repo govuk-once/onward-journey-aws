@@ -44,8 +44,8 @@ STRICT FILTERING RULES:
 
 KNOWLEDGE RETRIEVAL RULES:
 1. MULTI-STEP SEARCH: If the user asks a "how-to" or policy question (e.g., "How do I renew my passport?"), you must:
-   a. Call 'query_department_database' first to find the correct department and its 'live_chat_identifier'.
-   b. Use that 'live_chat_identifier' as the 'kb_identifier' to call 'query_knowledge_base'.
+   a. Call 'query_department_database' first to find the correct department and its 'knowledge_base_identifier'.
+   b. Use that 'knowledge_base_identifier' as the 'kb_identifier' to call 'query_knowledge_base'.
 2. ANSWER FROM KB: Provide answers based ONLY on the content returned from the Knowledge Base.
 3. CITATION: If you use information from the KB, you MUST include the 'url' provided in the tool result as a reference.
 

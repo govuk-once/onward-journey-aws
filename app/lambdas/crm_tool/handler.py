@@ -24,14 +24,14 @@ sandbox_queue_id = "7c1702bc-8f49-4cd6-96d4-51b6542b26f5"
 sandbox_deploy_id = "a548193a-6a74-474d-8e2d-f0adb0f291b1"
 
 CRM_CONFIG_MAP = {
-    "gate-hmp-track-001": {
+    "hmp-track-001": {
         "platform": "genesys",
         "secret_path": "crm-creds/home-office-genesys",
         "api_region": "euw2.pure.cloud",
         "queue_id": sandbox_queue_id,
         "deploy_id": sandbox_deploy_id
     },
-    "gate-ho-visa-005": {
+    "ho-visa-005": {
         "platform": "genesys",
         "secret_path": "",
         # "secret_path": "crm-creds/home-office-genesys",
@@ -39,7 +39,7 @@ CRM_CONFIG_MAP = {
         "queue_id": "ho-visa-queue-uuid",
         "deploy_id": "ho-visa-deploy-uuid"
     },
-    "gate-dvla-renew-003": {
+    "dvla-renew-003": {
         "platform": "genesys",
         "secret_path": "",
         # "secret_path": "crm-creds/dvla-genesys",

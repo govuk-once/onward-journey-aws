@@ -62,14 +62,20 @@ def lambda_handler(event, context):
             # Default to Contact Search
             results = conn.run(
                 """
-                SELECT service_name, phone_number, live_chat_identifier, description
-                FROM dept_contacts_v2
+                SELECT service_name, phone_number, live_chat_identifier, knowledge_base_identifier, description
+                FROM dept_contacts_v3
                 ORDER BY embedding <=> :embed::vector LIMIT 3
                 """,
                 embed=str(embedding),
             )
             formatted_results = [
-                {"service": r[0], "phone": r[1], "live_chat_identifier": r[2], "info": r[3]}
+                {
+                    "service": r[0],
+                    "phone": r[1],
+                    "live_chat_identifier": r[2],
+                    "knowledge_base_identifier": r[3],
+                    "info": r[4]
+                }
                 for r in results
             ]
     finally:

@@ -44,10 +44,18 @@ def lambda_handler(event, context):
     try:
         if "query_knowledge_base" in method:
             # KB Search: Filter by the specific department KB identifier
+            if not kb_id:
+                print(f"❌ [ERROR] kb_identifier is required for {method}")
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32602, "message": "kb_identifier is required"}
+                }
+
             results = conn.run(
                 """
                 SELECT title, content, external_url
-                FROM genesys_kb
+                FROM knowledge_bases
                 WHERE kb_identifier = :kb_id
                 ORDER BY embedding <=> :embed::vector LIMIT 3
                 """,

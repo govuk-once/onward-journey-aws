@@ -1,0 +1,119 @@
+{
+  "Comment": "Knowledge Base ETL Sync Pipeline - Fetches, embeds, and upserts KB articles.",
+  "StartAt": "CheckMetadata",
+  "States": {
+    "CheckMetadata": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${check_meta_lambda_arn}",
+        "Payload": {
+          "kb_identifier.$": "$.kb_identifier",
+          "platform.$": "$.platform"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultSelector": {
+        "sync_required.$": "$.Payload.sync_required",
+        "remote_modified_date.$": "$.Payload.remote_modified_date"
+      },
+      "ResultPath": "$.meta_check",
+      "Next": "IsSyncRequired"
+    },
+
+    "IsSyncRequired": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.meta_check.sync_required",
+          "BooleanEquals": true,
+          "Next": "FetchArticles"
+        }
+      ],
+      "Default": "SyncSkipped"
+    },
+
+    "SyncSkipped": {
+      "Type": "Succeed",
+      "Comment": "Local RDS is already up to date with the remote CRM."
+    },
+
+    "FetchArticles": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${fetch_articles_lambda_arn}",
+        "Payload": {
+          "kb_identifier.$": "$.kb_identifier",
+          "platform.$": "$.platform"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultSelector": {
+        "articles.$": "$.Payload.articles"
+      },
+      "ResultPath": "$.kb_data",
+      "Next": "ProcessAndEmbedArticles"
+    },
+
+    "ProcessAndEmbedArticles": {
+      "Type": "Map",
+      "ItemsPath": "$.kb_data.articles",
+      "ItemSelector": {
+        "article.$": "$$.Map.Item.Value",
+        "kb_identifier.$": "$.kb_identifier",
+        "remote_modified_date.$": "$.meta_check.remote_modified_date"
+      },
+      "MaxConcurrency": 10,
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "EmbedAndUpsert",
+        "States": {
+          "EmbedAndUpsert": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${upsert_lambda_arn}",
+              "Payload": {
+                "kb_identifier.$": "$.kb_identifier",
+                "article.$": "$.article",
+                "remote_modified_date.$": "$.remote_modified_date"
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "Next": "SyncComplete"
+    },
+
+    "SyncComplete": {
+      "Type": "Succeed",
+      "Comment": "Successfully generated embeddings and upserted all articles."
+    }
+  }
+}

@@ -154,7 +154,7 @@ def query_department_database(query: str, config: RunnableConfig):
 
 @tool
 def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig):
-    """Queries a specific department's Genesys Knowledge Base for policy and help articles."""
+    """Queries a specific department's Knowledge Base for policy and help articles."""
 
     # STEP 1: The Call
     # Construct the tool name dynamically using the Environment Prefix

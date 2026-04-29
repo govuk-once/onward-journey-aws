@@ -1,7 +1,7 @@
 # This ensures the dist folders exist so the Data Sources don't crash during the Plan phase.
 resource "null_resource" "ensure_dist_folders" {
   provisioner "local-exec" {
-    command = "mkdir -p ${path.module}/../../dist/layer/python ${path.module}/../../dist/orchestrator_staging ${path.module}/../../dist/rds_seeder_staging ${path.module}/../../dist/rds_tool_staging ${path.module}/../../dist/crm_tool_staging"
+    command = "mkdir -p ${path.module}/../../dist/layer/python ${path.module}/../../dist/orchestrator_staging ${path.module}/../../dist/rds_seeder_staging ${path.module}/../../dist/rds_tool_staging ${path.module}/../../dist/crm_tool_staging ${path.module}/../../dist/kb_sync_staging"
   }
 }
 
@@ -99,6 +99,36 @@ data "archive_file" "crm_tool_zip" {
   output_path = "${path.module}/../../dist/crm_tool_payload.zip"
   source {
     content  = file("${path.module}/../../app/lambdas/crm_tool/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 5. KB SYNC: CHECK METADATA
+data "archive_file" "kb_sync_check_meta_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_check_meta_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/check_meta/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 6. KB SYNC: FETCH ARTICLES
+data "archive_file" "kb_sync_fetch_articles_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_fetch_articles_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/fetch_articles/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 7. KB SYNC: UPSERT
+data "archive_file" "kb_sync_upsert_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_upsert_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/upsert/handler.py")
     filename = "handler.py"
   }
 }

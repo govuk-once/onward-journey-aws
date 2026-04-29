@@ -52,7 +52,7 @@ tables:
         "user_type",
       ]
 
-  - name: "genesys_kb"
+  - name: "knowledge_bases"
     primary_key: "id"
     columns:
       external_id: "TEXT UNIQUE"

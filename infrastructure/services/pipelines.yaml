@@ -1,0 +1,18 @@
+pipelines:
+  - name: "home-office-visas"
+    kb_identifier: "ho-visa-005"
+    platform: "genesys"
+    schedule_expression: "rate(12 hours)"
+    enabled: true
+
+  - name: "dvla-renewals"
+    kb_identifier: "dvla-renew-003"
+    platform: "genesys"
+    schedule_expression: "cron(0 2 * * ? *)" # Every day at 2am
+    enabled: true
+
+  - name: "hmp-tracking"
+    kb_identifier: "hmp-track-001"
+    platform: "genesys"
+    schedule_expression: "rate(24 hours)"
+    enabled: true

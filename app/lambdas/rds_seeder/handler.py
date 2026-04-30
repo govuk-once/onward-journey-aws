@@ -53,12 +53,9 @@ def lambda_handler(event, context):
 
     try:
         # Ensure pgvector extension is available in the database
-        # This is performed outside the transaction to prevent parallel race conditions
-        # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
 
-        # --- EXISTING CSV SEEDING LOGIC ---
-        target_file = event["file_name"]
+        target_file = event.get("file_name")
         target_table = event["table_name"]
 
         # Load the master configuration provided by Terraform as a JSON string
@@ -69,80 +66,77 @@ def lambda_handler(event, context):
         if not table_conf:
             raise Exception(f"Configuration for table '{target_table}' not found in YAML.")
 
-        # Initialise service clients
-        s3 = boto3.client("s3")
-
         # Wrap data ingestion in a transaction for atomicity
         conn.run("BEGIN")
 
         # 1. TABLE INITIALIZATION
-        # To ensure the database matches the latest YAML/CSV schema, we drop
-        # the existing table and recreate it. This removes stale data and locks.
         columns = table_conf["columns"]
-        col_definitions = ", ".join(
-            [f"{name} {dtype}" for name, dtype in columns.items()]
-        )
+
+        # Build column definitions, handling primary keys carefully
+        col_parts = []
+        if table_conf.get("primary_key") == "id" and "id" not in columns:
+            col_parts.append("id SERIAL PRIMARY KEY")
+
+        for name, dtype in columns.items():
+            col_parts.append(f"{name} {dtype}")
+
+        col_definitions = ", ".join(col_parts)
 
         print(f"Initialising/recreating table: {target_table}")
         conn.run(f"DROP TABLE IF EXISTS {target_table} CASCADE;")
-        conn.run(
-            f"CREATE TABLE {target_table} (id SERIAL PRIMARY KEY, {col_definitions});"
-        )
+        conn.run(f"CREATE TABLE {target_table} ({col_definitions});")
 
-        # 2. FETCH SOURCE DATA
-        print(f"Fetching source data from S3: mock/{target_file}")
-        s3_res = s3.get_object(
-            Bucket=os.environ["BUCKET_NAME"], Key=f"mock/{target_file}"
-        )
-
-        # 'utf-8-sig' handles potential Byte Order Marks (BOM) from Excel CSV exports
-        lines = s3_res["Body"].read().decode("utf-8-sig").splitlines()
-        reader = csv.DictReader(lines)
-
-        # 3. DYNAMIC INGESTION & EMBEDDING
-        embed_cols = table_conf.get("embedding_source_cols", [])
-
-        print(f"Starting ingestion for {target_table}...")
-        for i, row in enumerate(reader):
-            # Map CSV row data to the columns defined in the YAML - force blank strings to None for SQL NULL conversion
-            # 'embedding' is excluded here as it is calculated via Bedrock below
-            params = {
-                name: (row.get(name) if row.get(name) != "" else None)
-                for name in columns.keys() if name != "embedding"
-            }
-
-            # Semantic Embedding Logic
-            # If the schema defines an 'embedding' column and source columns are provided:
-            if "embedding" in columns and embed_cols:
-                # Construct a descriptive context string for high-quality vector embeddings
-                # Concatenating columns specified in the YAML 'embedding_source_cols'
-                text_to_embed = ". ".join(
-                    [f"{col}: {row.get(col, '')}" for col in embed_cols]
-                )
-
-                # Invoke Bedrock to generate a 1024-dimension vector
-                vector = get_embedding(bedrock, text_to_embed)
-
-                # Format for pgvector input: [val1, val2, ...]
-                params["emb"] = "[" + ",".join(map(str, vector)) + "]"
-
-            # Build Dynamic INSERT statement based on the active parameter map
-            col_names = ", ".join(params.keys()).replace("emb", "embedding")
-            placeholders = ", ".join([f":{k}" for k in params.keys()])
-
-            conn.run(
-                f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})",
-                **params,
+        # 2. FETCH SOURCE DATA & INGEST (Skip if no source_file provided)
+        rows_processed = 0
+        if target_file:
+            print(f"Fetching source data from S3: mock/{target_file}")
+            s3 = boto3.client("s3")
+            s3_res = s3.get_object(
+                Bucket=os.environ["BUCKET_NAME"], Key=f"mock/{target_file}"
             )
 
-            # Log progress to monitor health and runtime in CloudWatch
-            if i % 10 == 0:
-                print(f"Successfully processed {i} rows for {target_table}...")
+            # 'utf-8-sig' handles potential Byte Order Marks (BOM) from Excel CSV exports
+            lines = s3_res["Body"].read().decode("utf-8-sig").splitlines()
+            reader = csv.DictReader(lines)
+
+            # 3. DYNAMIC INGESTION & EMBEDDING
+            embed_cols = table_conf.get("embedding_source_cols", [])
+
+            print(f"Starting ingestion for {target_table}...")
+            for i, row in enumerate(reader):
+                # Map CSV row data to the columns defined in the YAML
+                params = {
+                    name: (row.get(name) if row.get(name) != "" else None)
+                    for name in columns.keys() if name != "embedding"
+                }
+
+                # Semantic Embedding Logic
+                if "embedding" in columns and embed_cols:
+                    text_to_embed = ". ".join(
+                        [f"{col}: {row.get(col, '')}" for col in embed_cols]
+                    )
+                    vector = get_embedding(bedrock, text_to_embed)
+                    params["emb"] = "[" + ",".join(map(str, vector)) + "]"
+
+                # Build Dynamic INSERT statement
+                col_names = ", ".join(params.keys()).replace("emb", "embedding")
+                placeholders = ", ".join([f":{k}" for k in params.keys()])
+
+                conn.run(
+                    f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})",
+                    **params,
+                )
+                rows_processed = i + 1
+
+                if rows_processed % 10 == 0:
+                    print(f"Successfully processed {rows_processed} rows for {target_table}...")
+        else:
+            print(f"No source file provided for {target_table}. Created empty table.")
 
         # Commit only if every row in the file was processed successfully
         conn.run("COMMIT")
-        print(f"Ingestion complete for {target_table}. Total rows processed: {i + 1}")
-        return {"status": "success", "table": target_table, "rows_processed": i + 1}
+        print(f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}")
+        return {"status": "success", "table": target_table, "rows_processed": rows_processed}
 
     except Exception as e:
         # Roll back the transaction if any row or embedding call fails

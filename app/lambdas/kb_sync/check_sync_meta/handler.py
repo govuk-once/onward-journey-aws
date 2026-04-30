@@ -14,9 +14,6 @@ def lambda_handler(event, context):
     # 1. Check Local RDS
     conn = get_db_connection()
     try:
-        # Ensure metadata table exists
-        conn.run("CREATE TABLE IF NOT EXISTS sync_kb_metadata (kb_identifier TEXT PRIMARY KEY, last_modified TEXT);")
-
         local_meta = conn.run("SELECT last_modified FROM sync_kb_metadata WHERE kb_identifier = :id", id=kb_id)
         local_date = local_meta[0][0] if local_meta else None
     finally:

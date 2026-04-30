@@ -34,6 +34,10 @@ def lambda_handler(event, context):
     if not art:
         return {"status": "skipped", "message": "No article data provided"}
 
+    # DEBUG: Connection info check
+    print(f"🔍 [DEBUG] UPSERT START: Article={art.get('external_id')} KB={kb_id}")
+    print(f"🔍 [DEBUG] DB_HOST={os.environ.get('DB_HOST')}")
+
     bedrock = get_bedrock_client()
     conn = get_db_connection()
 
@@ -46,19 +50,6 @@ def lambda_handler(event, context):
 
         # --- LOAD: Atomic Upsert ---
         conn.run("BEGIN")
-
-        # Ensure kb table exists
-        conn.run("""
-        CREATE TABLE IF NOT EXISTS knowledge_bases (
-            id SERIAL PRIMARY KEY,
-            external_id TEXT UNIQUE,
-            title TEXT,
-            content TEXT,
-            kb_identifier TEXT,
-            external_url TEXT,
-            embedding VECTOR(1024)
-        );
-        """)
 
         conn.run("""
             INSERT INTO knowledge_bases (external_id, title, content, kb_identifier, external_url, embedding)
@@ -84,6 +75,10 @@ def lambda_handler(event, context):
             """, kb=kb_id, date=remote_date)
 
         conn.run("COMMIT")
+
+        # DEBUG: Confirmation of success
+        print(f"🔍 [DEBUG] UPSERT COMMIT SUCCESS: {art.get('external_id')}")
+
         return {
             "status": "success",
             "external_id": art["external_id"],
@@ -92,7 +87,7 @@ def lambda_handler(event, context):
 
     except Exception as e:
         conn.run("ROLLBACK")
-        print(f"UPSERT ERROR [{art.get('external_id')}]: {str(e)}")
+        print(f"❌ [DEBUG] UPSERT FAILED [{art.get('external_id')}]: {str(e)}")
         raise e
     finally:
         conn.close()

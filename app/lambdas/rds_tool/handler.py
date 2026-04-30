@@ -26,22 +26,37 @@ def lambda_handler(event, context):
     kb_id = args.get("kb_identifier")
     request_id = event.get("id")
 
-    # 2. Generate Vector Embedding using Amazon Titan v2
-    # We use 1024 dimensions and normalization to match our RDS pgvector settings
-    bedrock = get_bedrock_client()
-    embed_body = json.dumps({"inputText": query, "dimensions": 1024, "normalize": True})
-    embed_resp = bedrock.invoke_model(
-        modelId="amazon.titan-embed-text-v2:0",
-        body=embed_body,
-        contentType="application/json",
-        accept="application/json"
-    )
-    embedding = json.loads(embed_resp["body"].read())["embedding"]
-
-    # 3. Connect and Query RDS using pgvector similarity
+    # Connect to RDS
     conn = get_db_connection()
 
     try:
+        # --- BEGIN DEBUG BLOCK: DELETE AFTER TROUBLESHOOTING ---
+        if method == "droptable":
+            table_to_drop = args.get("table")
+            if not table_to_drop:
+                return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": "table name required in arguments"}}
+
+            print(f"🔥 [DEBUG] MANUAL DROP REQUESTED: {table_to_drop}")
+            conn.run(f"DROP TABLE IF EXISTS {table_to_drop} CASCADE;")
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"content": [{"type": "text", "text": f"Successfully dropped table: {table_to_drop}"}]}
+            }
+        # --- END DEBUG BLOCK ---
+
+        # 2. Generate Vector Embedding using Amazon Titan v2
+        # We use 1024 dimensions and normalization to match our RDS pgvector settings
+        bedrock = get_bedrock_client()
+        embed_body = json.dumps({"inputText": query, "dimensions": 1024, "normalize": True})
+        embed_resp = bedrock.invoke_model(
+            modelId="amazon.titan-embed-text-v2:0",
+            body=embed_body,
+            contentType="application/json",
+            accept="application/json"
+        )
+        embedding = json.loads(embed_resp["body"].read())["embedding"]
+
         if "query_knowledge_base" in method:
             # KB Search: Filter by the specific department KB identifier
             if not kb_id:
@@ -51,6 +66,15 @@ def lambda_handler(event, context):
                     "id": request_id,
                     "error": {"code": -32602, "message": "kb_identifier is required"}
                 }
+
+            # --- DEBUG LOGGING ---
+            print(f"🔍 [DEBUG] KB Search START: kb_id='{kb_id}'")
+            print(f"🔍 [DEBUG] DB_HOST={os.environ.get('DB_HOST')}")
+
+            # Check total count vs identifier count to diagnose wiping/mismatch issues
+            total_count = conn.run("SELECT COUNT(*) FROM knowledge_bases")[0][0]
+            id_count = conn.run("SELECT COUNT(*) FROM knowledge_bases WHERE kb_identifier = :kb_id", kb_id=kb_id)[0][0]
+            print(f"🔍 [DEBUG] KB Search: Total Rows={total_count}, Matches for '{kb_id}'={id_count}")
 
             results = conn.run(
                 """

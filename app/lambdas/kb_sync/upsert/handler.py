@@ -46,6 +46,20 @@ def lambda_handler(event, context):
 
         # --- LOAD: Atomic Upsert ---
         conn.run("BEGIN")
+
+        # Ensure kb table exists
+        conn.run("""
+        CREATE TABLE IF NOT EXISTS knowledge_bases (
+            id SERIAL PRIMARY KEY,
+            external_id TEXT UNIQUE,
+            title TEXT,
+            content TEXT,
+            kb_identifier TEXT,
+            external_url TEXT,
+            embedding VECTOR(1024)
+        );
+        """)
+
         conn.run("""
             INSERT INTO knowledge_bases (external_id, title, content, kb_identifier, external_url, embedding)
             VALUES (:eid, :title, :content, :kb, :url, :emb::vector)

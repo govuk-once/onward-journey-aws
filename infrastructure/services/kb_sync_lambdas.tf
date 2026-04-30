@@ -1,14 +1,40 @@
 
-## KB SYNC: CHECK METADATA
-resource "aws_cloudwatch_log_group" "kb_sync_check_meta" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-check-meta"
+## KB SYNC: CHECK KB METADATA
+resource "aws_cloudwatch_log_group" "kb_sync_check_kb_meta" {
+  name              = "/aws/lambda/${var.environment}-kb-sync-check-kb-meta"
   retention_in_days = 14
 }
 
-resource "aws_lambda_function" "kb_sync_check_meta" {
-  filename         = data.archive_file.kb_sync_check_meta_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_check_meta_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-check-meta"
+resource "aws_lambda_function" "kb_sync_check_kb_meta" {
+  filename         = data.archive_file.kb_sync_check_kb_meta_zip.output_path
+  source_code_hash = data.archive_file.kb_sync_check_kb_meta_zip.output_base64sha256
+  function_name    = "${var.environment}-kb-sync-check-kb-meta"
+  role             = aws_iam_role.crm_tool_role.arn
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  memory_size      = 512
+  timeout          = 30
+
+  environment {
+    variables = {
+      ENV_PREFIX = var.environment
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.kb_sync_check_kb_meta]
+}
+
+## KB SYNC: CHECK SYNC METADATA
+resource "aws_cloudwatch_log_group" "kb_sync_check_sync_meta" {
+  name              = "/aws/lambda/${var.environment}-kb-sync-check-sync-meta"
+  retention_in_days = 14
+}
+
+resource "aws_lambda_function" "kb_sync_check_sync_meta" {
+  filename         = data.archive_file.kb_sync_check_sync_meta_zip.output_path
+  source_code_hash = data.archive_file.kb_sync_check_sync_meta_zip.output_base64sha256
+  function_name    = "${var.environment}-kb-sync-check-sync-meta"
   role             = aws_iam_role.rds_tool_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
@@ -32,7 +58,7 @@ resource "aws_lambda_function" "kb_sync_check_meta" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.kb_sync_check_meta]
+  depends_on = [aws_cloudwatch_log_group.kb_sync_check_sync_meta]
 }
 
 ## KB SYNC: FETCH ARTICLES
@@ -45,7 +71,7 @@ resource "aws_lambda_function" "kb_sync_fetch_articles" {
   filename         = data.archive_file.kb_sync_fetch_articles_zip.output_path
   source_code_hash = data.archive_file.kb_sync_fetch_articles_zip.output_base64sha256
   function_name    = "${var.environment}-kb-sync-fetch-articles"
-  role             = aws_iam_role.crm_tool_role.arn # Needs secret access
+  role             = aws_iam_role.crm_tool_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]

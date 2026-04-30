@@ -60,8 +60,7 @@ data "archive_file" "shared_layer_zip" {
 }
 
 
-## INDIVIDUAL LAMBDA PACKAGING (THIN ZIPS)
-# Each Lambda now only contains its specific handler.py.
+## INDIVIDUAL LAMBDA PACKAGING
 
 # 1. ORCHESTRATOR
 data "archive_file" "orchestrator_zip" {
@@ -103,17 +102,27 @@ data "archive_file" "crm_tool_zip" {
   }
 }
 
-# 5. KB SYNC: CHECK METADATA
-data "archive_file" "kb_sync_check_meta_zip" {
+# 5. KB SYNC: CHECK KB METADATA
+data "archive_file" "kb_sync_check_kb_meta_zip" {
   type        = "zip"
-  output_path = "${path.module}/../../dist/kb_sync_check_meta_payload.zip"
+  output_path = "${path.module}/../../dist/kb_sync_check_kb_meta_payload.zip"
   source {
-    content  = file("${path.module}/../../app/lambdas/kb_sync/check_meta/handler.py")
+    content  = file("${path.module}/../../app/lambdas/kb_sync/check_kb_meta/handler.py")
     filename = "handler.py"
   }
 }
 
-# 6. KB SYNC: FETCH ARTICLES
+# 6. KB SYNC: CHECK SYNC METADATA
+data "archive_file" "kb_sync_check_sync_meta_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_check_sync_meta_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/check_sync_meta/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 7. KB SYNC: FETCH ARTICLES
 data "archive_file" "kb_sync_fetch_articles_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_fetch_articles_payload.zip"
@@ -123,7 +132,7 @@ data "archive_file" "kb_sync_fetch_articles_zip" {
   }
 }
 
-# 7. KB SYNC: UPSERT
+# 8. KB SYNC: UPSERT
 data "archive_file" "kb_sync_upsert_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_upsert_payload.zip"

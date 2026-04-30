@@ -35,7 +35,8 @@ resource "aws_iam_policy" "sfn_kb_sync_policy" {
           "lambda:InvokeFunction"
         ]
         Resource = [
-          aws_lambda_function.kb_sync_check_meta.arn,
+          aws_lambda_function.kb_sync_check_kb_meta.arn,
+          aws_lambda_function.kb_sync_check_sync_meta.arn,
           aws_lambda_function.kb_sync_fetch_articles.arn,
           aws_lambda_function.kb_sync_upsert.arn
         ]
@@ -79,9 +80,10 @@ resource "aws_sfn_state_machine" "kb_sync_machine" {
   role_arn = aws_iam_role.sfn_kb_sync_role.arn
 
   definition = templatefile("${path.module}/kb_sync_workflow.asl.json", {
-    check_meta_lambda_arn     = aws_lambda_function.kb_sync_check_meta.arn
-    fetch_articles_lambda_arn = aws_lambda_function.kb_sync_fetch_articles.arn
-    upsert_lambda_arn         = aws_lambda_function.kb_sync_upsert.arn
+    check_kb_meta_lambda_arn   = aws_lambda_function.kb_sync_check_kb_meta.arn
+    check_sync_meta_lambda_arn = aws_lambda_function.kb_sync_check_sync_meta.arn
+    fetch_articles_lambda_arn  = aws_lambda_function.kb_sync_fetch_articles.arn
+    upsert_lambda_arn          = aws_lambda_function.kb_sync_upsert.arn
   })
 
   logging_configuration {

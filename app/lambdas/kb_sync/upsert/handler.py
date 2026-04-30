@@ -34,10 +34,6 @@ def lambda_handler(event, context):
     if not art:
         return {"status": "skipped", "message": "No article data provided"}
 
-    # DEBUG: Connection info check
-    print(f"🔍 [DEBUG] UPSERT START: Article={art.get('external_id')} KB={kb_id}")
-    print(f"🔍 [DEBUG] DB_HOST={os.environ.get('DB_HOST')}")
-
     bedrock = get_bedrock_client()
     conn = get_db_connection()
 
@@ -76,9 +72,6 @@ def lambda_handler(event, context):
 
         conn.run("COMMIT")
 
-        # DEBUG: Confirmation of success
-        print(f"🔍 [DEBUG] UPSERT COMMIT SUCCESS: {art.get('external_id')}")
-
         return {
             "status": "success",
             "external_id": art["external_id"],
@@ -87,7 +80,7 @@ def lambda_handler(event, context):
 
     except Exception as e:
         conn.run("ROLLBACK")
-        print(f"❌ [DEBUG] UPSERT FAILED [{art.get('external_id')}]: {str(e)}")
+        print(f"UPSERT ERROR [{art.get('external_id')}]: {str(e)}")
         raise e
     finally:
         conn.close()

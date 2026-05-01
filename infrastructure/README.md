@@ -47,18 +47,37 @@ The **Government Department Contacts Store** (RDS PostgreSQL 17.6) is our primar
 - **Secret Name:** Look for `${var.environment}-dept-contacts-db-password` in the AWS Console.
 - **Connectivity:** Access is strictly controlled via the `${var.environment}-rds-metadata-sg`. It only accepts inbound traffic from the orchestrator or seeder on port 5432.
 
-### 5. Data Ingestion & Seeder Pipeline
+### 5. Data Ingestion & Seeder Pipeline (Schema-as-Code)
 
-We use a configuration-driven pipeline to populate the RDS database. This is managed via `infrastructure/seed_config.yaml`.
+We use a configuration-driven pipeline to manage both the **schema** and the **initial data** of the RDS database. This is managed via `infrastructure/services/seed_config.yaml`.
 
-- **CSV to RDS:** Adding a new table is as simple as dropping a CSV into `mock_data/` and adding a table entry into the YAML.
+- **Schema Management:** The seeder acts as a single source of truth for the database structure. Adding a new table definition to the YAML (even without a source file) will automatically provision that table in RDS.
+- **CSV to RDS:** To seed data, add a CSV into `mock_data/` and reference it in the `source_file` field of your table entry in the YAML.
+- **Flexible Primary Keys:** By default, tables are created with a `SERIAL PRIMARY KEY` called `id`. However, you can define your own natural primary key (e.g., `kb_identifier`) in the column list to ensure idempotency and prevent duplicates.
 - **Development and Mock Data:** The `interaction_memory.csv` and its YAML entry are provided for testing purposes. You can:
   - Replace the existing file and update its YAML entry.
   - Add entirely new files and YAML entries as required for development.
-The `dept_contacts_v2` table powers the primary RAG search via `mock_rag_data_v2.csv`.
+The `dept_contacts_v*` table powers the primary RAG search via `mock_rag_data_v*.csv`.
+For example, the `dept_contacts_v3` table currently powers the primary contact search.
 - **Parallel-Safe Ingestion:** The Seeder Lambda is designed to handle parallel execution. It verifies and installs the `pgvector` extension outside of the main data transaction to prevent race conditions when multiple tables are seeded simultaneously.
 - **Automatic Vectorisation:** If a table in the YAML defines an `embedding` column and `embedding_source_cols`, the Seeder Lambda will automatically call Bedrock Titan v2 to generate vectors for those rows during ingestion.
-- **Automatic Triggers:** Terraform monitors the `filemd5` hash of your CSV files and the YAML config. Any change will automatically trigger a targeted Lambda invocation to refresh that specific table.
+- **Automatic Triggers:** Terraform monitors the `seed_config.yaml` and your CSV files. Any change to a specific table's configuration or its source data will automatically trigger a targeted Lambda invocation to refresh that specific table.
+
+---
+
+### 6. Knowledge Base ETL Sync Pipeline (Step Functions)
+
+In addition to the static seeder, we have a dynamic **Knowledge Base Sync Pipeline** designed to fetch and vectorise articles from remote CRM platforms (e.g., Genesys Cloud) on a schedule.
+
+- **Orchestration:** Managed via an AWS Step Function (`kb-sync-machine`).
+- **Workflow Steps:**
+    1.  **CheckKBMeta:** Polls the remote CRM to get the `dateModified` of the target Knowledge Base.
+    2.  **CheckSyncMeta:** Compares the remote timestamp with the `last_modified` date stored in the local `sync_kb_metadata` table.
+    3.  **Choice (IsSyncRequired):** If the dates match, the execution ends. If they differ, the sync proceeds.
+    4.  **FetchArticles:** Downloads all articles from the remote CRM.
+    5.  **ProcessAndEmbedArticles (Map State):** Iterates through each article in parallel, calling Bedrock Titan v2 to generate embeddings and upserting the results into the `knowledge_bases` table.
+- **Scheduling:** EventBridge rules are dynamically created based on the `active_pipelines` configuration in the Terraform locals.
+- **Observability:** Logs for each step are available in CloudWatch under `/aws/lambda/[initials]-kb-sync-*` and the Step Function execution history.
 
 ---
 
@@ -72,10 +91,11 @@ If your data isn't appearing in RDS after an apply, check the following:
 3.  **Secrets Format:** Ensure the DB password in Secrets Manager is saved as a **Plaintext** string, not a JSON key-pair.
 
 #### Manual Table Refresh
-To force-rebuild a table without changing the CSV, use a targeted replace command. Example for the v2 contact table:
+To force-rebuild a table without changing the configuration, use a targeted replace command. Note that keys are the **table name**, not the file name:
 
 ```bash
-terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data_v2.csv"]'
+# Example for the knowledge_bases table
+terraform apply -replace='terraform_data.rds_sync_trigger["knowledge_bases"]'
 ```
 
 #### Manual Build/Rebuild (Lambda Packaging)

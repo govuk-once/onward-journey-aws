@@ -15,6 +15,7 @@ The application is structured to support efficient AWS Lambda deployments using 
 | `lambdas/` | Contains the entry points (`handler.py`) for each individual AWS Lambda function. |
 | `lambdas/orchestrator/` | The core **LangGraph State Machine** that coordinates the agent's reasoning and tool calls. |
 | `lambdas/rds_seeder/` | Handles S3-to-RDS data ingestion and vector embedding generation. |
+| `lambdas/kb_sync/` | A **Step Function-driven ETL pipeline** that syncs articles from remote CRMs (e.g. Genesys) into the RDS knowledge base. |
 | `lambdas/rds_tool/` | MCP-compatible tool for performing semantic searches against the RDS database. |
 | `lambdas/crm_tool/` | MCP-compatible tool for checking human agent availability and initiating handoffs. |
 | `shared/utils/` | Common logic (DB connectors, AWS client builders) shared across all Lambdas via the Layer. |

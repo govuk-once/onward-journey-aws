@@ -5,7 +5,7 @@ A prototype hosted on AWS for connecting users to further support after a chat s
 
 This project uses a **Layered Infrastructure** model:
 * **The Foundation (`infrastructure/vpc`):** A persistent, shared network (VPC, Subnets, S3 Gateway) managed in the **`default`** Terraform workspace.
-* **The Workspaces (`infrastructure/services`):** Isolated developer environments (Lambdas, RDS, Bedrock) managed via **dedicated developer workspaces**.
+* **The Workspaces (`infrastructure/services`):** Isolated developer environments (Lambdas, RDS, Bedrock, Step Function ETL) managed via **dedicated developer workspaces**.
 
 For detailed information on the infrastructure architecture, environment isolation, and database management, please refer to the [Infrastructure README](infrastructure/README.md).
 

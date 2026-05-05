@@ -13,6 +13,7 @@ locals {
     # 1. Clean and prepare fresh staging directory
     rm -rf ${path.module}/../../dist/layer
     mkdir -p ${path.module}/../../dist/layer/python/utils
+    mkdir -p ${path.module}/../../dist/layer/python/integrations
 
     # 2. INSTALL DEPENDENCIES
     # We install from pyproject.toml but explicitly EXCLUDE boto3/botocore (pre-installed in Lambda)
@@ -32,15 +33,20 @@ locals {
     find ${path.module}/../../dist/layer/python -name "__pycache__" -type d -exec rm -rf {} +
     find ${path.module}/../../dist/layer/python -name "*.pyc" -delete
 
-    # 4. COPY SHARED UTILS
+    # 4. COPY SHARED DIRECTORIES
     cp shared/utils/*.py ../dist/layer/python/utils/
-  EOT
+    cp shared/integrations/*.py ../dist/layer/python/integrations/
+    mkdir -p ../dist/layer/python/integrations/providers
+    cp shared/integrations/providers/*.py ../dist/layer/python/integrations/providers/
+    EOT
 }
+
 
 resource "null_resource" "build_shared_layer" {
   triggers = {
     lock_file    = filemd5("${path.module}/../../app/uv.lock")
-    shared_logic = sha1(join("", [for f in fileset("${path.module}/../../app/shared/utils/", "*.py") : filemd5("${path.module}/../../app/shared/utils/${f}")]))
+    shared_utils = sha1(join("", [for f in fileset("${path.module}/../../app/shared/utils/", "*.py") : filemd5("${path.module}/../../app/shared/utils/${f}")]))
+    integrations = sha1(join("", [for f in fileset("${path.module}/../../app/shared/integrations/", "*.py") : filemd5("${path.module}/../../app/shared/integrations/${f}")]))
     build_script = sha1(local.layer_build_command)
   }
 

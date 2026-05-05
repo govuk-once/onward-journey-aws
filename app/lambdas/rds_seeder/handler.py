@@ -1,7 +1,9 @@
 """
 RDS Data Seeder Lambda.
-Handles the ingestion of CSV datasets from S3 into RDS PostgreSQL tables,
-generating vector embeddings via Amazon Bedrock Titan v2 for RAG capabilities.
+
+This Lambda handles the ingestion of CSV datasets from S3 into RDS PostgreSQL
+tables. It dynamically creates tables based on a YAML configuration and
+generates vector embeddings via Amazon Bedrock for RAG capabilities.
 """
 
 import csv
@@ -41,9 +43,27 @@ def get_embedding(bedrock_client, text):
 
 def lambda_handler(event, context):
     """
-    Main entry point for the RDS Seeder.
-    Processes a specific S3 CSV file and performs an atomic update on its
-    corresponding PostgreSQL table, including vector embedding generation.
+    Orchestrates the database seeding process for a specific table.
+
+    1. Retrieves table schema and source file info from the event and environment.
+    2. Drops and recreates the target table to ensure a clean state.
+    3. Fetches the source CSV from S3.
+    4. Iteratively generates embeddings for specified columns and inserts rows.
+    5. Commits the transaction upon successful completion.
+
+    Args:
+        event (dict): The Lambda event object, expected to contain:
+            - file_name (str, optional): The name of the CSV file in S3. If omitted,
+                the table will be created without any initial data.
+            - table_name (str): The name of the target RDS table.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A status report containing the success state and row count.
+
+    Raises:
+        Exception: If table configuration is missing, S3 fetch fails, or
+            database operations encounter an error.
     """
     # Initialise service clients
     bedrock = get_bedrock_client()

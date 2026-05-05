@@ -1,17 +1,39 @@
 """
-RDS Tool Lambda (MCP Server).
-Handles semantic search requests forwarded by the AgentCore Gateway.
-- query_department_database: Searches for contact details.
-- query_knowledge_base: Searches for specific department policy/guidance.
+RDS Tool Lambda.
+
+This Lambda function acts as a semantic search tool for the GOV.UK Contact
+Assistant. It processes queries forwarded by the AgentCore Gateway,
+generates vector embeddings for the query text, and performs high-speed
+vector similarity searches (using pgvector) against the RDS database.
+
+Supported Methods:
+    - query_department_database: Searches for general department contact
+      details and service descriptions.
+    - query_knowledge_base: Searches for specific policy and guidance
+      articles within a department's knowledge base.
 """
 
-import os
 import json
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
 def lambda_handler(event, context):
-    """AgentCore Gateway sends the tool arguments inside the 'arguments' key."""
+    """
+    Entry point for RDS search tool requests, routing to the appropriate search method.
+
+    Args:
+        event (dict): The Lambda event object from the MCP Gateway, containing:
+            - method (str): The search method to execute.
+            - arguments (dict): Search parameters including:
+                - query (str): The natural language query to search for.
+                - kb_identifier (str, optional): Required for KB searches.
+            - id (str|int): A unique identifier for the request.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A JSON-RPC 2.0 formatted dictionary containing the search results
+            as a JSON-serialized string within an MCP content block.
+    """
 
     print(f"📥 GATEWAY CALL: {json.dumps(event)}")
 

@@ -1,12 +1,35 @@
 """
-KB Sync: Check Sync Metadata Lambda
+KB Sync: Check Sync Metadata Lambda.
+
+This Lambda is part of the Knowledge Base (KB) synchronization workflow.
+It compares the modification timestamp from the remote provider with the
+last recorded sync timestamp in the local database (RDS) to determine if
+an update is necessary.
 """
 
-import os
 import json
 from utils.db import get_db_connection
 
 def lambda_handler(event, context):
+    """
+    Compares remote and local KB metadata to decide if synchronization is needed.
+
+    Args:
+        event (dict): The Lambda event object, expected to contain:
+            - kb_identifier (str): Unique identifier for the Knowledge Base.
+            - remote_modified_date (str): The latest modification date from the provider.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A dictionary containing:
+            - sync_required (bool): True if the remote data differs from local.
+            - remote_modified_date (str): The remote date passed in the event.
+            - local_date (str): The last recorded sync date in the local database.
+            - kb_identifier (str): The KB ID being checked.
+
+    Raises:
+        Exception: If there is an issue connecting to or querying the database.
+    """
     print(f"Received event: {json.dumps(event)}")
     kb_id = event.get("kb_identifier")
     remote_date = event.get("remote_modified_date")
@@ -28,5 +51,6 @@ def lambda_handler(event, context):
     return {
         "sync_required": sync_required,
         "remote_modified_date": remote_date,
+        "local_date": local_date,
         "kb_identifier": kb_id
     }

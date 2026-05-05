@@ -1,116 +1,37 @@
 """
 KB Sync: Fetch Articles Lambda.
+
+This Lambda is part of the Knowledge Base (KB) synchronization workflow.
+It retrieves all relevant articles from the configured remote KB provider
+(e.g., Genesys) for downstream processing and synchronization.
 """
 
-import os
 import json
-import requests
-import time
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List
-
-from utils.aws import get_secrets_client
-from utils.genesys_parser import parse_genesys_blocks
-from utils.config import CRM_CONFIG_MAP
-
-# Initialise AWS Clients
-secrets_client = get_secrets_client()
-ENV_PREFIX = os.environ.get("ENV_PREFIX")
-
-# --- BASE KB FETCH INTERFACE ---
-class KbFetchIntegration(ABC):
-    def __init__(self, kb_id: str, config: Dict[str, Any]):
-        self.kb_id = kb_id
-        self.config = config
-        self.creds = self._load_dynamic_secrets()
-        self._token = None
-        self._token_expiry = 0
-
-    def _load_dynamic_secrets(self) -> Dict[str, Any]:
-        """Retrieve the raw secret data from AWS Secrets Manager."""
-        full_secret_name = f"{ENV_PREFIX}/{self.config['secret_path']}"
-        print(f"Fetching {self.config['platform'].capitalize()} Secrets for KB: {self.kb_id}")
-        response = secrets_client.get_secret_value(SecretId=full_secret_name)
-        return json.loads(response["SecretString"])
-
-    @abstractmethod
-    def fetch_articles(self) -> List[Dict[str, Any]]:
-        """Fetch all articles from the remote platform."""
-        pass
-
-# --- GENESYS IMPLEMENTATION ---
-class GenesysKbFetchIntegration(KbFetchIntegration):
-    def _refresh_oauth_token(self) -> str:
-        """Authenticate with Genesys Cloud and cache the bearer token."""
-        if self._token and time.time() < (self._token_expiry - 60):
-            return self._token
-
-        auth_url = f"https://login.{self.config['api_region']}/oauth/token"
-        resp = requests.post(
-            auth_url,
-            data={"grant_type": "client_credentials"},
-            auth=(self.creds['client_id'], self.creds['client_secret']),
-            timeout=10
-        )
-        resp.raise_for_status()
-
-        data = resp.json()
-        self._token = data["access_token"]
-        self._token_expiry = time.time() + data["expires_in"]
-        return self._token
-
-    def fetch_articles(self) -> List[Dict[str, Any]]:
-        token = self._refresh_oauth_token()
-        headers = {"Authorization": f"Bearer {token}"}
-        region = self.config['api_region']
-        kb_uuid = self.creds.get("kb_id")
-        articles = []
-
-        url = f"https://api.{region}/api/v2/knowledge/knowledgebases/{kb_uuid}/documents"
-
-        while url:
-            resp = requests.get(url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-
-            for doc in data.get("entities", []):
-                var_url = f"https://api.{region}/api/v2/knowledge/knowledgebases/{kb_uuid}/documents/{doc['id']}/variations"
-                var_resp = requests.get(var_url, headers=headers, timeout=10)
-                var_data = var_resp.json()
-
-                if var_data.get("entities"):
-                    raw_text = parse_genesys_blocks(var_data["entities"][0].get("body", {}).get("blocks", []))
-                    articles.append({
-                        "title": doc["title"],
-                        "content": raw_text,
-                        "kb_identifier": self.kb_id,
-                        "external_id": doc["id"],
-                        "external_url": f"https://genesys.cloud/kb/{kb_uuid}/article/{doc['id']}"
-                    })
-
-            url = data.get("nextUri")
-            if url: url = f"https://api.{region}{url}"
-
-        return articles
-
-# --- FACTORY ---
-def get_kb_fetch_integration(kb_id: str, config: Dict[str, Any]) -> KbFetchIntegration:
-    platform = config.get("platform")
-    if platform == "genesys":
-        return GenesysKbFetchIntegration(kb_id, config)
-    raise ValueError(f"Unsupported platform: {platform}")
+from integrations.factory import ProviderFactory, Capability
 
 def lambda_handler(event, context):
+    """
+    Fetches articles from the remote Knowledge Base provider.
+
+    Args:
+        event (dict): The Lambda event object, expected to contain:
+            - kb_identifier (str): Unique identifier for the Knowledge Base.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A dictionary containing:
+            - articles (list): A list of article objects retrieved from the provider.
+
+    Raises:
+        Exception: If the provider cannot be instantiated or article fetching fails.
+    """
     print(f"Received event: {json.dumps(event)}")
     kb_id = event.get("kb_identifier")
-    config = CRM_CONFIG_MAP.get(kb_id)
-
-    if not config:
-        raise Exception(f"Configuration not found for KB: {kb_id}")
 
     try:
-        integration = get_kb_fetch_integration(kb_id, config)
-        articles = integration.fetch_articles()
+        provider = ProviderFactory.get_provider(kb_id, Capability.KB_FETCH)
+
+        articles = provider.fetch_articles()
 
         print(f"KB {kb_id}: Fetched {len(articles)} articles.")
         return {

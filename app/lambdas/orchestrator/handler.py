@@ -1,6 +1,10 @@
 """
 GOV.UK Onward Journey - AgentCore/Lambda Hybrid Orchestrator.
-Manages LangGraph state and Bedrock AgentCore interactions.
+
+This Lambda serves as the central reasoning engine for the GOV.UK Contact
+Assistant. It implements a StateGraph (via LangGraph) to manage multi-turn
+conversations, persists state using Amazon Bedrock AgentCore, and
+coordinates tool execution through a VPC-signed MCP Gateway.
 """
 
 import boto3
@@ -285,8 +289,28 @@ app = workflow.compile(checkpointer=checkpointer)
 
 def lambda_handler(event, context):
     """
-    GOV.UK Onward Journey - Orchestrator Entry Point.
-    Handles LangGraph execution with state persistence via Bedrock AgentCore.
+    Orchestrator Entry Point: Processes user messages and executes the agent graph.
+
+    This function handles the lifecycle of a single interaction:
+    1. Parses the incoming message and session metadata (thread_id, actor_id).
+    2. Verifies connectivity to required VPC endpoints (Bedrock, AgentCore, Secrets).
+    3. Initializes the conversation graph with a specialized system prompt.
+    4. Streams the graph execution, including iterative tool calls and reasoning.
+    5. Returns the consolidated assistant response and updated state identifiers.
+
+    Args:
+        event (dict): The Lambda event object. Supports standard JSON payloads
+            or API Gateway/Function URL 'body' strings. Expected keys:
+            - message (str): The user's input text.
+            - thread_id (str): Unique identifier for the conversation history.
+            - actor_id (str): Unique identifier for the user's persistent identity.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A JSON response containing:
+            - response (str): The final generated assistant response.
+            - thread_id (str): The session identifier (echoed back).
+            - actor_id (str): The user identifier (echoed back).
     """
     print(f"Received event: {json.dumps(event)}")
 

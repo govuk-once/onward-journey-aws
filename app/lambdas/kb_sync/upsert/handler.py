@@ -1,15 +1,20 @@
 """
 KB Sync: Upsert Article Lambda.
-Handles article chunking, embedding generation, and RDS loading for a SINGLE article.
+
+This Lambda is the final processing stage for a single Knowledge Base article
+within the synchronization workflow. It transforms the article text into
+vector embeddings using Amazon Bedrock and performs an atomic upsert into
+the local RDS database.
 """
 
-import os
 import json
-from typing import Dict, Any
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
 def get_embedding(bedrock_client, text):
+    """
+    Generates a vector embedding for the provided text using Amazon Bedrock.
+    """
     body = json.dumps({
         "inputText": text,
         "dimensions": 1024,
@@ -25,7 +30,20 @@ def get_embedding(bedrock_client, text):
 
 def lambda_handler(event, context):
     """
-    Receives a SINGLE article and overarching metadata.
+    Processes a single article: generates embeddings and upserts into the database.
+
+    Args:
+        event (dict): The Lambda event object, expected to contain:
+            - article (dict): The article data (title, content, external_id, etc.).
+            - kb_identifier (str): Unique identifier for the parent Knowledge Base.
+            - remote_modified_date (str, optional): The timestamp of the remote KB.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A status report containing the success state and article/KB identifiers.
+
+    Raises:
+        Exception: If embedding generation or database operations fail.
     """
     art = event.get("article", {})
     kb_id = event.get("kb_identifier")
@@ -39,7 +57,6 @@ def lambda_handler(event, context):
 
     try:
         # --- TRANSFORM: Chunking & Embedding ---
-        # Future expansion: Add recursive character chunking here.
         text_to_embed = f"Title: {art['title']}. Content: {art['content']}"
         vector = get_embedding(bedrock, text_to_embed)
         vector_str = "[" + ",".join(map(str, vector)) + "]"

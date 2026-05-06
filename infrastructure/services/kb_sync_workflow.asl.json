@@ -50,6 +50,7 @@
       "ResultSelector": {
         "sync_required.$": "$.Payload.sync_required",
         "remote_modified_date.$": "$.Payload.remote_modified_date",
+        "local_date.$": "$.Payload.local_date",
         "kb_identifier.$": "$.Payload.kb_identifier"
       },
       "ResultPath": "$.meta_check",

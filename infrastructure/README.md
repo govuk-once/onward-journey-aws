@@ -98,6 +98,59 @@ To force-rebuild a table without changing the configuration, use a targeted repl
 terraform apply -replace='terraform_data.rds_sync_trigger["knowledge_base_articles"]'
 ```
 
+#### Manual Knowledge Base sync
+
+The Knowledge Bases may require manual syncing after applying terraform - to check if this is the case, go to the `rds-tool` lambda in AWS console and run a test command for each `kb_identifier` (`hmp-track-001`, `dvla-renew-003`, `ho-visa-005`), for example:
+
+```
+{
+  "method": "query_knowledge_base",
+  "arguments": {
+    "query": "how do i track my personal travel document application?",
+    "kb_identifier": "hmp-track-001"
+  }
+}
+```
+The query should be successful, but check the details - if the result content only displays an empty array or unexpected content, you will need to manually sync. Follow these steps:
+
+1: Manually drop the sync_metadata and knowledge_base_articles tables
+
+  In the `rds-tool` lambda, run the following command from test tab:
+
+  ```
+  {
+    "method": "test_drop_table",
+    "arguments": {
+      "table_name": "sync_kb_metadata"
+    }
+  }
+  ```
+
+Now repeat the above, but change `table_name` to `knowledge_base_articles`
+
+2: Rebuild sync_metadata and knowledge_base_articles tables
+
+  In a terminal, from the `infrastructure/services` directory, run the following commands while signed into AWS CLI and in your terraform workspace:
+
+  ```bash
+  terraform apply -replace='terraform_data.rds_sync_trigger["sync_metadata"]'
+  terraform apply -replace='terraform_data.rds_sync_trigger["knowledge_base_articles"]'
+  ```
+
+3: Manually run the sync pipeline
+
+  Go to step functions in AWS console and select the `kb-sync-machine` prefixed with your initials. Click start execution and run the following:
+  ```
+  {
+    "kb_identifier": "hmp-track-001",
+    "platform": "genesys",
+    "sync_type": "scheduled"
+  }
+  ```
+  You will need to run this an additional two times, replacing the `kb_identifier` with `dvla-renew-003` and `ho-visa-005` respectively.
+
+  Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
+
 #### Manual Build/Rebuild (Lambda Packaging)
 If a Lambda build is unsuccessful or staging folders are corrupted, use the `taint` command.
 

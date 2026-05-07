@@ -90,6 +90,7 @@ def lambda_handler(event, context):
     conn = get_db_connection()
 
     try:
+        # TODO: move debug functions into dev lambda
         if "test_drop_table" in method:
             table_to_drop = args.get("table_name")
             result_text = debug_drop_table(conn, table_to_drop)

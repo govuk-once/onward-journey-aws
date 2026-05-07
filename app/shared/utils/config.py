@@ -11,7 +11,7 @@ sandbox_deploy_id = "a548193a-6a74-474d-8e2d-f0adb0f291b1"
 CRM_CONFIG_MAP = {
     "hmp-track-001": {
         "platform": "genesys",
-        "secret_path": "crm-creds/home-office-genesys",
+        "secret_path": "crm-creds/hmp-genesys",
         "api_region": "euw2.pure.cloud",
         "queue_id": sandbox_queue_id,
         "deploy_id": sandbox_deploy_id

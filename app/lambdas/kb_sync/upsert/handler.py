@@ -46,7 +46,7 @@ def lambda_handler(event, context):
         Exception: If embedding generation or database operations fail.
     """
     art = event.get("article", {})
-    kb_id = event.get("kb_identifier")
+    kb_identifier = event.get("kb_identifier")
     remote_date = event.get("remote_modified_date")
 
     if not art:
@@ -66,7 +66,7 @@ def lambda_handler(event, context):
 
         conn.run("""
             INSERT INTO knowledge_base_articles (external_id, title, content, kb_identifier, external_url, embedding)
-            VALUES (:eid, :title, :content, :kb, :url, :emb::vector)
+            VALUES (:eid, :title, :content, :kb_identifier, :url, :emb::vector)
             ON CONFLICT (external_id) DO UPDATE SET
                 title = EXCLUDED.title,
                 content = EXCLUDED.content,
@@ -74,7 +74,7 @@ def lambda_handler(event, context):
                 kb_identifier = EXCLUDED.kb_identifier;
         """,
         eid=art["external_id"], title=art["title"], content=art["content"],
-        kb=kb_id, url=art["external_url"], emb=vector_str)
+        kb_identifier=kb_identifier, url=art["external_url"], emb=vector_str)
 
         # TODO: Future enhancement: Move this metadata update to a dedicated 'Finalize' step
         # outside the Step Function Map state. Currently, if the batch fails halfway,
@@ -83,16 +83,16 @@ def lambda_handler(event, context):
         if remote_date:
             conn.run("""
                 INSERT INTO sync_kb_metadata (kb_identifier, last_modified)
-                VALUES (:kb, :date)
+                VALUES (:kb_identifier, :date)
                 ON CONFLICT (kb_identifier) DO UPDATE SET last_modified = EXCLUDED.last_modified;
-            """, kb=kb_id, date=remote_date)
+            """, kb_identifier=kb_identifier, date=remote_date)
 
         conn.run("COMMIT")
 
         return {
             "status": "success",
             "external_id": art["external_id"],
-            "kb_identifier": kb_id
+            "kb_identifier": kb_identifier
         }
 
     except Exception as e:

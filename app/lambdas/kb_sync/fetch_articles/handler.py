@@ -26,14 +26,14 @@ def lambda_handler(event, context):
         Exception: If the provider cannot be instantiated or article fetching fails.
     """
     print(f"Received event: {json.dumps(event)}")
-    kb_id = event.get("kb_identifier")
+    kb_identifier = event.get("kb_identifier")
 
     try:
-        provider = ProviderFactory.get_provider(kb_id, Capability.KB_FETCH)
+        provider = ProviderFactory.get_provider(kb_identifier, Capability.KB_FETCH)
 
         articles = provider.fetch_articles()
 
-        print(f"KB {kb_id}: Fetched {len(articles)} articles.")
+        print(f"KB {kb_identifier}: Fetched {len(articles)} articles.")
         return {
             "articles": articles
         }

@@ -28,16 +28,16 @@ def lambda_handler(event, context):
         Exception: If the provider cannot be instantiated or metadata fetch fails.
     """
     print(f"Received event: {json.dumps(event)}")
-    kb_id = event.get("kb_identifier")
+    kb_identifier = event.get("kb_identifier")
 
     try:
-        provider = ProviderFactory.get_provider(kb_id, Capability.KB_SYNC_META)
+        provider = ProviderFactory.get_provider(kb_identifier, Capability.KB_SYNC_META)
         remote_date = provider.fetch_remote_modified_date()
 
-        print(f"KB {kb_id}: Remote modified date is {remote_date}")
+        print(f"KB {kb_identifier}: Remote modified date is {remote_date}")
 
         return {
-            "kb_identifier": kb_id,
+            "kb_identifier": kb_identifier,
             "remote_modified_date": remote_date,
             "platform": provider.config["platform"]
         }

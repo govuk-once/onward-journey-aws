@@ -71,7 +71,7 @@ def lambda_handler(event, context):
 
     args = event.get("arguments", {})
     query = args.get("query") or event.get("query") or "No query provided"
-    kb_id = args.get("kb_identifier")
+    kb_identifier = args.get("kb_identifier")
     request_id = event.get("id")
 
     # 2. Generate Vector Embedding using Amazon Titan v2
@@ -103,7 +103,7 @@ def lambda_handler(event, context):
 
         elif "query_knowledge_base" in method:
             # KB Search: Filter by the specific department KB identifier
-            if not kb_id:
+            if not kb_identifier:
                 print(f"❌ [ERROR] kb_identifier is required for {method}")
                 return {
                     "jsonrpc": "2.0",
@@ -115,10 +115,10 @@ def lambda_handler(event, context):
                 """
                 SELECT title, content, external_url
                 FROM knowledge_base_articles
-                WHERE kb_identifier = :kb_id
+                WHERE kb_identifier = :kb_identifier
                 ORDER BY embedding <=> :embed::vector LIMIT 3
                 """,
-                kb_id=kb_id,
+                kb_identifier=kb_identifier,
                 embed=str(embedding),
             )
             formatted_results = [

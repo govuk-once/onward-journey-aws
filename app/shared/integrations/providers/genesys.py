@@ -54,8 +54,8 @@ class GenesysProvider(BaseCrmProvider):
 
     def fetch_remote_modified_date(self) -> Optional[str]:
         headers = self.get_standard_headers()
-        kb_uuid = self.creds.get("kb_id")
-        url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{kb_uuid}")
+        external_kb_id = self.creds.get("external_kb_id")
+        url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{external_kb_id}")
 
         resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
@@ -63,10 +63,10 @@ class GenesysProvider(BaseCrmProvider):
 
     def fetch_articles(self) -> List[Dict[str, Any]]:
         headers = self.get_standard_headers()
-        kb_uuid = self.creds.get("kb_id")
+        external_kb_id = self.creds.get("external_kb_id")
         articles = []
 
-        url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{kb_uuid}/documents")
+        url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents")
 
         while url:
             resp = requests.get(url, headers=headers, timeout=10)
@@ -74,7 +74,7 @@ class GenesysProvider(BaseCrmProvider):
             data = resp.json()
 
             for doc in data.get("entities", []):
-                var_url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{kb_uuid}/documents/{doc['id']}/variations")
+                var_url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents/{doc['id']}/variations")
                 var_resp = requests.get(var_url, headers=headers, timeout=10)
                 var_data = var_resp.json()
 
@@ -85,7 +85,7 @@ class GenesysProvider(BaseCrmProvider):
                         "content": raw_text,
                         "kb_identifier": self.identifier,
                         "external_id": doc["id"],
-                        "external_url": f"https://genesys.cloud/kb/{kb_uuid}/article/{doc['id']}"
+                        "external_url": f"https://genesys.cloud/kb/{external_kb_id}/article/{doc['id']}"
                     })
 
             next_uri = data.get("nextUri")

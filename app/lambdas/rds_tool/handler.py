@@ -114,7 +114,7 @@ def lambda_handler(event, context):
             results = conn.run(
                 """
                 SELECT title, content, external_url
-                FROM knowledge_bases
+                FROM knowledge_base_articles
                 WHERE kb_identifier = :kb_id
                 ORDER BY embedding <=> :embed::vector LIMIT 3
                 """,

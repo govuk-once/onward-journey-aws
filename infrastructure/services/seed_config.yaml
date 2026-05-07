@@ -52,7 +52,7 @@ tables:
         "user_type",
       ]
 
-  - name: "knowledge_bases"
+  - name: "knowledge_base_articles"
     primary_key: "id"
     columns:
       external_id: "TEXT UNIQUE"

@@ -71,3 +71,27 @@ resource "aws_secretsmanager_secret_version" "dvla_crm_val" {
     ignore_changes = [secret_string]
   }
 }
+
+# HMP CRM Secret
+resource "aws_secretsmanager_secret" "hmp_genesys_credentials" {
+  name        = "${var.environment}/crm-creds/hmp-genesys"
+  description = "OAuth credentials for the HMP Genesys Cloud instance"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# The placeholder structure for manual population in Console via CLI for safety
+resource "aws_secretsmanager_secret_version" "hmp_crm_val" {
+  secret_id = aws_secretsmanager_secret.hmp_genesys_credentials.id
+  secret_string = jsonencode({
+    client_id     = "REPLACE_IN_CONSOLE"
+    client_secret = "REPLACE_IN_CONSOLE"
+    org_id        = "REPLACE_IN_CONSOLE"
+    kb_id         = "REPLACE_IN_CONSOLE"
+  })
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}

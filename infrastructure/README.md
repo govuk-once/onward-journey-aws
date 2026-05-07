@@ -75,7 +75,7 @@ In addition to the static seeder, we have a dynamic **Knowledge Base Sync Pipeli
     2.  **CheckSyncMeta:** Compares the remote timestamp with the `last_modified` date stored in the local `sync_kb_metadata` table.
     3.  **Choice (IsSyncRequired):** If the dates match, the execution ends. If they differ, the sync proceeds.
     4.  **FetchArticles:** Downloads all articles from the remote CRM.
-    5.  **ProcessAndEmbedArticles (Map State):** Iterates through each article in parallel, calling Bedrock Titan v2 to generate embeddings and upserting the results into the `knowledge_bases` table.
+    5.  **ProcessAndEmbedArticles (Map State):** Iterates through each article in parallel, calling Bedrock Titan v2 to generate embeddings and upserting the results into the `knowledge_base_articles` table.
 - **Scheduling:** EventBridge rules are dynamically created based on the `active_pipelines` configuration in the Terraform locals.
 - **Observability:** Logs for each step are available in CloudWatch under `/aws/lambda/[initials]-kb-sync-*` and the Step Function execution history.
 
@@ -94,8 +94,8 @@ If your data isn't appearing in RDS after an apply, check the following:
 To force-rebuild a table without changing the configuration, use a targeted replace command. Note that keys are the **table name**, not the file name:
 
 ```bash
-# Example for the knowledge_bases table
-terraform apply -replace='terraform_data.rds_sync_trigger["knowledge_bases"]'
+# Example for the knowledge_base_articles table
+terraform apply -replace='terraform_data.rds_sync_trigger["knowledge_base_articles"]'
 ```
 
 #### Manual Build/Rebuild (Lambda Packaging)

@@ -65,7 +65,7 @@ def lambda_handler(event, context):
         conn.run("BEGIN")
 
         conn.run("""
-            INSERT INTO knowledge_bases (external_id, title, content, kb_identifier, external_url, embedding)
+            INSERT INTO knowledge_base_articles (external_id, title, content, kb_identifier, external_url, embedding)
             VALUES (:eid, :title, :content, :kb, :url, :emb::vector)
             ON CONFLICT (external_id) DO UPDATE SET
                 title = EXCLUDED.title,

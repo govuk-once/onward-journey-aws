@@ -1,7 +1,7 @@
 """
 KB Sync: Check Sync Metadata Lambda.
 
-This Lambda is part of the Knowledge Base (KB) synchronization workflow.
+This Lambda is part of the Knowledge Base (KB) synchronisation workflow.
 It compares the modification timestamp from the remote provider with the
 last recorded sync timestamp in the local database (RDS) to determine if
 an update is necessary.
@@ -12,7 +12,7 @@ from utils.db import get_db_connection
 
 def lambda_handler(event, context):
     """
-    Compares remote and local KB metadata to decide if synchronization is needed.
+    Compares remote and local KB metadata to decide if synchronisation is needed.
 
     Args:
         event (dict): The Lambda event object, expected to contain:

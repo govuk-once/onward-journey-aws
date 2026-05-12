@@ -1,7 +1,7 @@
 """
 KB Sync: Check KB Metadata Lambda.
 
-This Lambda is part of the Knowledge Base (KB) synchronization workflow.
+This Lambda is part of the Knowledge Base (KB) synchronisation workflow.
 Its role is to fetch the latest 'modified' timestamp from the remote KB
 provider (e.g., Genesys) to determine if a local sync is required.
 """

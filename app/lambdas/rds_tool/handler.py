@@ -75,7 +75,7 @@ def lambda_handler(event, context):
     request_id = event.get("id")
 
     # 2. Generate Vector Embedding using Amazon Titan v2
-    # We use 1024 dimensions and normalization to match our RDS pgvector settings
+    # We use 1024 dimensions and normalisation to match our RDS pgvector settings
     bedrock = get_bedrock_client()
     embed_body = json.dumps({"inputText": query, "dimensions": 1024, "normalize": True})
     embed_resp = bedrock.invoke_model(

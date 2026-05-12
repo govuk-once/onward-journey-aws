@@ -2,7 +2,7 @@
 KB Sync: Upsert Article Lambda.
 
 This Lambda is the final processing stage for a single Knowledge Base article
-within the synchronization workflow. It transforms the article text into
+within the synchronisation workflow. It transforms the article text into
 vector embeddings using Amazon Bedrock and performs an atomic upsert into
 the local RDS database.
 """

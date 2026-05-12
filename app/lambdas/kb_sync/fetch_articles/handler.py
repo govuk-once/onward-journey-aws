@@ -1,9 +1,9 @@
 """
 KB Sync: Fetch Articles Lambda.
 
-This Lambda is part of the Knowledge Base (KB) synchronization workflow.
+This Lambda is part of the Knowledge Base (KB) synchronisation workflow.
 It retrieves all relevant articles from the configured remote KB provider
-(e.g., Genesys) for downstream processing and synchronization.
+(e.g., Genesys) for downstream processing and synchronisation.
 """
 
 import json

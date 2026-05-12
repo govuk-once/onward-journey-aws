@@ -58,7 +58,7 @@ def lambda_handler(event, context):
 
     Returns:
         dict: A JSON-RPC 2.0 formatted dictionary containing the search results
-            as a JSON-serialized string within an MCP content block.
+            as a JSON-serialised string within an MCP content block.
     """
 
     print(f"📥 GATEWAY CALL: {json.dumps(event)}")

@@ -294,7 +294,7 @@ def lambda_handler(event, context):
     This function handles the lifecycle of a single interaction:
     1. Parses the incoming message and session metadata (thread_id, actor_id).
     2. Verifies connectivity to required VPC endpoints (Bedrock, AgentCore, Secrets).
-    3. Initializes the conversation graph with a specialized system prompt.
+    3. Initialises the conversation graph with a specialised system prompt.
     4. Streams the graph execution, including iterative tool calls and reasoning.
     5. Returns the consolidated assistant response and updated state identifiers.
 

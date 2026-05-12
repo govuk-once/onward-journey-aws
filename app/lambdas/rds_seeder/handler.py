@@ -17,7 +17,7 @@ from utils.aws import get_bedrock_client
 def get_embedding(bedrock_client, text):
     """
     Invokes the Amazon Titan Text Embeddings v2 model via Bedrock.
-    Matches the local prototype configuration (1024 dimensions, normalized).
+    Matches the local prototype configuration (1024 dimensions, normalised).
     """
     dimensions = 1024
     body = json.dumps({

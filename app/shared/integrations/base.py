@@ -10,7 +10,7 @@ ENV_PREFIX = os.environ.get("ENV_PREFIX")
 class BaseCrmProvider(ABC):
     def __init__(self, identifier: str, config: Dict[str, Any]):
         """
-        Initializes the CRM Provider with basic configuration and credentials.
+        Initialises the CRM Provider with basic configuration and credentials.
 
         Args:
             identifier: The unique identifier for this CRM instance.

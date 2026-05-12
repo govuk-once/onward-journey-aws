@@ -36,7 +36,7 @@ The build process (defined in `infrastructure/build.tf`) automatically:
 
 ### Shared Logic & Utilities
 To maintain consistency and reduce duplication, all common operations should be added to `app/shared/utils/`:
-*   `aws.py`: Centralized Boto3 client factory (handles VPC endpoints).
+*   `aws.py`: Centralised Boto3 client factory (handles VPC endpoints).
 *   `db.py`: RDS/PostgreSQL connection management.
 
 ---

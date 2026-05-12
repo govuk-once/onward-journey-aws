@@ -76,7 +76,7 @@ def lambda_handler(event, context):
         eid=art["external_id"], title=art["title"], content=art["content"],
         kb_identifier=kb_identifier, url=art["external_url"], emb=vector_str)
 
-        # TODO: Future enhancement: Move this metadata update to a dedicated 'Finalize' step
+        # TODO: Future enhancement: Move this metadata update to a dedicated 'Finalise' step
         # outside the Step Function Map state. Currently, if the batch fails halfway,
         # the 'last_modified' date is still updated, which might cause the next sync
         # to skip the remaining failed articles.

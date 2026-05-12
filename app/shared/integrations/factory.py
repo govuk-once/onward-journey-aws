@@ -12,7 +12,7 @@ class ProviderFactory:
     @staticmethod
     def get_provider(identifier: str, capability: Capability) -> BaseCrmProvider:
         """
-        Factory method to get an initialized provider instance for a specific capability.
+        Factory method to get an initialised provider instance for a specific capability.
         """
         config = CRM_CONFIG_MAP.get(identifier)
         if not config:

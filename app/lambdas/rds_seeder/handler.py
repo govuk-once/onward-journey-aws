@@ -26,19 +26,13 @@ def get_embedding(bedrock_client, text):
         "normalize": True
     })
 
-    try:
-        response = bedrock_client.invoke_model(
-            body=body,
-            modelId="amazon.titan-embed-text-v2:0",
-            contentType="application/json",
-            accept="application/json"
-        )
-        return json.loads(response.get("body").read())["embedding"]
-    except Exception as e:
-        print(f"Embedding API Error: {e}")
-        # Return a zero-vector fallback to prevent the entire batch from failing,
-        # matching the error handling style of the local prototype.
-        return [0.0] * dimensions
+    response = bedrock_client.invoke_model(
+        body=body,
+        modelId="amazon.titan-embed-text-v2:0",
+        contentType="application/json",
+        accept="application/json"
+    )
+    return json.loads(response.get("body").read())["embedding"]
 
 
 def lambda_handler(event, context):
@@ -65,6 +59,22 @@ def lambda_handler(event, context):
         Exception: If table configuration is missing, S3 fetch fails, or
             database operations encounter an error.
     """
+    # 1. VALIDATION & CONFIGURATION
+    target_file = event.get("file_name")
+    target_table = event.get("table_name")
+    if not target_table:
+        raise Exception("Missing mandatory 'table_name' in event payload.")
+
+    db_config_raw = os.environ.get("DB_CONFIG")
+    if not db_config_raw:
+        raise Exception("DB_CONFIG environment variable is missing.")
+
+    config = json.loads(db_config_raw)
+
+    table_conf = next((t for t in config["tables"] if t["name"] == target_table), None)
+    if not table_conf:
+        raise Exception(f"Configuration for table '{target_table}' not found in YAML.")
+
     # Initialise service clients
     bedrock = get_bedrock_client()
 
@@ -75,26 +85,15 @@ def lambda_handler(event, context):
         # Ensure pgvector extension is available in the database
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
 
-        target_file = event.get("file_name")
-        target_table = event["table_name"]
-
-        # Load the master configuration provided by Terraform as a JSON string
-        config = json.loads(os.environ["DB_CONFIG"])
-
-        # Locate the specific table definition from our YAML configuration
-        table_conf = next((t for t in config["tables"] if t["name"] == target_table), None)
-        if not table_conf:
-            raise Exception(f"Configuration for table '{target_table}' not found in YAML.")
-
         # Wrap data ingestion in a transaction for atomicity
         conn.run("BEGIN")
 
-        # 1. TABLE INITIALIZATION
+        # 2. TABLE INITIALISATION
         columns = table_conf["columns"]
 
         # Build column definitions, handling primary keys carefully
         col_parts = []
-        if table_conf.get("primary_key") == "id" and "id" not in columns:
+        if table_conf.get("primary_key", "id") == "id" and "id" not in columns:
             col_parts.append("id SERIAL PRIMARY KEY")
 
         for name, dtype in columns.items():
@@ -135,8 +134,13 @@ def lambda_handler(event, context):
                     text_to_embed = ". ".join(
                         [f"{col}: {row.get(col, '')}" for col in embed_cols]
                     )
-                    vector = get_embedding(bedrock, text_to_embed)
-                    params["emb"] = "[" + ",".join(map(str, vector)) + "]"
+                    try:
+                        vector = get_embedding(bedrock, text_to_embed)
+                        params["emb"] = "[" + ",".join(map(str, vector)) + "]"
+                    except Exception as e:
+                        print(f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}")
+                        print(f"Skipping row {i} to prevent batch failure.")
+                        continue
 
                 # Build Dynamic INSERT statement
                 col_names = ", ".join(params.keys()).replace("emb", "embedding")
@@ -146,7 +150,7 @@ def lambda_handler(event, context):
                     f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})",
                     **params,
                 )
-                rows_processed = i + 1
+                rows_processed += 1
 
                 if rows_processed % 10 == 0:
                     print(f"Successfully processed {rows_processed} rows for {target_table}...")

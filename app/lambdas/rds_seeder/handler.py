@@ -83,6 +83,8 @@ def lambda_handler(event, context):
 
     try:
         # Ensure pgvector extension is available in the database
+        # This is performed outside the transaction to prevent parallel race conditions
+        # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
 
         # Wrap data ingestion in a transaction for atomicity

@@ -51,23 +51,3 @@ tables:
         "description",
         "user_type",
       ]
-
-  - name: "knowledge_base_articles"
-    primary_key: "id"
-    columns:
-      external_id: "TEXT UNIQUE"
-      title: "TEXT"
-      content: "TEXT"
-      kb_identifier: "TEXT"
-      external_url: "TEXT"
-      embedding: "VECTOR(1024)"
-    embedding_source_cols:
-      [
-        "title",
-        "content"
-      ]
-
-  - name: "sync_kb_metadata"
-    columns:
-      kb_identifier: "TEXT PRIMARY KEY"
-      last_modified: "TEXT"

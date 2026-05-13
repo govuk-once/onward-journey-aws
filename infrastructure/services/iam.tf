@@ -361,3 +361,58 @@ resource "aws_iam_role_policy_attachment" "rds_seeder_vpc_access" {
   role       = aws_iam_role.rds_seeder_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
+
+## RDS KB INIT SERVICE ROLE
+# Minimal execution role for the Knowledge Base infrastructure initialisation.
+
+resource "aws_iam_role" "rds_kb_init_role" {
+  name = "${var.environment}-rds-kb-init-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_policy" "rds_kb_init_permissions" {
+  name        = "${var.environment}-rds-kb-init-permissions"
+  description = "Provides minimal permissions for KB initialisation (Logs and DB Secrets)."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "SecretsManagerAccess"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "rds_kb_init_main" {
+  role       = aws_iam_role.rds_kb_init_role.name
+  policy_arn = aws_iam_policy.rds_kb_init_permissions.arn
+}
+
+resource "aws_iam_role_policy_attachment" "rds_kb_init_vpc_access" {
+  role       = aws_iam_role.rds_kb_init_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}

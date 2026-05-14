@@ -60,6 +60,8 @@ resource "aws_secretsmanager_secret_version" "ho_crm_val" {
     client_secret  = "REPLACE_IN_CONSOLE"
     org_id         = "REPLACE_IN_CONSOLE"
     external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]
@@ -84,6 +86,8 @@ resource "aws_secretsmanager_secret_version" "dvla_crm_val" {
     client_secret  = "REPLACE_IN_CONSOLE"
     org_id         = "REPLACE_IN_CONSOLE"
     external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]
@@ -108,6 +112,8 @@ resource "aws_secretsmanager_secret_version" "hmp_crm_val" {
     client_secret  = "REPLACE_IN_CONSOLE"
     org_id         = "REPLACE_IN_CONSOLE"
     external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]

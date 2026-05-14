@@ -97,7 +97,10 @@ class GenesysProvider(BaseCrmProvider):
 
     def fetch_adviser_availability(self) -> str:
         headers = self.get_standard_headers()
-        q_id = self.config['queue_id']
+        q_id = self.creds.get('queue_id')
+
+        if not q_id:
+            return "Live chat is currently unavailable (missing configuration)."
 
         conf_url = self.get_api_url(f"/api/v2/routing/queues/{q_id}")
         conf = requests.get(conf_url, headers=headers, timeout=5).json()
@@ -134,7 +137,7 @@ class GenesysProvider(BaseCrmProvider):
 
     def generate_handoff_signal(self, event: Dict[str, Any]) -> Dict[str, Any]:
         region = self.config['api_region']
-        deploy_id = self.config['deploy_id']
+        deploy_id = self.creds.get('deploy_id')
         token = event.get("thread_id", str(uuid.uuid4()))
         actor_id = event.get("actor_id", "ANONYMOUS")
 

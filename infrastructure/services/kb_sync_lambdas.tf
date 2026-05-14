@@ -43,7 +43,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.rds_seeder_sg.id]
+    security_group_ids = [aws_security_group.kb_sync_sg.id]
   }
 
   environment {
@@ -105,7 +105,7 @@ resource "aws_lambda_function" "kb_sync_upsert" {
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.rds_seeder_sg.id]
+    security_group_ids = [aws_security_group.kb_sync_sg.id]
   }
 
   environment {

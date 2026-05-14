@@ -117,8 +117,8 @@ resource "aws_lambda_function" "rds_tool" {
     variables = {
       DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
       DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER                  = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      DB_USER                  = "rds_readonly_dept_contacts"
+      DB_SECRET_ARN            = aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
       SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
     }
@@ -194,17 +194,17 @@ output "orchestrator_url" {
   value       = aws_lambda_function_url.orchestrator_url.function_url
 }
 
-## RDS KB INIT
-resource "aws_cloudwatch_log_group" "rds_kb_init" {
-  name              = "/aws/lambda/${var.environment}-rds-kb-init"
+## RDS INIT
+resource "aws_cloudwatch_log_group" "rds_init" {
+  name              = "/aws/lambda/${var.environment}-rds-init"
   retention_in_days = 14
 }
 
-resource "aws_lambda_function" "rds_kb_init" {
-  filename         = data.archive_file.rds_kb_init_zip.output_path
-  source_code_hash = data.archive_file.rds_kb_init_zip.output_base64sha256
-  function_name    = "${var.environment}-rds-kb-init"
-  role             = aws_iam_role.rds_kb_init_role.arn
+resource "aws_lambda_function" "rds_init" {
+  filename         = data.archive_file.rds_init_zip.output_path
+  source_code_hash = data.archive_file.rds_init_zip.output_base64sha256
+  function_name    = "${var.environment}-rds-init"
+  role             = aws_iam_role.rds_init_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]
@@ -218,14 +218,15 @@ resource "aws_lambda_function" "rds_kb_init" {
 
   environment {
     variables = {
-      KB_CONFIG            = jsonencode(local.kb_config)
-      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER              = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+      KB_CONFIG               = jsonencode(local.kb_config)
+      DB_HOST                 = aws_db_instance.dept_contacts_metadata.address
+      DB_NAME                 = aws_db_instance.dept_contacts_metadata.db_name
+      DB_USER                 = aws_db_instance.dept_contacts_metadata.username
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      RDS_READONLY_SECRET_ARN = aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
+      SECRETS_ENDPOINT_URL    = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.rds_kb_init]
+  depends_on = [aws_cloudwatch_log_group.rds_init]
 }

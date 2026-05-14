@@ -54,14 +54,40 @@ We use a configuration-driven pipeline to manage the database schema and the ing
 - **Mock Data Seeding (`rds_seeder`):** Managed via `infrastructure/services/seed_config.yaml`. This is used to wipe and repopulate mock CSV datasets (like department contacts) for PoC testing.
   - **CSV to RDS:** To seed data, add a CSV into `mock_data/` and reference it in the `source_file` field of your table entry in the YAML.
   - **Reset Logic:** The seeder is **destructive**. It uses `DROP TABLE ... CASCADE` to ensure the table state exactly matches the CSV file.
-- **Knowledge Base Initialisation (`rds_kb_init`):** Managed via `infrastructure/services/kb_config.yaml`. This ensures that tables used for external KB syncs exist without risking data loss. It uses `CREATE TABLE IF NOT EXISTS` to ensure tables are provisioned once and never wiped.
+- **Database Initialisation (`rds_init`):** Managed via `infrastructure/services/kb_config.yaml`. This ensures that the database environment is correctly provisioned:
+  - **Extensions:** Installs `pgvector`.
+  - **Users:** Idempotently creates the `rds_readonly_dept_contacts` SQL user used by the Search Tool.
+  - **Security:** Syncs the `rds_readonly_dept_contacts` password from Secrets Manager into the database.
+  - **Tables:** Ensures tables used for KB syncs exist without risking data loss. It uses `CREATE TABLE IF NOT EXISTS`.
 - **Flexible Primary Keys:** By default, tables are created with a `SERIAL PRIMARY KEY` called `id`. However, you can define your own natural primary key (e.g., `kb_identifier`) in the column list to ensure idempotency and prevent duplicates.
-- **Automatic Vectorisation:** If a table defines an `embedding` column and `embedding_source_cols`, the respective Lambda will automatically call Bedrock Titan v2 to generate vectors (for the seeder) or provision the correct vector types (for KB init).
-- **Automatic Triggers:** Terraform monitors both YAML configs and mock CSV files. Any change will automatically trigger the appropriate Lambda (`rds_seeder` for mock data, `rds_kb_init` for KB infra).
+- **Automatic Vectorisation:** If a table defines an `embedding` column and `embedding_source_cols`, the respective Lambda will automatically call Bedrock Titan v2 to generate vectors (for the seeder) or provision the correct vector types (for RDS init).
+- **Automatic Triggers:** Terraform monitors YAML configs, Lambda code, and mock CSV files. Any change will automatically trigger the appropriate Lambda (`rds_seeder` for mock data, `rds_init` for RDS infra and user sync).
 
 ---
 
-### 6. Knowledge Base ETL Sync Pipeline (Step Functions)
+### 6. Managing the Read-Only User
+
+The `rds_tool` Lambda is strictly restricted to read-only access using a dedicated SQL user called `rds_readonly_dept_contacts`.
+
+#### Rotating the Password
+If you need to change or rotate the search tool's password:
+
+1.  **Via Terraform (Recommended):**
+    Run the following to force a new random string generation:
+    ```bash
+    terraform apply -replace="random_password.rds_readonly_dept_contacts_password"
+    ```
+    Terraform will update the secret and automatically trigger `rds_init` to update the password inside PostgreSQL.
+
+2.  **Via Secrets Manager:**
+    If you manually update the value of the `${var.environment}-rds-readonly-dept-contacts-password` secret in the AWS Console, you must then trigger the sync:
+    ```bash
+    terraform apply -replace="terraform_data.rds_init_trigger"
+    ```
+
+---
+
+### 7. Knowledge Base ETL Sync Pipeline (Step Functions)
 
 In addition to the static seeder, we have a dynamic **Knowledge Base Sync Pipeline** designed to fetch and vectorise articles from remote CRM platforms (e.g., Genesys Cloud) on a schedule.
 
@@ -84,19 +110,19 @@ If your tables or data aren't appearing in RDS after an apply, check the followi
 
 1.  **CloudWatch Logs:**
     *   Mock Data: `/aws/lambda/[initials]-rds-seeder`
-    *   KB Infrastructure: `/aws/lambda/[initials]-rds-kb-init`
+    *   RDS Infrastructure: `/aws/lambda/[initials]-rds-init`
 2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table in the VPC layer.
 3.  **Secrets Format:** Ensure the DB password in Secrets Manager is saved as a **Plaintext** string, not a JSON key-pair.
 
 #### Manual Refresh
-To force-rebuild a mock table or re-run the KB initialisation:
+To force-rebuild a mock table or re-run the RDS initialisation:
 
 ```bash
 # Force-rebuild a mock table (e.g., dept_contacts)
 terraform apply -replace='terraform_data.rds_sync_trigger["dept_contacts"]'
 
-# Re-run KB table initialisation
-terraform apply -replace='terraform_data.rds_kb_init_trigger'
+# Re-run RDS infrastructure and user initialisation
+terraform apply -replace='terraform_data.rds_init_trigger'
 ```
 
 #### Manual Knowledge Base sync
@@ -117,7 +143,7 @@ The query should be successful, but check the details - if the result content on
 1: Ensure tables are provisioned
   If the tables `sync_kb_metadata` or `knowledge_base_articles` are missing, run:
   ```bash
-  terraform apply -replace='terraform_data.rds_kb_init_trigger'
+  terraform apply -replace='terraform_data.rds_init_trigger'
   ```
 
 2: Manually run the sync pipeline

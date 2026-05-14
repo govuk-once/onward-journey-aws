@@ -3,12 +3,12 @@ import json
 import pg8000.native
 from .aws import get_secrets_client
 
-def get_db_password() -> str:
+def get_db_password(secret_arn: str = None) -> str:
     """Retrieves the DB password, handling both JSON and raw string formats."""
     secrets_client = get_secrets_client()
-    secret_arn = os.environ["DB_SECRET_ARN"]
+    target_arn = secret_arn or os.environ["DB_SECRET_ARN"]
 
-    response = secrets_client.get_secret_value(SecretId=secret_arn)
+    response = secrets_client.get_secret_value(SecretId=target_arn)
     raw_value = response["SecretString"].strip()
 
     # 1. If it looks like JSON, parse it and get the 'password' key

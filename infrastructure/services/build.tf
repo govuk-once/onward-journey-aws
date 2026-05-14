@@ -1,7 +1,7 @@
 # This ensures the dist folders exist so the Data Sources don't crash during the Plan phase.
 resource "null_resource" "ensure_dist_folders" {
   provisioner "local-exec" {
-    command = "mkdir -p ${path.module}/../../dist/layer/python ${path.module}/../../dist/orchestrator_staging ${path.module}/../../dist/rds_seeder_staging ${path.module}/../../dist/rds_tool_staging ${path.module}/../../dist/crm_tool_staging ${path.module}/../../dist/kb_sync_staging ${path.module}/../../dist/rds_kb_init_staging"
+    command = "mkdir -p ${path.module}/../../dist/layer/python ${path.module}/../../dist/orchestrator_staging ${path.module}/../../dist/rds_seeder_staging ${path.module}/../../dist/rds_tool_staging ${path.module}/../../dist/crm_tool_staging ${path.module}/../../dist/kb_sync_staging ${path.module}/../../dist/rds_init_staging"
   }
 }
 
@@ -27,7 +27,7 @@ locals {
       --no-cache \
       -r pyproject.toml
 
-    # 3. OPTIMIZE SIZE: Remove boto3, botocore, and cache files to stay under 250MB limit
+    # 3. OPTIMISE SIZE: Remove boto3, botocore, and cache files to stay under 250MB limit
     rm -rf ${path.module}/../../dist/layer/python/boto3*
     rm -rf ${path.module}/../../dist/layer/python/botocore*
     find ${path.module}/../../dist/layer/python -name "__pycache__" -type d -exec rm -rf {} +
@@ -148,12 +148,12 @@ data "archive_file" "kb_sync_upsert_zip" {
   }
 }
 
-# 9. RDS KB INIT
-data "archive_file" "rds_kb_init_zip" {
+# 9. RDS INIT
+data "archive_file" "rds_init_zip" {
   type        = "zip"
-  output_path = "${path.module}/../../dist/rds_kb_init_payload.zip"
+  output_path = "${path.module}/../../dist/rds_init_payload.zip"
   source {
-    content  = file("${path.module}/../../app/lambdas/rds_kb_init/handler.py")
+    content  = file("${path.module}/../../app/lambdas/rds_init/handler.py")
     filename = "handler.py"
   }
 }

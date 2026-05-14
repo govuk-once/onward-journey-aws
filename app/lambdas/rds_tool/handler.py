@@ -17,32 +17,6 @@ import json
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
-def debug_drop_table(conn, table_name):
-    """
-    [LOCAL TESTING ONLY] Drops the specified table and logs record counts.
-    """
-    try:
-        # 1. Count before
-        count_before = conn.run(f"SELECT COUNT(*) FROM {table_name}")[0][0]
-        print(f"DEBUG | Before Drop: Table '{table_name}' has {count_before} rows.")
-
-        # 2. Drop
-        conn.run(f"DROP TABLE IF EXISTS {table_name} CASCADE;")
-        print(f"DEBUG | Table '{table_name}' dropped.")
-
-        # 3. Verify
-        try:
-            conn.run(f"SELECT 1 FROM {table_name} LIMIT 1")
-            count_after = "STILL_EXISTS"
-        except Exception:
-            count_after = "DELETED"
-
-        print(f"DEBUG | After Drop: Table '{table_name}' status: {count_after}")
-        return f"SUCCESS: Dropped {table_name} (was {count_before} rows)."
-    except Exception as e:
-        print(f"DEBUG | Drop Error: {str(e)}")
-        return f"ERROR: Could not drop {table_name}. {str(e)}"
-
 def lambda_handler(event, context):
     """
     Entry point for RDS search tool requests, routing to the appropriate search method.
@@ -90,19 +64,7 @@ def lambda_handler(event, context):
     conn = get_db_connection()
 
     try:
-        # TODO: move debug functions into dev lambda
-        if "test_drop_table" in method:
-            table_to_drop = args.get("table_name")
-            result_text = debug_drop_table(conn, table_to_drop)
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "content": [{"type": "text", "text": result_text}]
-                },
-            }
-
-        elif "query_knowledge_base" in method:
+        if "query_knowledge_base" in method:
             # KB Search: Filter by the specific department KB identifier
             if not kb_identifier:
                 print(f"❌ [ERROR] kb_identifier is required for {method}")

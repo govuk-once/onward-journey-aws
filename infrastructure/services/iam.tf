@@ -235,10 +235,45 @@ resource "aws_iam_role_policy_attachment" "rds_tool_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Attachment: Reuse existing RDS/Secrets/Embeddings policy
+resource "aws_iam_policy" "rds_tool_permissions" {
+  name        = "${var.environment}-rds-tool-permissions"
+  description = "Provides the RDS Tool access to embedding models and DB credentials. Restricted to access/query only."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "BedrockEmbeddingInvoke"
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn,
+          aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "rds_tool_main" {
   role       = aws_iam_role.rds_tool_role.name
-  policy_arn = aws_iam_policy.rds_seeder_permissions.arn
+  policy_arn = aws_iam_policy.rds_tool_permissions.arn
 }
 
 ## CRM TOOL SERVICE ROLE
@@ -362,11 +397,11 @@ resource "aws_iam_role_policy_attachment" "rds_seeder_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-## RDS KB INIT SERVICE ROLE
+## RDS INIT SERVICE ROLE
 # Minimal execution role for the Knowledge Base infrastructure initialisation.
 
-resource "aws_iam_role" "rds_kb_init_role" {
-  name = "${var.environment}-rds-kb-init-role"
+resource "aws_iam_role" "rds_init_role" {
+  name = "${var.environment}-rds-init-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -380,9 +415,9 @@ resource "aws_iam_role" "rds_kb_init_role" {
   })
 }
 
-resource "aws_iam_policy" "rds_kb_init_permissions" {
-  name        = "${var.environment}-rds-kb-init-permissions"
-  description = "Provides minimal permissions for KB initialisation (Logs and DB Secrets)."
+resource "aws_iam_policy" "rds_init_permissions" {
+  name        = "${var.environment}-rds-init-permissions"
+  description = "Provides minimal permissions for RDS initialisation (Logs and DB Secrets)."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -398,21 +433,24 @@ resource "aws_iam_policy" "rds_kb_init_permissions" {
         Resource = "arn:aws:logs:*:*:*"
       },
       {
-        Sid      = "SecretsManagerAccess"
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn,
+          aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
+        ]
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "rds_kb_init_main" {
-  role       = aws_iam_role.rds_kb_init_role.name
-  policy_arn = aws_iam_policy.rds_kb_init_permissions.arn
+resource "aws_iam_role_policy_attachment" "rds_init_main" {
+  role       = aws_iam_role.rds_init_role.name
+  policy_arn = aws_iam_policy.rds_init_permissions.arn
 }
 
-resource "aws_iam_role_policy_attachment" "rds_kb_init_vpc_access" {
-  role       = aws_iam_role.rds_kb_init_role.name
+resource "aws_iam_role_policy_attachment" "rds_init_vpc_access" {
+  role       = aws_iam_role.rds_init_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

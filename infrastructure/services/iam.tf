@@ -263,7 +263,6 @@ resource "aws_iam_policy" "rds_tool_permissions" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue"]
         Resource = [
-          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn,
           aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
         ]
       }
@@ -452,5 +451,58 @@ resource "aws_iam_role_policy_attachment" "rds_init_main" {
 
 resource "aws_iam_role_policy_attachment" "rds_init_vpc_access" {
   role       = aws_iam_role.rds_init_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+## KB SYNC SERVICE ROLE
+# Execution role for the Knowledge Base synchronisation pipeline.
+
+resource "aws_iam_role" "kb_sync_role" {
+  name               = "${var.environment}-kb-sync-role"
+  assume_role_policy = data.aws_iam_policy_document.allow_all_assume_role.json
+}
+
+resource "aws_iam_policy" "kb_sync_permissions" {
+  name        = "${var.environment}-kb-sync-permissions"
+  description = "Provides the KB Sync Pipeline access to embedding models and admin DB credentials."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "BedrockEmbeddingInvoke"
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_main" {
+  role       = aws_iam_role.kb_sync_role.name
+  policy_arn = aws_iam_policy.kb_sync_permissions.arn
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_vpc_access" {
+  role       = aws_iam_role.kb_sync_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

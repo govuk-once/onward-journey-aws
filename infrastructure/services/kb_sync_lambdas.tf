@@ -34,7 +34,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
   filename         = data.archive_file.kb_sync_check_sync_meta_zip.output_path
   source_code_hash = data.archive_file.kb_sync_check_sync_meta_zip.output_base64sha256
   function_name    = "${var.environment}-kb-sync-check-sync-meta"
-  role             = aws_iam_role.rds_tool_role.arn
+  role             = aws_iam_role.kb_sync_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]
@@ -96,7 +96,7 @@ resource "aws_lambda_function" "kb_sync_upsert" {
   filename         = data.archive_file.kb_sync_upsert_zip.output_path
   source_code_hash = data.archive_file.kb_sync_upsert_zip.output_base64sha256
   function_name    = "${var.environment}-kb-sync-upsert"
-  role             = aws_iam_role.rds_tool_role.arn
+  role             = aws_iam_role.kb_sync_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]

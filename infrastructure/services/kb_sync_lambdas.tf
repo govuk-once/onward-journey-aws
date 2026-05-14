@@ -8,7 +8,7 @@ resource "aws_lambda_function" "kb_sync_check_kb_meta" {
   filename         = data.archive_file.kb_sync_check_kb_meta_zip.output_path
   source_code_hash = data.archive_file.kb_sync_check_kb_meta_zip.output_base64sha256
   function_name    = "${var.environment}-kb-sync-check-kb-meta"
-  role             = aws_iam_role.crm_tool_role.arn
+  role             = aws_iam_role.kb_sync_crm_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]
@@ -70,7 +70,7 @@ resource "aws_lambda_function" "kb_sync_fetch_articles" {
   filename         = data.archive_file.kb_sync_fetch_articles_zip.output_path
   source_code_hash = data.archive_file.kb_sync_fetch_articles_zip.output_base64sha256
   function_name    = "${var.environment}-kb-sync-fetch-articles"
-  role             = aws_iam_role.crm_tool_role.arn
+  role             = aws_iam_role.kb_sync_crm_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_logic.arn]

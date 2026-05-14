@@ -506,3 +506,43 @@ resource "aws_iam_role_policy_attachment" "kb_sync_vpc_access" {
   role       = aws_iam_role.kb_sync_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
+
+## KB SYNC CRM ROLE
+# Execution role for the public-facing components of the KB Sync pipeline (Internet Access).
+
+resource "aws_iam_role" "kb_sync_crm_role" {
+  name               = "${var.environment}-kb-sync-crm-role"
+  assume_role_policy = data.aws_iam_policy_document.allow_all_assume_role.json
+}
+
+resource "aws_iam_policy" "kb_sync_crm_permissions" {
+  name        = "${var.environment}-kb-sync-crm-permissions"
+  description = "Allows the KB Sync pipeline to fetch external CRM credentials."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "CRMSecretAccess"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.environment}/crm-creds/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_crm_main" {
+  role       = aws_iam_role.kb_sync_crm_role.name
+  policy_arn = aws_iam_policy.kb_sync_crm_permissions.arn
+}

@@ -15,6 +15,7 @@ class GenesysProvider(BaseCrmProvider):
     # --- AUTH & CORE ---
 
     def _refresh_oauth_token(self) -> str:
+        """Authenticate with Genesys Cloud and cache the bearer token."""
         if self._token and time.time() < (self._token_expiry - 60):
             return self._token
 
@@ -96,17 +97,26 @@ class GenesysProvider(BaseCrmProvider):
     # --- LIVE CHAT CAPABILITIES ---
 
     def fetch_adviser_availability(self) -> str:
+        """
+        Performs a three-stage check to verify if a human adviser is available in Genesys.
+        """
         headers = self.get_standard_headers()
         q_id = self.creds.get('queue_id')
 
         if not q_id:
             return "Live chat is currently unavailable (missing configuration)."
 
+        # --- PHASE 1: MEMBERSHIP CHECK ---
+        # We query the Routing API to see if the department is staffed.
+        # If 'joinedMemberCount' is 0, the queue is functionally 'Offline'.
         conf_url = self.get_api_url(f"/api/v2/routing/queues/{q_id}")
         conf = requests.get(conf_url, headers=headers, timeout=5).json()
         if conf.get("joinedMemberCount", 0) == 0:
             return "Live chat is currently unavailable."
 
+        # --- PHASE 2: CHANNEL & PRESENCE CHECK ---
+        # We filter for specific Routing Statuses (Qualifiers) to ensure the service is active.
+        # We strictly only count IDLE (waiting) and INTERACTING (working) statuses.
         query_url = self.get_api_url("/api/v2/analytics/queues/observations/query")
         query_payload = {
             "filter": {"type": "and", "predicates": [
@@ -119,6 +129,8 @@ class GenesysProvider(BaseCrmProvider):
         obs_results = obs_resp.json().get("results", [{}])
         on_queue = 0
 
+        # Genesys only returns 'qualifiers' (statuses) that have a count > 0.
+        # We sum those who are IDLE (waiting), INTERACTING (busy), or COMMUNICATING (in session).
         if obs_results and "data" in obs_results[0]:
             for entry in obs_results[0]["data"]:
                 if entry.get("metric") == "oOnQueueUsers" and entry.get("qualifier") in ["IDLE", "INTERACTING"]:
@@ -127,6 +139,8 @@ class GenesysProvider(BaseCrmProvider):
         if on_queue == 0:
             return "Live chat is currently unavailable."
 
+        # --- PHASE 3: WAIT TIME CHECK ---
+        # Provides the current estimated wait time (EWT) for the queue.
         ewt_url = self.get_api_url(f"/api/v2/routing/queues/{q_id}/estimatedwaittime")
         ewt_resp = requests.get(ewt_url, headers=headers, timeout=5).json()
         results = ewt_resp.get("results", [{}])
@@ -136,13 +150,27 @@ class GenesysProvider(BaseCrmProvider):
         return f"Live chat is AVAILABLE. Estimated wait: {wait_str}."
 
     def generate_handoff_signal(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Prepares the connection parameters for the Genesys Web Messenger WebSocket.
+        Returns a SIGNAL payload consumed by the Svelte frontend.
+        """
         region = self.config['api_region']
         deploy_id = self.creds.get('deploy_id')
+
+        # --- PHASE 1: PREPARE SESSION PARAMETERS ---
+        # Web Messaging identifies sessions using a persistent 'token' (UUID).
+        # We use the thread_id to ensure the CRM session is linked to our AI thread.
+        # NOTE: Ensure the Orchestrator tool passes 'thread_id' in the arguments.
         token = event.get("thread_id", str(uuid.uuid4()))
         actor_id = event.get("actor_id", "ANONYMOUS")
 
+        # --- PHASE 2: CONSTRUCT WEBSOCKET ADDRESS ---
+        # The frontend connects directly to this wss:// endpoint to start the chat.
         websocket_url = f"wss://webmessaging.{region}/v1?deploymentId={deploy_id}"
 
+        # --- PHASE 3: PACKAGE CONTEXT FOR FRONTEND ---
+        # We bundle the context (Summary/Reason) so the Svelte frontend can send
+        # it as 'customAttributes' during the WebSocket 'configureSession' step.
         handoff_config = {
             "action": "initiate_live_handoff",
             "websocketUrl": websocket_url,
@@ -154,6 +182,7 @@ class GenesysProvider(BaseCrmProvider):
             "actor_id": actor_id
         }
 
+        # Validation: Verify we have the absolute minimum required to connect
         if not deploy_id or not region:
             return {
                 "content": [{

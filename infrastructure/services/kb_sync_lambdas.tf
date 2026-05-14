@@ -1,4 +1,3 @@
-
 ## KB SYNC: CHECK KB METADATA
 resource "aws_cloudwatch_log_group" "kb_sync_check_kb_meta" {
   name              = "/aws/lambda/${var.environment}-kb-sync-check-kb-meta"

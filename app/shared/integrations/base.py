@@ -29,3 +29,9 @@ class BaseCrmProvider(ABC):
         print(f"Fetching {platform} Secrets from AWS Secrets Manager for: {self.identifier}")
         response = secrets_client.get_secret_value(SecretId=full_secret_name)
         return json.loads(response["SecretString"])
+
+    @abstractmethod
+    def fetch_adviser_availability(self) -> str: pass
+
+    @abstractmethod
+    def generate_handoff_signal(self, event: Dict[str, Any]) -> Dict[str, Any]: pass

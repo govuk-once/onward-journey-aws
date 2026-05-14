@@ -34,6 +34,7 @@ def lambda_handler(event, context):
         dict: A JSON-RPC 2.0 formatted dictionary containing the tool execution
             result or an error message.
     """
+    # Log the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
     trace_id = event.get("thread_id") or event.get("session_id") or "UNKNOWN_SESSION"
     print(f"CRM TOOL CALL | Trace: {trace_id} | Event: {json.dumps(event)}")
 
@@ -50,6 +51,7 @@ def lambda_handler(event, context):
 
         elif "connect_to_live_chat" in method:
             result = provider.generate_handoff_signal(event)
+            # --- HANDOFF STATUS LOG ---
             log_metric("LiveHandoffInitiated", {"Target": chat_id, "Trace": trace_id})
 
         else:

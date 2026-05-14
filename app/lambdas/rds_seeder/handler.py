@@ -136,7 +136,8 @@ def lambda_handler(event, context):
                 try:
                     # Invoke Bedrock to generate a 1024-dimension vector
                     vector = get_embedding(bedrock, text_to_embed)
-                     # Format for pgvector input: [val1, val2, ...]
+                     # pgvector explicitly requires square brackets [val1, val2, ...] -
+                     # Do not pass the raw Python list, as standard Postgres arrays use {} and will crash
                     params["emb"] = "[" + ",".join(map(str, vector)) + "]"
                 except Exception as e:
                     print(f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}")
@@ -155,7 +156,7 @@ def lambda_handler(event, context):
             if rows_processed % 10 == 0:
                 print(f"Processed {rows_processed} rows for {target_table}...")
 
-        # Commit only if every row in the file was processed successfully
+        # Commit all successfully processed rows
         conn.run("COMMIT")
         print(f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}")
         return {"status": "success", "table": target_table, "rows_processed": rows_processed}

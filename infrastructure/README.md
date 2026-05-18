@@ -45,7 +45,7 @@ The **Government Department Contacts Store** (RDS PostgreSQL 17.6) is our primar
 - **The "Empty Secret" Workflow:** To maintain security, we do not store the database password in code or state. Consequently, the initial Terraform deployment for an environment will partially fail as it tries to read a secret version that doesn't exist yet.
 - **Accessing the DB:** You must manually set your password in **AWS Secrets Manager** after your first deployment.
 - **Secret Name:** Look for `${var.environment}-dept-contacts-db-password` in the AWS Console.
-- **Connectivity:** Access is strictly controlled via the `${var.environment}-rds-metadata-sg`. It only accepts inbound traffic from the orchestrator or seeder on port 5432.
+- **Connectivity:** Access is strictly controlled via the `${var.environment}-rds-metadata-sg`. It only accepts inbound traffic from the orchestrator, seeder or KB sync pipeline on port 5432.
 
 ### 5. Data Ingestion & Database Initialisation
 
@@ -57,7 +57,7 @@ We use a configuration-driven pipeline to manage the database schema and the ing
 - **Database Initialisation (`rds_init`):** Managed via `infrastructure/services/kb_config.yaml`. This ensures that the database environment is correctly provisioned:
   - **Extensions:** Installs `pgvector`.
   - **Users:** Idempotently creates the `rds_readonly_dept_contacts` SQL user used by the Search Tool.
-  - **Security:** Syncs the `rds_readonly_dept_contacts` password from Secrets Manager into the database.
+  - **Security:** Security: Enables AWS IAM token authentication for the rds_readonly_dept_contacts user.
   - **Tables:** Ensures tables used for KB syncs exist without risking data loss. It uses `CREATE TABLE IF NOT EXISTS`.
 - **Flexible Primary Keys:** By default, tables are created with a `SERIAL PRIMARY KEY` called `id`. However, you can define your own natural primary key (e.g., `kb_identifier`) in the column list to ensure idempotency and prevent duplicates.
 - **Automatic Vectorisation:** If a table defines an `embedding` column and `embedding_source_cols`, the respective Lambda will automatically call Bedrock Titan v2 to generate vectors (for the seeder) or provision the correct vector types (for RDS init).
@@ -69,20 +69,7 @@ We use a configuration-driven pipeline to manage the database schema and the ing
 
 The `rds_tool` Lambda is strictly restricted to read-only access using a dedicated SQL user called `rds_readonly_dept_contacts`.
 
-#### Rotating the Password
-If you need to change or rotate the search tool's password:
-
-1.  **Via Terraform (Recommended):**
-    Run the following to force a new random string generation:
-    ```bash
-    terraform apply -replace="random_password.rds_readonly_dept_contacts_password"
-    ```
-    Terraform will update the secret and automatically trigger `rds_init` to update the password inside PostgreSQL.
-
-2.  **Via Secrets Manager:**
-    If you manually update the value of the `${var.environment}-rds-readonly-dept-contacts-password` secret in the AWS Console, you must then trigger the sync:
-    ```bash
-    terraform apply -replace="terraform_data.rds_init_trigger"
+This uses AWS IAM Database Authentication. The Lambda does not use a static password or access Secrets Manager for database connectivity. Instead, it generates a short-lived AWS IAM token at runtime to authenticate. Local permissions within PostgreSQL are restricted to SELECT operations only, ensuring a zero-leak state configuration.
     ```
 
 ---
@@ -109,6 +96,7 @@ In addition to the static seeder, we have a dynamic **Knowledge Base Sync Pipeli
 If your tables or data aren't appearing in RDS after an apply, check the following:
 
 1.  **CloudWatch Logs:**
+    Look for "Connection Timeout" or Bedrock "Access Denied" errors:
     *   Mock Data: `/aws/lambda/[initials]-rds-seeder`
     *   RDS Infrastructure: `/aws/lambda/[initials]-rds-init`
 2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table in the VPC layer.

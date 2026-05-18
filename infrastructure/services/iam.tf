@@ -259,11 +259,11 @@ resource "aws_iam_policy" "rds_tool_permissions" {
         Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
       },
       {
-        Sid    = "SecretsManagerAccess"
+        Sid    = "RDSIAMConnect"
         Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
+        Action = ["rds-db:connect"]
         Resource = [
-          aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
+          "arn:aws:rds-db:${var.aws_region}:${var.aws_account_id}:dbuser:${aws_db_instance.dept_contacts_metadata.resource_id}/rds_readonly_dept_contacts"
         ]
       }
     ]
@@ -436,8 +436,7 @@ resource "aws_iam_policy" "rds_init_permissions" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue"]
         Resource = [
-          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn,
-          aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
         ]
       }
     ]
@@ -464,7 +463,7 @@ resource "aws_iam_role" "kb_sync_role" {
 
 resource "aws_iam_policy" "kb_sync_permissions" {
   name        = "${var.environment}-kb-sync-permissions"
-  description = "Provides the KB Sync Pipeline access to embedding models and admin DB credentials."
+  description = "Provides the KB Sync Pipeline access to embedding models and DB credentials (IAM and Password)."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -484,6 +483,14 @@ resource "aws_iam_policy" "kb_sync_permissions" {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]
         Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "RDSIAMConnect"
+        Effect = "Allow"
+        Action = ["rds-db:connect"]
+        Resource = [
+          "arn:aws:rds-db:${var.aws_region}:${var.aws_account_id}:dbuser:${aws_db_instance.dept_contacts_metadata.resource_id}/rds_readonly_dept_contacts"
+        ]
       },
       {
         Sid    = "SecretsManagerAccess"

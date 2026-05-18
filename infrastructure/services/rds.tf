@@ -15,6 +15,9 @@ resource "aws_db_instance" "dept_contacts_metadata" {
   db_name           = "gov_dept_contacts"
   username          = "onward_admin"
 
+  # Enable IAM database authentication for passwordless connections
+  iam_database_authentication_enabled = true
+
   # Reference the specific password from Secrets Manager
   password = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_string
 

@@ -118,7 +118,6 @@ resource "aws_lambda_function" "rds_tool" {
       DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
       DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER                  = "rds_readonly_dept_contacts"
-      DB_SECRET_ARN            = aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
       SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
     }
@@ -218,13 +217,12 @@ resource "aws_lambda_function" "rds_init" {
 
   environment {
     variables = {
-      KB_CONFIG               = jsonencode(local.kb_config)
-      DB_HOST                 = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME                 = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER                 = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN           = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      RDS_READONLY_SECRET_ARN = aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
-      SECRETS_ENDPOINT_URL    = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+      KB_CONFIG            = jsonencode(local.kb_config)
+      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
+      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
+      DB_USER              = aws_db_instance.dept_contacts_metadata.username
+      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
     }
   }
 

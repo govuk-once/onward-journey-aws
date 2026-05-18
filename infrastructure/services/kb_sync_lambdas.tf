@@ -51,7 +51,6 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
       DB_HOST              = aws_db_instance.dept_contacts_metadata.address
       DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER              = "rds_readonly_dept_contacts"
-      DB_SECRET_ARN        = aws_secretsmanager_secret_version.rds_readonly_dept_contacts_password.arn
       SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
       ENV_PREFIX           = var.environment
     }

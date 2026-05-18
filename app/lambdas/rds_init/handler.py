@@ -2,21 +2,20 @@
 RDS Initialisation Lambda.
 
 This Lambda handles automated setup tasks for the RDS PostgreSQL database:
-1. Idempotently creates the 'rds_readonly_dept_contacts' user and syncs its password.
+1. Idempotently creates the 'rds_readonly_dept_contacts' user (w/IAM auth).
 2. Ensures the 'pgvector' extension is installed.
 3. Provisions the necessary tables for the Knowledge Base.
 """
 
 import json
 import os
-from utils.db import get_db_connection, get_db_password
+from utils.db import get_db_connection
 
 def lambda_handler(event, context):
     """
     Orchestrates the RDS setup process.
     """
     kb_config_raw = os.environ.get("KB_CONFIG")
-    rds_readonly_secret_arn = os.environ.get("RDS_READONLY_SECRET_ARN")
 
     if not kb_config_raw:
         raise Exception("KB_CONFIG environment variable is missing.")
@@ -27,27 +26,23 @@ def lambda_handler(event, context):
     conn = get_db_connection()
 
     try:
-        # --- PHASE 1: USER PROVISIONING ---
-        if rds_readonly_secret_arn:
-            rds_readonly_pass = get_db_password(rds_readonly_secret_arn)
-
-            print("Syncing 'rds_readonly_dept_contacts' user...")
-            # Check if user exists
-            user_exists = conn.run("SELECT 1 FROM pg_roles WHERE rolname = 'rds_readonly_dept_contacts';")
-
-            if not user_exists:
-                print("Creating 'rds_readonly_dept_contacts' user...")
-                conn.run(f"CREATE USER rds_readonly_dept_contacts WITH PASSWORD '{rds_readonly_pass}';")
-            else:
-                print("Updating 'rds_readonly_dept_contacts' password...")
-                conn.run(f"ALTER USER rds_readonly_dept_contacts WITH PASSWORD '{rds_readonly_pass}';")
-
-            # Ensure permissions are correct
-            conn.run("GRANT CONNECT ON DATABASE gov_dept_contacts TO rds_readonly_dept_contacts;")
-            conn.run("GRANT USAGE ON SCHEMA public TO rds_readonly_dept_contacts;")
-            conn.run("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO rds_readonly_dept_contacts;")
-            # Also grant on existing tables just in case
-            conn.run("GRANT SELECT ON ALL TABLES IN SCHEMA public TO rds_readonly_dept_contacts;")
+        # --- PHASE 1: USER PROVISIONING (IAM AUTH) ---
+        print("Provisioning 'rds_readonly_dept_contacts' for IAM Auth...")
+        # Create the user without a password, link it to IAM, and restrict to SELECT
+        conn.run("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'rds_readonly_dept_contacts') THEN
+                    CREATE USER rds_readonly_dept_contacts;
+                END IF;
+            END
+            $$;
+        """)
+        conn.run("GRANT rds_iam TO rds_readonly_dept_contacts;")
+        conn.run("GRANT CONNECT ON DATABASE gov_dept_contacts TO rds_readonly_dept_contacts;")
+        conn.run("GRANT USAGE ON SCHEMA public TO rds_readonly_dept_contacts;")
+        conn.run("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO rds_readonly_dept_contacts;")
+        conn.run("GRANT SELECT ON ALL TABLES IN SCHEMA public TO rds_readonly_dept_contacts;")
 
         # --- PHASE 2: EXTENSIONS ---
         print("Ensuring pgvector extension is available...")
@@ -78,7 +73,7 @@ def lambda_handler(event, context):
 
         conn.run("COMMIT")
         print("RDS initialisation complete.")
-        return {"status": "success", "message": "RDS setup and user sync complete."}
+        return {"status": "success", "message": "RDS setup and IAM user provisioning complete."}
 
     except Exception as e:
         if conn:

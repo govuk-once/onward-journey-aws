@@ -22,25 +22,6 @@ data "aws_secretsmanager_secret_version" "dept_contacts_db_password" {
   secret_id = aws_secretsmanager_secret.dept_contacts_db_password.id
 }
 
-# --- READ-ONLY DEPT CONTACTS USER CREDENTIALS ---
-
-resource "random_password" "rds_readonly_dept_contacts_password" {
-  length           = 24
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
-}
-
-resource "aws_secretsmanager_secret" "rds_readonly_dept_contacts_password" {
-  name        = "${var.environment}-rds-readonly-dept-contacts-password"
-  description = "Automated read-only credentials for the Gov Dept Contacts RDS Search Tool"
-}
-
-resource "aws_secretsmanager_secret_version" "rds_readonly_dept_contacts_password" {
-  secret_id     = aws_secretsmanager_secret.rds_readonly_dept_contacts_password.id
-  secret_string = random_password.rds_readonly_dept_contacts_password.result
-}
-
-
 # Home Office CRM Secret
 resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
   # Naming by Department + Provider

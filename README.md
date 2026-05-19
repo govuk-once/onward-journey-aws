@@ -33,7 +33,7 @@ Copy the example config to create your target environment configuration. *Replac
 Update `<environment_name>.config` with your AWS Account ID:
 ```hcl
 region               = "eu-west-2"
-bucket               = "govuk-once-onwardjourney-dev-<AWS account ID>-tfstate"
+bucket               = "govuk-once-onwardjourney-development-<AWS account ID>-tfstate"
 use_lockfile         = true
 encrypt              = true
 key                  = "onward-journey.tfstate"

@@ -8,6 +8,10 @@ resource "aws_bedrockagentcore_memory" "agent_chat_context" {
   name                      = "${var.environment}_agent_chat_context"
   memory_execution_role_arn = aws_iam_role.agentcore_role.arn
   event_expiry_duration     = 30
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
 }
 
 ## AGENTCORE GATEWAY
@@ -17,6 +21,10 @@ resource "aws_bedrockagentcore_gateway" "tool_interface" {
   role_arn        = aws_iam_role.agentcore_role.arn
   protocol_type   = "MCP"
   authorizer_type = "AWS_IAM"
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
 }
 
 
@@ -78,6 +86,7 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
     gateway_iam_role {} # Use the Gateway's role to invoke the Lambda
   }
   depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway
   ]
 }

@@ -10,16 +10,22 @@ resource "null_resource" "ensure_dist_folders" {
 
 locals {
   layer_build_command = <<EOT
-    # 1. Clean and prepare fresh staging directory
-    rm -rf ${path.module}/../../dist/layer
-    mkdir -p ${path.module}/../../dist/layer/python/utils
-    mkdir -p ${path.module}/../../dist/layer/python/integrations
+    set -e
+    echo "Starting Lambda Layer build..."
+
+    # 1. Prepare staging directory
+    STAGING_DIR="${path.module}/../../dist/layer"
+    rm -rf "$STAGING_DIR"
+    mkdir -p "$STAGING_DIR/python"
 
     # 2. INSTALL DEPENDENCIES
-    # We install from pyproject.toml but explicitly EXCLUDE boto3/botocore (pre-installed in Lambda)
-    cd ${path.module}/../../app
+    echo "Installing external dependencies from pyproject.toml..."
+    cd "${path.module}/../../app"
+
+    # We use uv to install dependencies into the layer's python directory.
+    # We explicitly target the Lambda runtime platform (Amazon Linux 2023 / manylinux_2_28).
     uv pip install \
-      --target ../dist/layer/python \
+      --target "../dist/layer/python" \
       --python-platform x86_64-manylinux_2_28 \
       --python-version 3.12 \
       --only-binary=:all: \
@@ -27,17 +33,24 @@ locals {
       --no-cache \
       -r pyproject.toml
 
-    # 3. OPTIMISE SIZE: Remove boto3, botocore, and cache files to stay under 250MB limit
-    rm -rf ${path.module}/../../dist/layer/python/boto3*
-    rm -rf ${path.module}/../../dist/layer/python/botocore*
-    find ${path.module}/../../dist/layer/python -name "__pycache__" -type d -exec rm -rf {} +
-    find ${path.module}/../../dist/layer/python -name "*.pyc" -delete
+    # 3. OPTIMISE SIZE
+    echo "Cleaning up pre-installed and temporary files..."
+    rm -rf "$STAGING_DIR/python/boto3"*
+    rm -rf "$STAGING_DIR/python/botocore"*
+    find "$STAGING_DIR/python" -name "__pycache__" -type d -exec rm -rf {} +
+    find "$STAGING_DIR/python" -name "*.pyc" -delete
 
-    # 4. COPY SHARED DIRECTORIES
-    cp shared/utils/*.py ../dist/layer/python/utils/
-    cp shared/integrations/*.py ../dist/layer/python/integrations/
-    mkdir -p ../dist/layer/python/integrations/providers
-    cp shared/integrations/providers/*.py ../dist/layer/python/integrations/providers/
+    # 4. COPY SHARED DIRECTORIES (Internal utilities)
+    echo "Copying shared internal utilities..."
+    mkdir -p "$STAGING_DIR/python/utils"
+    mkdir -p "$STAGING_DIR/python/integrations"
+    cp shared/utils/*.py "$STAGING_DIR/python/utils/"
+    cp shared/integrations/*.py "$STAGING_DIR/python/integrations/"
+    mkdir -p "$STAGING_DIR/python/integrations/providers"
+    cp shared/integrations/providers/*.py "$STAGING_DIR/python/integrations/providers/"
+
+    echo "Lambda Layer build complete."
+    ls -F "$STAGING_DIR/python"
     EOT
 }
 

@@ -57,7 +57,12 @@ def lambda_handler(event, context):
             columns = table_conf["columns"]
 
             col_parts = []
-            if table_conf.get("primary_key", "id") == "id" and "id" not in columns:
+
+            # Check if ANY column definition already contains "PRIMARY KEY" (case-insensitive)
+            has_explicit_pk = any("PRIMARY KEY" in str(dtype).upper() for dtype in columns.values())
+
+            # Only auto-inject the default 'id' if there isn't already an explicit primary key
+            if not has_explicit_pk and table_conf.get("primary_key", "id") == "id" and "id" not in columns:
                 col_parts.append("id SERIAL PRIMARY KEY")
 
             for name, dtype in columns.items():

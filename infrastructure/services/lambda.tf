@@ -1,9 +1,20 @@
 ## SHARED LOGIC LAYER
 resource "aws_lambda_layer_version" "shared_logic" {
-  filename            = data.archive_file.shared_layer_zip.output_path
-  layer_name          = "${var.environment}-shared-logic"
-  source_code_hash    = data.archive_file.shared_layer_zip.output_base64sha256
+  filename   = "${path.module}/../../dist/shared_layer_payload.zip"
+  layer_name = "${var.environment}-shared-logic"
+
+  # THE FIX: We use the hash of your source files as the description.
+  # If you update your Python code, this description string changes,
+  # forcing Terraform to build and deploy a brand new layer version safely!
+  description = "Shared logic layer. Build hash: ${local.layer_trigger_hash}"
+
+  # NOTE: source_code_hash has been completely removed to prevent Plan crashes.
+
   compatible_runtimes = ["python3.12"]
+
+  depends_on = [
+    null_resource.build_shared_layer
+  ]
 }
 
 ## DATA INGESTION: RDS SEEDER

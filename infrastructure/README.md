@@ -165,3 +165,7 @@ terraform apply \
   -replace="null_resource.install_rds_tool_deps" \
   -replace="null_resource.install_crm_tool_deps"
 ```
+
+#### Terraform Destroy
+
+A guide to destroying infrastructure in a workspace is available [here](https://gdsgovukagents.atlassian.net/wiki/spaces/GAOJ/pages/153190436/Terraform+destroy+guide).

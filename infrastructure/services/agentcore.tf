@@ -86,6 +86,7 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
     gateway_iam_role {} # Use the Gateway's role to invoke the Lambda
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
     aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway
   ]
@@ -123,6 +124,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_availability" {
     gateway_iam_role {}
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
     aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway_crm
   ]
@@ -171,6 +173,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
     gateway_iam_role {}
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
     aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway_crm
   ]

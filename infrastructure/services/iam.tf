@@ -553,3 +553,11 @@ resource "aws_iam_role_policy_attachment" "kb_sync_crm_main" {
   role       = aws_iam_role.kb_sync_crm_role.name
   policy_arn = aws_iam_policy.kb_sync_crm_permissions.arn
 }
+
+resource "time_sleep" "wait_for_iam_propagation" {
+  create_duration = "30s"
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
+}

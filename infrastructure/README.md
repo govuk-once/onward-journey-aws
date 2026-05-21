@@ -106,8 +106,8 @@ If your tables or data aren't appearing in RDS after an apply, check the followi
 To force-rebuild a mock table or re-run the RDS initialisation:
 
 ```bash
-# Force-rebuild a mock table (e.g., dept_contacts)
-terraform apply -replace='terraform_data.rds_sync_trigger["dept_contacts"]'
+# Force-rebuild a mock table:
+terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data_<version>.csv"]'
 
 # Re-run RDS infrastructure and user initialisation
 terraform apply -replace='terraform_data.rds_init_trigger'

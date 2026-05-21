@@ -3,8 +3,8 @@ resource "aws_lambda_layer_version" "shared_logic" {
   filename   = "${path.module}/../../dist/shared_layer_payload.zip"
   layer_name = "${var.environment}-shared-logic"
 
-  # THE FIX: We use the hash of your source files as the description.
-  # If you update your Python code, this description string changes,
+  # Use the hash of source files as the description.
+  # If Python code changes, this description string changes,
   # forcing Terraform to build and deploy a brand new layer version safely!
   description = "Shared logic layer. Build hash: ${local.layer_trigger_hash}"
 

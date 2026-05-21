@@ -36,6 +36,8 @@ locals {
     echo "Installing external dependencies from pyproject.toml..."
     cd "$APP_DIR"
 
+    # We use uv to install dependencies into the layer's python directory.
+    # We explicitly target the Lambda's runtime platform (Amazon Linux 2023 / manylinux_2_28).
     # Since we use absolute paths for --target, we never lose the folder!
     uv pip install \
       --target "$STAGING_DIR/python" \

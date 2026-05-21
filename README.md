@@ -87,9 +87,8 @@ terraform init -reconfigure -backend-config="../environments/<environment_name>.
 terraform workspace select <workspace_name> || terraform workspace new <workspace_name>
 ```
 
-**2. Validate and Prepare Build Folders**
+**2. Validate**
 * Run `terraform validate` to ensure your specific environment names meet Bedrock's regex requirements.
-* **Build Folders:** The `dist/` directory contains staging folders for Lambda builds. These contain `.gitkeep` files to ensure the directory structure exists for Terraform. **Do not delete these hidden files**, as they are required for the `terraform plan` phase to succeed.
 
 **3. First Deployment (Expected Failure)**
 ```bash

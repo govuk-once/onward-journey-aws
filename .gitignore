@@ -10,11 +10,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-# Ignore everything in dist except for .gitkeep files
 dist/**
-!dist/**/
-!dist/**/.gitkeep
-!dist/**/**/.gitkeep
 downloads/
 eggs/
 .eggs/

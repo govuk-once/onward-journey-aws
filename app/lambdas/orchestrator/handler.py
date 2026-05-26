@@ -1,6 +1,10 @@
 """
 GOV.UK Onward Journey - AgentCore/Lambda Hybrid Orchestrator.
-Manages LangGraph state and Bedrock AgentCore interactions.
+
+This Lambda serves as the central reasoning engine for the GOV.UK Contact
+Assistant. It implements a StateGraph (via LangGraph) to manage multi-turn
+conversations, persists state using Amazon Bedrock AgentCore, and
+coordinates tool execution through a VPC-signed MCP Gateway.
 """
 
 import boto3
@@ -41,6 +45,13 @@ STRICT FILTERING RULES:
 1. IDENTIFY: Determine exactly which government department the user is asking about (e.g., DWP, HMRC, Home Office).
 2. FILTER: When you receive tool results, look at the 'service' and 'info' fields.
 3. OMIT: If a result belongs to a DIFFERENT department than the one requested, you MUST NOT list its details.
+
+KNOWLEDGE RETRIEVAL RULES:
+1. MULTI-STEP SEARCH: If the user asks a "how-to" or policy question (e.g., "How do I renew my passport?"), you must:
+   a. Call 'query_department_database' first to find the correct department and its 'knowledge_base_identifier'.
+   b. Use that 'knowledge_base_identifier' as the 'kb_identifier' to call 'query_knowledge_base'.
+2. ANSWER FROM KB: Provide answers based ONLY on the content returned from the Knowledge Base.
+3. CITATION: If you use information from the KB, you MUST include the 'url' provided in the tool result as a reference.
 
 ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
 1. MANDATORY CHECK: If a valid 'live_chat_identifier' is provided by the database, you MUST check if agents are available before responding by calling 'crm_live_chat_tools' with method='check_chat_availability'.
@@ -146,6 +157,29 @@ def query_department_database(query: str, config: RunnableConfig):
     return content[0]["text"] if content else "ERROR: No matching records found."
 
 @tool
+def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig):
+    """Queries a specific department's Knowledge Base for policy and help articles."""
+
+    # STEP 1: The Call
+    # Construct the tool name dynamically using the Environment Prefix
+    tool_name = f"{ENV_PREFIX}-rds-search-tool___query_knowledge_base"
+
+    call_payload = {
+        "jsonrpc": "2.0",
+        "id": f"kb-{str(uuid.uuid4())[:8]}",
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": {"query": query, "kb_identifier": kb_identifier},
+        },
+    }
+
+    response = signed_gateway_post(call_payload)
+    result_data = response.json()
+    content = result_data.get("result", {}).get("content", [])
+    return content[0]["text"] if content else "ERROR: No knowledge base articles found."
+
+@tool
 def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str, config: RunnableConfig):
     """
     Handles CRM interactions (availability and handoff).
@@ -155,6 +189,7 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
     - 'check_chat_availability': Use this first to see if agents are online.
     - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
     """
+
 
     actor_id = config["configurable"].get("actor_id")
     thread_id = config["configurable"].get("thread_id")
@@ -206,7 +241,7 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
 
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
-tools = [query_department_database, crm_live_chat_tools]
+tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State, config: RunnableConfig):
@@ -254,8 +289,28 @@ app = workflow.compile(checkpointer=checkpointer)
 
 def lambda_handler(event, context):
     """
-    GOV.UK Onward Journey - Orchestrator Entry Point.
-    Handles LangGraph execution with state persistence via Bedrock AgentCore.
+    Orchestrator Entry Point: Processes user messages and executes the agent graph.
+
+    This function handles the lifecycle of a single interaction:
+    1. Parses the incoming message and session metadata (thread_id, actor_id).
+    2. Verifies connectivity to required VPC endpoints (Bedrock, AgentCore, Secrets).
+    3. Initialises the conversation graph with a specialised system prompt.
+    4. Streams the graph execution, including iterative tool calls and reasoning.
+    5. Returns the consolidated assistant response and updated state identifiers.
+
+    Args:
+        event (dict): The Lambda event object. Supports standard JSON payloads
+            or API Gateway/Function URL 'body' strings. Expected keys:
+            - message (str): The user's input text.
+            - thread_id (str): Unique identifier for the conversation history.
+            - actor_id (str): Unique identifier for the user's persistent identity.
+        context (LambdaContext): AWS Lambda context object.
+
+    Returns:
+        dict: A JSON response containing:
+            - response (str): The final generated assistant response.
+            - thread_id (str): The session identifier (echoed back).
+            - actor_id (str): The user identifier (echoed back).
     """
     print(f"Received event: {json.dumps(event)}")
 

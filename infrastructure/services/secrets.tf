@@ -22,7 +22,6 @@ data "aws_secretsmanager_secret_version" "dept_contacts_db_password" {
   secret_id = aws_secretsmanager_secret.dept_contacts_db_password.id
 }
 
-
 # Home Office CRM Secret
 resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
   # Naming by Department + Provider
@@ -38,9 +37,12 @@ resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
 resource "aws_secretsmanager_secret_version" "ho_crm_val" {
   secret_id = aws_secretsmanager_secret.ho_genesys_credentials.id
   secret_string = jsonencode({
-    client_id     = "REPLACE_IN_CONSOLE"
-    client_secret = "REPLACE_IN_CONSOLE"
-    org_id        = "REPLACE_IN_CONSOLE"
+    client_id      = "REPLACE_IN_CONSOLE"
+    client_secret  = "REPLACE_IN_CONSOLE"
+    org_id         = "REPLACE_IN_CONSOLE"
+    external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]
@@ -61,9 +63,38 @@ resource "aws_secretsmanager_secret" "dvla_genesys_credentials" {
 resource "aws_secretsmanager_secret_version" "dvla_crm_val" {
   secret_id = aws_secretsmanager_secret.dvla_genesys_credentials.id
   secret_string = jsonencode({
-    client_id     = "REPLACE_IN_CONSOLE"
-    client_secret = "REPLACE_IN_CONSOLE"
-    org_id        = "REPLACE_IN_CONSOLE"
+    client_id      = "REPLACE_IN_CONSOLE"
+    client_secret  = "REPLACE_IN_CONSOLE"
+    org_id         = "REPLACE_IN_CONSOLE"
+    external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
+  })
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# HMP CRM Secret
+resource "aws_secretsmanager_secret" "hmp_genesys_credentials" {
+  name        = "${var.environment}/crm-creds/hmp-genesys"
+  description = "OAuth credentials for the HMP Genesys Cloud instance"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# The placeholder structure for manual population in Console via CLI for safety
+resource "aws_secretsmanager_secret_version" "hmp_crm_val" {
+  secret_id = aws_secretsmanager_secret.hmp_genesys_credentials.id
+  secret_string = jsonencode({
+    client_id      = "REPLACE_IN_CONSOLE"
+    client_secret  = "REPLACE_IN_CONSOLE"
+    org_id         = "REPLACE_IN_CONSOLE"
+    external_kb_id = "REPLACE_IN_CONSOLE"
+    queue_id       = "REPLACE IN CONSOLE"
+    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]

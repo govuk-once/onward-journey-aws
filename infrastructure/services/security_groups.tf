@@ -88,6 +88,16 @@ resource "aws_security_group_rule" "allow_data_services_to_rds" {
   source_security_group_id = aws_security_group.rds_seeder_sg.id
 }
 
+resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
+  description              = "PostgreSQL from KB Sync Pipeline"
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_metadata.id
+  source_security_group_id = aws_security_group.kb_sync_sg.id
+}
+
 # RDS SEEDER SECURITY GROUP
 # Group for the Seeder and RDS Tool Lambda (MCP Server).
 resource "aws_security_group" "rds_seeder_sg" {
@@ -108,6 +118,26 @@ resource "aws_security_group" "rds_seeder_sg" {
   }
 }
 
+# KB SYNC SECURITY GROUP
+# Group for the Knowledge Base synchronisation pipeline.
+resource "aws_security_group" "kb_sync_sg" {
+  name        = "${var.environment}-kb-sync-sg"
+  description = "Security group for KB Sync Lambdas to access RDS and Bedrock"
+  vpc_id      = local.vpc_id
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.environment}-kb-sync-sg"
+  }
+}
+
 # Ingress rule allowing authorized data services to reach AWS service endpoints.
 resource "aws_security_group_rule" "allow_data_services_to_endpoints" {
   description              = "Allow data services to reach Bedrock/SecretsManager endpoints"
@@ -117,4 +147,14 @@ resource "aws_security_group_rule" "allow_data_services_to_endpoints" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.vpc_endpoints.id
   source_security_group_id = aws_security_group.rds_seeder_sg.id
+}
+
+resource "aws_security_group_rule" "allow_kb_sync_to_endpoints" {
+  description              = "Allow KB sync pipeline to reach Bedrock/SecretsManager endpoints"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.vpc_endpoints.id
+  source_security_group_id = aws_security_group.kb_sync_sg.id
 }

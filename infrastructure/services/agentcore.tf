@@ -8,6 +8,10 @@ resource "aws_bedrockagentcore_memory" "agent_chat_context" {
   name                      = "${var.environment}_agent_chat_context"
   memory_execution_role_arn = aws_iam_role.agentcore_role.arn
   event_expiry_duration     = 30
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
 }
 
 ## AGENTCORE GATEWAY
@@ -17,6 +21,10 @@ resource "aws_bedrockagentcore_gateway" "tool_interface" {
   role_arn        = aws_iam_role.agentcore_role.arn
   protocol_type   = "MCP"
   authorizer_type = "AWS_IAM"
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
 }
 
 
@@ -47,6 +55,28 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
               }
             }
           }
+          inline_payload {
+            name        = "query_knowledge_base"
+            description = "Searches the department knowledge base for policy and how-to articles."
+
+            input_schema {
+              type        = "object"
+              description = "Input for the knowledge base search tool"
+
+              property {
+                name        = "query"
+                type        = "string"
+                description = "The search query for the knowledge base."
+                required    = true
+              }
+              property {
+                name        = "kb_identifier"
+                type        = "string"
+                description = "The unique identifier for the department knowledge base."
+                required    = true
+              }
+            }
+          }
         }
       }
     }
@@ -56,6 +86,8 @@ resource "aws_bedrockagentcore_gateway_target" "rds_search_tool" {
     gateway_iam_role {} # Use the Gateway's role to invoke the Lambda
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
+    aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway
   ]
 }
@@ -92,6 +124,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_availability" {
     gateway_iam_role {}
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
     aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway_crm
   ]
@@ -140,6 +173,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
     gateway_iam_role {}
   }
   depends_on = [
+    time_sleep.wait_for_iam_propagation,
     aws_iam_role_policy.agentcore_gateway_invocation,
     aws_lambda_permission.allow_bedrock_gateway_crm
   ]

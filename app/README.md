@@ -15,6 +15,8 @@ The application is structured to support efficient AWS Lambda deployments using 
 | `lambdas/` | Contains the entry points (`handler.py`) for each individual AWS Lambda function. |
 | `lambdas/orchestrator/` | The core **LangGraph State Machine** that coordinates the agent's reasoning and tool calls. |
 | `lambdas/rds_seeder/` | Handles S3-to-RDS data ingestion and vector embedding generation. |
+| `lambdas/rds_init/` | Idempotently provisions RDS extensions, users (rds_readonly_dept_contacts), and KB tables. |
+| `lambdas/kb_sync/` | A **Step Function-driven ETL pipeline** that syncs articles from remote CRMs (e.g. Genesys) into the RDS knowledge base. |
 | `lambdas/rds_tool/` | MCP-compatible tool for performing semantic searches against the RDS database. |
 | `lambdas/crm_tool/` | MCP-compatible tool for checking human agent availability and initiating handoffs. |
 | `shared/utils/` | Common logic (DB connectors, AWS client builders) shared across all Lambdas via the Layer. |
@@ -35,7 +37,7 @@ The build process (defined in `infrastructure/build.tf`) automatically:
 
 ### Shared Logic & Utilities
 To maintain consistency and reduce duplication, all common operations should be added to `app/shared/utils/`:
-*   `aws.py`: Centralized Boto3 client factory (handles VPC endpoints).
+*   `aws.py`: Centralised Boto3 client factory (handles VPC endpoints).
 *   `db.py`: RDS/PostgreSQL connection management.
 
 ---

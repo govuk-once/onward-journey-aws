@@ -235,10 +235,44 @@ resource "aws_iam_role_policy_attachment" "rds_tool_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Attachment: Reuse existing RDS/Secrets/Embeddings policy
+resource "aws_iam_policy" "rds_tool_permissions" {
+  name        = "${var.environment}-rds-tool-permissions"
+  description = "Provides the RDS Tool access to embedding models and DB credentials. Restricted to access/query only."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "BedrockEmbeddingInvoke"
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "RDSIAMConnect"
+        Effect = "Allow"
+        Action = ["rds-db:connect"]
+        Resource = [
+          "arn:aws:rds-db:${var.aws_region}:${var.aws_account_id}:dbuser:${aws_db_instance.dept_contacts_metadata.resource_id}/rds_readonly_dept_contacts"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "rds_tool_main" {
   role       = aws_iam_role.rds_tool_role.name
-  policy_arn = aws_iam_policy.rds_seeder_permissions.arn
+  policy_arn = aws_iam_policy.rds_tool_permissions.arn
 }
 
 ## CRM TOOL SERVICE ROLE
@@ -336,6 +370,12 @@ resource "aws_iam_policy" "rds_seeder_permissions" {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      },
+      {
+        Sid      = "CrmToolInvocation"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = aws_lambda_function.crm_tool.arn
       }
     ]
   })
@@ -354,4 +394,170 @@ resource "aws_iam_role_policy_attachment" "rds_seeder_main" {
 resource "aws_iam_role_policy_attachment" "rds_seeder_vpc_access" {
   role       = aws_iam_role.rds_seeder_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+## RDS INIT SERVICE ROLE
+# Minimal execution role for the Knowledge Base infrastructure initialisation.
+
+resource "aws_iam_role" "rds_init_role" {
+  name = "${var.environment}-rds-init-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_policy" "rds_init_permissions" {
+  name        = "${var.environment}-rds-init-permissions"
+  description = "Provides minimal permissions for RDS initialisation (Logs and DB Secrets)."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "rds_init_main" {
+  role       = aws_iam_role.rds_init_role.name
+  policy_arn = aws_iam_policy.rds_init_permissions.arn
+}
+
+resource "aws_iam_role_policy_attachment" "rds_init_vpc_access" {
+  role       = aws_iam_role.rds_init_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+## KB SYNC SERVICE ROLE
+# Execution role for the Knowledge Base synchronisation pipeline.
+
+resource "aws_iam_role" "kb_sync_role" {
+  name               = "${var.environment}-kb-sync-role"
+  assume_role_policy = data.aws_iam_policy_document.allow_all_assume_role.json
+}
+
+resource "aws_iam_policy" "kb_sync_permissions" {
+  name        = "${var.environment}-kb-sync-permissions"
+  description = "Provides the KB Sync Pipeline access to embedding models and DB credentials (IAM and Password)."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "BedrockEmbeddingInvoke"
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "RDSIAMConnect"
+        Effect = "Allow"
+        Action = ["rds-db:connect"]
+        Resource = [
+          "arn:aws:rds-db:${var.aws_region}:${var.aws_account_id}:dbuser:${aws_db_instance.dept_contacts_metadata.resource_id}/rds_readonly_dept_contacts"
+        ]
+      },
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_main" {
+  role       = aws_iam_role.kb_sync_role.name
+  policy_arn = aws_iam_policy.kb_sync_permissions.arn
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_vpc_access" {
+  role       = aws_iam_role.kb_sync_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+## KB SYNC CRM ROLE
+# Execution role for the public-facing components of the KB Sync pipeline (Internet Access).
+
+resource "aws_iam_role" "kb_sync_crm_role" {
+  name               = "${var.environment}-kb-sync-crm-role"
+  assume_role_policy = data.aws_iam_policy_document.allow_all_assume_role.json
+}
+
+resource "aws_iam_policy" "kb_sync_crm_permissions" {
+  name        = "${var.environment}-kb-sync-crm-permissions"
+  description = "Allows the KB Sync pipeline to fetch external CRM credentials."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogAccess"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Sid      = "CRMSecretAccess"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.environment}/crm-creds/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_crm_main" {
+  role       = aws_iam_role.kb_sync_crm_role.name
+  policy_arn = aws_iam_policy.kb_sync_crm_permissions.arn
+}
+
+resource "time_sleep" "wait_for_iam_propagation" {
+  create_duration = "30s"
+
+  depends_on = [
+    aws_iam_role_policy.agentcore_gateway_invocation
+  ]
 }

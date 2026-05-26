@@ -20,6 +20,24 @@ This project uses [mise-en-place](https://mise.jdx.dev/getting-started.html) to 
 5. Ensure the GDS CLI is installed and configured; verify by running `gds aws once-onwardjourney-development-readonly -- echo "test"`.
 6. Install pre-commit hooks: `pre-commit install`. This will run the hooks listed in `.pre-commit-config.yaml` before each commit.
 
+If you have issues with `mise`, ensure the activation hook is added to your shell config, i.e.:
+
+`echo 'eval "$(mise activate zsh)"' >> ~/.zshrc`
+
+or
+
+`echo 'eval "$(mise activate bash)"' >> ~/.bashrc`
+
+Then restart terminal and check everything has linked up correctly:
+
+```
+# Check if the terminal can find an expected tool
+which uv
+
+# Check the active version according to mise
+mise current uv
+```
+
 ## 1. Initial Configuration
 
 Before deploying, you must create your environment configuration files.

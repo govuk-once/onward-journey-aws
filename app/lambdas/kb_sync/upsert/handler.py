@@ -76,17 +76,6 @@ def lambda_handler(event, context):
         eid=art["external_id"], title=art["title"], content=art["content"],
         kb_identifier=kb_identifier, url=art["external_url"], emb=vector_str)
 
-        # TODO: Future enhancement: Move this metadata update to a dedicated 'Finalise' step
-        # outside the Step Function Map state. Currently, if the batch fails halfway,
-        # the 'last_modified' date is still updated, which might cause the next sync
-        # to skip the remaining failed articles.
-        if remote_date:
-            conn.run("""
-                INSERT INTO sync_kb_metadata (kb_identifier, last_modified)
-                VALUES (:kb_identifier, :date)
-                ON CONFLICT (kb_identifier) DO UPDATE SET last_modified = EXCLUDED.last_modified;
-            """, kb_identifier=kb_identifier, date=remote_date)
-
         conn.run("COMMIT")
 
         return {

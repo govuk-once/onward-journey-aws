@@ -71,10 +71,15 @@ def lambda_handler(event, context):
             col_definitions = ", ".join(col_parts)
 
             print(f"Initialising table (if not exists): {target_table}")
-            conn.run(f"CREATE TABLE IF NOT EXISTS {target_table} ({col_definitions});")
+            conn.run(f'CREATE TABLE IF NOT EXISTS "{target_table}" ({col_definitions});')
+
+            # Ensure all columns exist
+            for col_name, col_type in columns.items():
+                print(f"Ensuring column exists: {target_table}.{col_name}")
+                conn.run(f'ALTER TABLE "{target_table}" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};')
 
             # Explicitly grant select on the newly created table
-            conn.run(f"GRANT SELECT ON {target_table} TO rds_readonly_dept_contacts;")
+            conn.run(f'GRANT SELECT ON "{target_table}" TO rds_readonly_dept_contacts;')
 
         conn.run("COMMIT")
         print("RDS initialisation complete.")

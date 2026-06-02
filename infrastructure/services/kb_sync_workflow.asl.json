@@ -92,6 +92,13 @@
           "BackoffRate": 2
         }
       ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error_info",
+          "Next": "HandleSyncFailure"
+        }
+      ],
       "ResultSelector": {
         "articles.$": "$.Payload.articles"
       },
@@ -137,12 +144,62 @@
           }
         }
       },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error_info",
+          "Next": "HandleSyncFailure"
+        }
+      ],
+      "ResultPath": "$.sync_results",
+      "Next": "FinaliseSyncSuccess"
+    },
+
+    "FinaliseSyncSuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${update_sync_meta_lambda_arn}",
+        "Payload": {
+          "kb_identifier.$": "$.kb_identifier",
+          "status": "SUCCESS",
+          "remote_modified_date.$": "$.meta_check.remote_modified_date"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "SyncComplete"
+    },
+
+    "HandleSyncFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${update_sync_meta_lambda_arn}",
+        "Payload": {
+          "kb_identifier.$": "$.kb_identifier",
+          "status": "FAILED",
+          "error.$": "States.Format('Sync failed: {}', $.error_info.Cause)"
+        }
+      },
+      "Next": "SyncFailed"
     },
 
     "SyncComplete": {
       "Type": "Succeed",
       "Comment": "Successfully generated embeddings and upserted all articles."
+    },
+
+    "SyncFailed": {
+      "Type": "Fail",
+      "Cause": "Knowledge Base synchronisation failed. Check database metadata for details.",
+      "Error": "SyncError"
     }
   }
 }

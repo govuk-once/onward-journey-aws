@@ -169,7 +169,17 @@ data "archive_file" "kb_sync_upsert_zip" {
   }
 }
 
-# 9. RDS INIT
+# 9. KB SYNC: UPDATE SYNC META
+data "archive_file" "kb_sync_update_sync_meta_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_update_sync_meta_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/update_sync_meta/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 10. RDS INIT
 data "archive_file" "rds_init_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/rds_init_payload.zip"

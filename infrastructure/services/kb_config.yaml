@@ -18,3 +18,5 @@ tables:
     columns:
       kb_identifier: "TEXT PRIMARY KEY"
       last_modified: "TEXT"
+      sync_status: "TEXT"
+      last_sync_error: "TEXT"

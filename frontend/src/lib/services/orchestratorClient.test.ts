@@ -1,5 +1,5 @@
 import { OrchestratorClient, type OrchestratorCallbacks } from "./orchestratorClient";
-import { jest, expect } from "@jest/globals";
+import { jest, expect, describe, it, beforeEach, afterEach } from "@jest/globals";
 
 describe("OrchestratorClient", () => {
     let client: OrchestratorClient;

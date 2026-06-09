@@ -1,20 +1,38 @@
-## SHARED LOGIC LAYER
-resource "aws_lambda_layer_version" "shared_logic" {
-  filename   = "${path.module}/../../dist/shared_layer_payload.zip"
-  layer_name = "${var.environment}-shared-logic"
+locals {
+  shared_layer_configs = {
+    core = {
+      name        = "core-logic"
+      description = "Core logic and dependencies"
+      zip_path    = local.core_output_zip
+      trigger     = local.core_trigger_hash
+    }
+    integrations = {
+      name        = "integrations-logic"
+      description = "CRM integrations logic"
+      zip_path    = local.integrations_output_zip
+      trigger     = local.integrations_trigger_hash
+    }
+  }
+}
 
-  # Use the hash of source files as the description.
-  # If Python code changes, this description string changes,
-  # forcing Terraform to build and deploy a brand new layer version safely!
-  description = "Shared logic layer. Build hash: ${local.layer_trigger_hash}"
+## SHARED LAYERS
+resource "aws_lambda_layer_version" "shared_layers" {
+  for_each   = local.shared_layer_configs
+  filename   = each.value.zip_path
+  layer_name = "${var.environment}-${each.value.name}"
 
-  # NOTE: source_code_hash has been completely removed to prevent Plan crashes.
+  # We use the hash of source files as the description to trigger new versions.
+  # Normally, 'source_code_hash' would be used, but since zip files are generated
+  # by local-exec (null_resource) during the Apply phase, using 'source_code_hash'
+  # would cause 'terraform plan' to crash because the file doesn't exist yet.
+  description = "${each.value.description}. Build hash: ${each.value.trigger}"
 
   compatible_runtimes = ["python3.12"]
 
-  depends_on = [
-    null_resource.build_shared_layer
-  ]
+  # Ensure the build process completes before we try to upload the layer.
+  # IMPORTANT: If you add a new layer to shared_layer_configs, you MUST add its
+  # build resource (null_resource) to this list.
+  depends_on = [null_resource.build_core_layer, null_resource.build_integrations_layer]
 }
 
 ## DATA INGESTION: RDS SEEDER
@@ -30,7 +48,7 @@ resource "aws_lambda_function" "rds_seeder" {
   role             = aws_iam_role.rds_seeder_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 900
 
@@ -72,7 +90,7 @@ resource "aws_lambda_function" "orchestrator" {
   role             = aws_iam_role.inference.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 1024
   timeout          = 120
 
@@ -115,7 +133,7 @@ resource "aws_lambda_function" "rds_tool" {
   role             = aws_iam_role.rds_tool_role.arn # Requires access to Bedrock and RDS
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 120
 
@@ -151,7 +169,7 @@ resource "aws_lambda_function" "crm_tool" {
   role             = aws_iam_role.crm_tool_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
 
@@ -217,7 +235,7 @@ resource "aws_lambda_function" "rds_init" {
   role             = aws_iam_role.rds_init_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 300
 

@@ -51,6 +51,7 @@
     "govuk-frontend": "^5.14.0",
     "sanitize-html": "^2.17.2",
     "showdown": "^2.1.0",
-    "rollup": ">=4.59.0"
+    "rollup": ">=4.59.0",
+    "flatted": "3.4.2"
   }
 }

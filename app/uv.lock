@@ -406,7 +406,6 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-aws" },
     { name = "pg8000" },
-    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -421,7 +420,6 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2.60" },
     { name = "langgraph-checkpoint-aws", specifier = ">=1.0.4" },
     { name = "pg8000", specifier = ">=1.31.2" },
-    { name = "urllib3", specifier = ">=2.7.0" },
 ]
 
 [package.metadata.requires-dev]

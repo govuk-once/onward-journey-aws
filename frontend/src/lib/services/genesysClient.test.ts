@@ -6,7 +6,7 @@ import {
   type ConnectionClosedEvent,
   type SessionExpiredEvent,
 } from "./genesysClient";
-import { jest, expect } from "@jest/globals";
+import { jest, expect, it, describe, beforeEach, afterEach } from "@jest/globals";
 
 class MockWebSocket {
   static CONNECTING = 0;

@@ -11,7 +11,7 @@ resource "aws_lambda_function" "kb_sync_check_kb_meta" {
   role             = aws_iam_role.kb_sync_crm_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
 
@@ -37,7 +37,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
   role             = aws_iam_role.kb_sync_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
 
@@ -72,7 +72,7 @@ resource "aws_lambda_function" "kb_sync_fetch_articles" {
   role             = aws_iam_role.kb_sync_crm_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 60
 
@@ -98,7 +98,7 @@ resource "aws_lambda_function" "kb_sync_upsert" {
   role             = aws_iam_role.kb_sync_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 1024
   timeout          = 30
 
@@ -134,7 +134,7 @@ resource "aws_lambda_function" "kb_sync_update_sync_meta" {
   role             = aws_iam_role.kb_sync_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_logic.arn]
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
 

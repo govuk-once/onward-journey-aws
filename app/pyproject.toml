@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "langchain-aws>=1.2.2",
     "langgraph>=0.2.60",
-    "langchain-core>=0.3.33",
+    "langchain-core>=1.3.3",
     "pg8000>=1.31.2",
     "langgraph-checkpoint-aws>=1.0.4"
 ]

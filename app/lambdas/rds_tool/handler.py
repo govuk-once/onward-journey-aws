@@ -35,20 +35,25 @@ def lambda_handler(event, context):
             as a JSON-serialised string within an MCP content block.
     """
 
-    print(f"📥 GATEWAY CALL: {json.dumps(event)}")
+    print(f"📥 GATEWAY EVENT: {json.dumps(event)}")
 
-    # 1. Extract Method, Query and Request ID
-    # AgentCore Gateway (MCP) passes the full target name as the method,
-    # but our orchestrator usually appends the specific tool name with ___
-    full_method = event.get("method", "")
+    # 1. Extract the Tool Name from the Gateway Context
+    custom_context = {}
+    if hasattr(context, 'client_context') and context.client_context:
+        custom_context = context.client_context.custom or {}
+
+    full_method = custom_context.get("bedrockAgentCoreToolName", "")
+    request_id = custom_context.get("bedrockAgentCoreMcpMessageId", "fallback-id")
+
+    # Clean the prefix
     method = full_method.split("___")[-1] if "___" in full_method else full_method
+    print(f"🔍 RESOLVED METHOD: {method}")
 
-    args = event.get("arguments", {})
-    query = args.get("query") or event.get("query") or "No query provided"
-    kb_identifier = args.get("kb_identifier")
-    request_id = event.get("id")
+    # 2. Extract arguments
+    query = event.get("query", "No query provided")
+    kb_identifier = event.get("kb_identifier")
 
-    # 2. Generate Vector Embedding using Amazon Titan v2
+    # 3. Generate Vector Embedding using Amazon Titan v2
     # We use 1024 dimensions and normalisation to match our RDS pgvector settings
     bedrock = get_bedrock_client()
     embed_body = json.dumps({"inputText": query, "dimensions": 1024, "normalize": True})
@@ -60,7 +65,7 @@ def lambda_handler(event, context):
     )
     embedding = json.loads(embed_resp["body"].read())["embedding"]
 
-    # 3. Connect and Query RDS using pgvector similarity
+    # 4. Connect and Query RDS using pgvector similarity
     conn = get_db_connection()
 
     try:
@@ -111,7 +116,7 @@ def lambda_handler(event, context):
     finally:
         conn.close()
 
-    # 4. Format results for the MCP-compatible response
+    # 5. Format results for the MCP-compatible response
     return {
         "jsonrpc": "2.0",
         "id": request_id,

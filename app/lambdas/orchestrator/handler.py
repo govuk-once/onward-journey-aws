@@ -27,8 +27,6 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
-from utils.aws import get_bedrock_client
-
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
 GATEWAY_ENDPOINT_URL = os.environ.get("GATEWAY_ENDPOINT_URL")

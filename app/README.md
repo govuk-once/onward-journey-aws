@@ -44,7 +44,30 @@ To maintain consistency and reduce duplication, all common operations should be 
 
 ## Testing
 
-Verification of the Lambda logic should be performed after deployment using the integration tests located in the root `tests/` directory:
+### Pytest and DeepEval
+We have a suite of quasi-integration tests using `pytest` and `DeepEval` which currently test the routing and output behaviour of the Orchestrator lambda. The tests are located in the `tests/orchestrator/test_handley.py` file.
+
+To run these tests, you must be logged into the authenticated GDS AWS shell (`gds aws <role-name> -- $SHELL`).
+
+From the `tests/orchestrator` directory, run either:
+
+`pytest test_handler.py` - this will run the tests with a minimal logging output.
+
+or
+
+`deepeval test run test_handler.py` - this will run the tests and provide comprehensive logging, including a summary of the judge agent's reasoning.
+
+To run a single test, append the test function name as per the following example:
+
+`pytest test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
+`
+
+or
+
+`deepeval test run test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
+
+### Integration post-deployment
+Verification of the Lambda logic should be performed after deployment using the integration tests located in the **root** `tests/` directory:
 
 ```bash
 # From the project root

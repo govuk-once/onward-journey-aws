@@ -19,7 +19,7 @@ packages = ["shared", "lambdas"]
 dev = [
     "boto3>=1.42.5",         # Pre-installed in Lambda, keep here for local IDE/Linting
     "pytest>=7.0.0",
-    "deepeval",
+    "deepeval>=4.0.7",
     "aiobotocore",
     "botocore"
 ]

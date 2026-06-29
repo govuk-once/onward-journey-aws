@@ -31,7 +31,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   threshold                 = 1
   alarm_description         = "Triggers if ${each.key} experiences 1 or more errors in a 1-minute window."
   insufficient_data_actions = []
-  alarm_actions             = aws_sns_topic.lambda_errors
+  alarm_actions             = [aws_sns_topic.lambda_errors.arn]
 
   dimensions = {
     FunctionName = each.key
@@ -39,7 +39,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 }
 
 data "aws_chatbot_slack_workspace" "gds_oj_slack" {
-  slack_team_name = "gds"
+  slack_team_name = "GDS"
 }
 
 resource "aws_chatbot_slack_channel_configuration" "oj_aws_errors" {

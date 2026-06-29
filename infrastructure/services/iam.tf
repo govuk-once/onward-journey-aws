@@ -561,3 +561,29 @@ resource "time_sleep" "wait_for_iam_propagation" {
     aws_iam_role_policy.agentcore_gateway_invocation
   ]
 }
+
+# Amazon Q Role
+# Allows Amazon Q Developer in chat applications to read Cloudwatch logs
+
+resource "aws_iam_role" "amazon_q" {
+  name = "${var.environment}_amazon_q_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "chatbot.amazonaws.com"
+        }
+      },
+    ]
+  })
+  # managed_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"]
+}
+
+resource "aws_iam_role_policy_attachment" "amazon_q_cloudwatch_access" {
+  role       = aws_iam_role.amazon_q.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}

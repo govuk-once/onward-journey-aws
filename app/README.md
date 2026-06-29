@@ -47,24 +47,33 @@ To maintain consistency and reduce duplication, all common operations should be 
 ### Pytest and DeepEval
 We have a suite of quasi-integration tests using `pytest` and `DeepEval` which currently test the routing and output behaviour of the Orchestrator lambda. The tests are located in the `tests/orchestrator/test_handley.py` file.
 
-To run these tests, you must be logged into the authenticated GDS AWS shell (`gds aws <role-name> -- $SHELL`).
+The same tests will run regardless of whether you use the `pytest` or `deepeval` command, but the output in the terminal will differ.
 
-From the `tests/orchestrator` directory, run either:
+To run the tests using the following commands, you must be logged into the authenticated GDS AWS shell (`gds aws <role-name> -- $SHELL`) and be in the `tests/orchestrator` directory.
 
-`pytest test_handler.py` - this will run the tests with a minimal logging output.
+#### Pytest
 
-or
+Using Pytest, the tests will run with a minimal logging output. You will only see the judge agent's reasoning in the event of a test failure.
 
-`deepeval test run test_handler.py` - this will run the tests and provide comprehensive logging, including a summary of the judge agent's reasoning.
+To run all tests:
+
+`pytest test_handler.py`
 
 To run a single test, append the test function name as per the following example:
 
 `pytest test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
-`
 
-or
+#### DeepEval
 
-`deepeval test run test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
+DeepEval provides comprehensive logging, including a summary of the judge agent's reasoning (including for passing tests).
+
+To run all tests:
+
+`uv run deepeval test run test_handler.py`
+
+To run a single test, append the test function name as per the following example:
+
+`uv run deepeval test run test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
 
 ### Integration post-deployment
 Verification of the Lambda logic should be performed after deployment using the integration tests located in the **root** `tests/` directory:

@@ -2,9 +2,10 @@
  * PURPOSE: Foundational Network Discovery.
  * This file bridges the gap between the permanent shared network and this
  * ephemeral developer workspace. It looks up the core network resources deployed
- * by the 'infrastructure/vpc' component so that developer infrastructure
- * (Lambdas, Endpoints, Security Groups) can be securely placed inside them.
+ * by the 'infrastructure/vpc' and infrastructure/slack-config components so that developer infrastructure
+ * (Lambdas, Endpoints, Security Groups) can be securely placed inside the VPC and alerts can be correctly routed.
  * * DEPENDENCY: The 'infrastructure/vpc' Terraform must be applied before this workspace.
+ * * DEPENDENCY: The 'infrastructure/slack-config' Terraform must be applied before this workspace.
  */
 
 # 1. Identify the shared foundational VPC
@@ -27,8 +28,14 @@ data "aws_subnets" "private" {
   }
 }
 
-# 3. Standardise the network outputs for use across the developer workspace
+# 3. Discover the SNS topic for routing alerts
+data "aws_sns_topic" "lambda_errors_topic" {
+  name = "lambda-errors-topic"
+}
+
+# 4. Standardise the network outputs for use across the developer workspace
 locals {
   vpc_id             = data.aws_vpc.shared.id
   private_subnet_ids = data.aws_subnets.private.ids
+  sns_topic_arn      = data.aws_sns_topic.lambda_errors_topic.arn
 }

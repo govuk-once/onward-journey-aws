@@ -1,8 +1,3 @@
-resource "aws_sns_topic" "lambda_errors" {
-  name = "${var.environment}-lambda-errors-topic"
-}
-
-
 locals {
   lambda_function_names = [
     "${var.environment}-kb-sync-fetch-articles",
@@ -31,21 +26,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   threshold                 = 1
   alarm_description         = "Triggers if ${each.key} experiences 1 or more errors in a 1-minute window."
   insufficient_data_actions = []
-  alarm_actions             = [aws_sns_topic.lambda_errors.arn]
+  alarm_actions             = [local.sns_topic_arn]
 
   dimensions = {
     FunctionName = each.key
   }
-}
-
-data "aws_chatbot_slack_workspace" "gds_oj_slack" {
-  slack_team_name = "GDS"
-}
-
-resource "aws_chatbot_slack_channel_configuration" "oj_aws_errors" {
-  configuration_name = "${var.environment}-oj-aws-errors-config"
-  iam_role_arn       = aws_iam_role.amazon_q.arn
-  slack_channel_id   = "C0BD43H6J6N"
-  slack_team_id      = data.aws_chatbot_slack_workspace.gds_oj_slack.slack_team_id
-  sns_topic_arns     = [aws_sns_topic.lambda_errors.arn]
 }

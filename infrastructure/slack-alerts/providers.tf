@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    key = "shared-infrastructure/slack-config.tfstate"
+    # backend config in slack.config. Initialise with: terraform init -reconfigure -backend-config="../environments/slack.config"
   }
 }
 

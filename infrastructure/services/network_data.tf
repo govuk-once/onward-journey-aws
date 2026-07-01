@@ -27,10 +27,6 @@ data "aws_subnets" "private" {
   }
 }
 
-data "aws_sns_topic" "lambda_errors_topic" {
-  name = "lambda-errors-topic"
-}
-
 # 4. Standardise the network outputs for use across the developer workspace
 locals {
   vpc_id             = data.aws_vpc.shared.id

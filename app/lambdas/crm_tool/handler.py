@@ -15,7 +15,7 @@ Supported Methods:
 
 import json
 from integrations.factory import ProviderFactory, Capability
-from integrations.tooling import format_jsonrpc_response, format_tool_text_result, log_metric
+from integrations.tooling import log_metric
 
 def lambda_handler(event, context):
     """
@@ -24,15 +24,14 @@ def lambda_handler(event, context):
     Args:
         event (dict): The Lambda event object, expected to contain:
             - method (str): The name of the tool method to execute.
-            - id (str|int): A unique identifier for the request (JSON-RPC style).
             - live_chat_identifier (str): Unique ID for the specific chat service.
             - thread_id (str, optional): Identifier for the conversation thread.
             - session_id (str, optional): Identifier for the user session.
         context (LambdaContext): AWS Lambda context object.
 
     Returns:
-        dict: A JSON-RPC 2.0 formatted dictionary containing the tool execution
-            result or an error message.
+        dict/str: The raw tool execution result or an error dictionary. AgentCore Gateway
+            handles the JSON-RPC serialization.
     """
     # Log the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
     trace_id = event.get("thread_id") or event.get("session_id") or "UNKNOWN_SESSION"
@@ -40,26 +39,23 @@ def lambda_handler(event, context):
 
     chat_id = event.get("live_chat_identifier")
     method = event.get("method")
-    request_id = event.get("id")
 
     try:
         provider = ProviderFactory.get_provider(chat_id, Capability.CHAT_AVAILABILITY)
 
         if "check_chat_availability" in method:
-            message = provider.fetch_adviser_availability()
-            result = format_tool_text_result(message)
+            return provider.fetch_adviser_availability()
 
         elif "connect_to_live_chat" in method:
             result = provider.generate_handoff_signal(event)
             # --- HANDOFF STATUS LOG ---
             log_metric("LiveHandoffInitiated", {"Target": chat_id, "Trace": trace_id})
+            return result
 
         else:
             print(f"❌ [ERROR] Unknown method: {method}")
-            result = format_tool_text_result(f"METHOD_ERROR: {method} not supported.")
-
-        return format_jsonrpc_response(request_id, result)
+            return {"error": f"METHOD_ERROR: {method} not supported."}
 
     except Exception as e:
         print(f"❌ [ERROR] CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
-        return format_jsonrpc_response(request_id, format_tool_text_result("SERVICE_ERROR: Internal Tool Error."))
+        return {"error": "SERVICE_ERROR: Internal Tool Error."}

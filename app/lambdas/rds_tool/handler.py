@@ -27,12 +27,11 @@ def lambda_handler(event, context):
             - arguments (dict): Search parameters including:
                 - query (str): The natural language query to search for.
                 - kb_identifier (str, optional): Required for KB searches.
-            - id (str|int): A unique identifier for the request.
         context (LambdaContext): AWS Lambda context object.
 
     Returns:
-        dict: A JSON-RPC 2.0 formatted dictionary containing the search results
-            as a JSON-serialised string within an MCP content block.
+        list/dict: The raw search results (list of dicts) or an error dictionary.
+            AgentCore Gateway will handle the JSON-RPC serialization.
     """
 
     print(f"📥 GATEWAY EVENT: {json.dumps(event)}")
@@ -43,7 +42,6 @@ def lambda_handler(event, context):
         custom_context = context.client_context.custom or {}
 
     full_method = custom_context.get("bedrockAgentCoreToolName", "")
-    request_id = custom_context.get("bedrockAgentCoreMcpMessageId", "fallback-id")
 
     # Clean the prefix
     method = full_method.split("___")[-1] if "___" in full_method else full_method
@@ -73,11 +71,7 @@ def lambda_handler(event, context):
             # KB Search: Filter by the specific department KB identifier
             if not kb_identifier:
                 print(f"❌ [ERROR] kb_identifier is required for {method}")
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {"code": -32602, "message": "kb_identifier is required"}
-                }
+                return {"error": "kb_identifier is required"}
 
             results = conn.run(
                 """
@@ -116,11 +110,5 @@ def lambda_handler(event, context):
     finally:
         conn.close()
 
-    # 5. Format results for the MCP-compatible response
-    return {
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "result": {
-            "content": [{"type": "text", "text": json.dumps(formatted_results)}]
-        },
-    }
+    # 5. Return results
+    return formatted_results

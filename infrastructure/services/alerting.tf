@@ -24,7 +24,7 @@ resource "aws_cloudwatch_log_metric_filter" "lambda_errors" {
   name     = "${each.key}-error-filter"
   pattern  = "?ERROR ?Error ?error ?Exception ?exception ?Fail ?fail"
 
-  # Link the filterto the auto-created log groups for each function
+  # Link the filter to the auto-created log groups for each function
   log_group_name = "/aws/lambda/${each.key}"
 
   metric_transformation {

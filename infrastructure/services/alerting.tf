@@ -1,10 +1,10 @@
 # DEPENDENCY: slack-alerting shared infrastructure (infrastructure/slack-alerting) must be applied before this workspace
-data "aws_sns_topic" "lambda_errors_topic" {
-  name = "lambda-errors-topic"
+data "aws_sns_topic" "oj_aws_errors" {
+  name = "oj-aws-errors"
 }
 
 locals {
-  sns_topic_arn = data.aws_sns_topic.lambda_errors_topic.arn
+  sns_topic_arn = data.aws_sns_topic.oj_aws_errors.arn
   main_functions = [
     "${var.environment}-rds-seeder",
     "${var.environment}-crm-tool",

@@ -71,7 +71,7 @@ aws_account_id = "<AWS account ID>"
 We use the GDS CLI to assume roles on our development machines. To see a list of relevant roles, run `gds aws | grep onwardjourney`. You can use these roles by running e.g. `gds aws <role-name> -- terraform plan`, or start a new authenticated shell session with `gds aws <role-name> -- $SHELL`.
 
 ### Phase 1: The Foundation (VPC)
-**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**.
+**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**. If you are deploying to an AWS acscount with shared infrastructure already in place, skip to Phase 3.
 
 **CRITICAL:** This layer MUST be deployed using the **`default`** Terraform workspace.
 
@@ -90,8 +90,26 @@ terraform plan
 # 4. Deploy to the 'default' workspace
 terraform apply
 ```
+### Phase 2: Set Alerting Channel
+Set up a channel to get automated error alerting via Slack.
 
-### Phase 2: Your Developer Workspace (Services)
+**Note:** You only need to run this phase if you are deploying to a **new AWS account**, or want to configure a **new Slack workspace or channel** to receive alerts.
+
+<!-- placeholder  -->
+
+
+```bash
+cd infrastructure/slack-alerts
+
+# Initialise pointing to your config
+terraform init -reconfigure -backend-config="../environments/<environment_name>.config"
+
+# Select or Create your unique workspace. For development, replace <workspace_name> with your initials
+terraform workspace select <workspace_name> || terraform workspace new <workspace_name>
+```
+
+
+### Phase 3: Your Developer Workspace (Services)
 Most daily development happens here. This layer uses **individual developer workspaces** for isolation. Follow these steps for a complete deployment of the services infrastructure:
 
 **1. Initialise and Select Workspace**

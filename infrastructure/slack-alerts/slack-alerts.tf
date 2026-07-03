@@ -2,15 +2,21 @@ resource "aws_sns_topic" "oj_aws_errors" {
   name = "oj-aws-errors"
 }
 
-data "aws_chatbot_slack_workspace" "gds_oj_slack" {
-  slack_team_name = "GDS"
+variable "slack_workspace_id" {
+  type        = string
+  description = "ID of the Slack workspace that will receive alerts"
+}
+
+variable "slack_channel_id" {
+  type        = string
+  description = "ID of the Slack channel that will receive alerts"
 }
 
 resource "aws_chatbot_slack_channel_configuration" "oj_aws_errors" {
   configuration_name = "oj-aws-errors-config"
   iam_role_arn       = aws_iam_role.amazon_q.arn
-  slack_channel_id   = "C0BD43H6J6N"
-  slack_team_id      = data.aws_chatbot_slack_workspace.gds_oj_slack.slack_team_id
+  slack_channel_id   = var.slack_channel_id
+  slack_team_id      = var.slack_workspace_id
   sns_topic_arns     = [aws_sns_topic.oj_aws_errors.arn]
   logging_level      = "INFO"
 }

@@ -102,4 +102,18 @@ terraform apply
 ```
 Alerting should now be set up, and you should receive a message in the configured Slack channel if any errors or failures occur in any of the lambda functions in your workspace.
 
-**Note**: Error alerting is set up for all existing lambda functions. If any new functions or resources are created, or if any existing functions are renamed, they won't trigger alerts unless their names are added to the `locals` block in `infrastructure/services/alerting.tf`
+## Adding new functions and resources
+
+Error alerting is set up to monitor log groups for all existing lambda functions and step functions. If any new functions or resources are created, or if any existing functions are renamed, they won't trigger alerts automatically.
+
+To monitor a new or renamed resource and turn on error alerts:
+- Sign into the AWS browser console and navigate to the Cloudwatch dashboard, then click **Log Management** under **Logs**.
+- find the log group for the resource you want to monitor
+- copy the log group name, e.g. `/aws/lambda/myworkspace-orchestrator`
+- in the terminal on your local machine, navigate to `infrastructure/services`
+- open `alerting.tf` in a text editor
+- add the log group name to the `main_log_groups` list inside the `locals` block, wrapped in quotes ("")
+- replace your workspace name with `${var.environment}`. E.g. `/aws/lambda/myworkspace-orchestrator` becomes `/aws/lambda/${var.environment}-orchestrator`
+- run `terraform apply` and type `yes` to accept the changes
+
+Alerting should now be set up for the new log group that you have added.

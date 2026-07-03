@@ -3,7 +3,7 @@
 Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user workspace where it is already set up in other workspaces.
 
 
-## Option 1: New account or configuration
+## Section 1: New account or configuration
 This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different slack channel or workspace). If you just need to add a user workspace, skip to section 2 (Adding a new user workspace).
 
 ### Create or edit a chat client
@@ -102,7 +102,7 @@ terraform apply
 ```
 Alerting should now be set up, and you should receive a message in the configured Slack channel if any errors or failures occur in any of the lambda functions in your workspace.
 
-## Adding new functions and resources
+## Section 3: Adding new functions and resources
 
 Error alerting is set up to monitor log groups for all existing lambda functions and step functions. If any new functions or resources are created, or if any existing functions are renamed, they won't trigger alerts automatically.
 

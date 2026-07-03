@@ -2,10 +2,10 @@
  * PURPOSE: Foundational Network Discovery.
  * This file bridges the gap between the permanent shared network and this
  * ephemeral developer workspace. It looks up the core network resources deployed
- * by the 'infrastructure/vpc' components so that developer infrastructure
- * (Lambdas, Endpoints, Security Groups) can be securely placed inside the VPC.
+ * by the 'infrastructure/vpc' component so that developer infrastructure
+ * (Lambdas, Endpoints, Security Groups) can be securely placed inside them.
  * * DEPENDENCY: The 'infrastructure/vpc' Terraform must be applied before this workspace.
- **/
+ */
 
 # 1. Identify the shared foundational VPC
 data "aws_vpc" "shared" {
@@ -27,7 +27,7 @@ data "aws_subnets" "private" {
   }
 }
 
-# 4. Standardise the network outputs for use across the developer workspace
+# 3. Standardise the network outputs for use across the developer workspace
 locals {
   vpc_id             = data.aws_vpc.shared.id
   private_subnet_ids = data.aws_subnets.private.ids

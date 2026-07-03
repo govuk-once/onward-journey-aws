@@ -1,19 +1,35 @@
 # Onward Journey - Error Alerting
 
-Onward Journey sends automated alerts to a configured Slack channel, whenever a AWS service or function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user workspace where it is already set up in other workspaces.
+Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user workspace where it is already set up in other workspaces.
 
-Before you begin, navigate to the infrastructure/slack-alerts directory, and sign into AWS via the GDS shell.
+
+## Option 1: New account or configuration
+This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different slack channel or workspace). If you just need to add a user workspace, skip to section 2 (Adding a new user workspace).
+
+### Create or edit a chat client
+Amazon Q chat clients can only be created in the browser, to enable authentication with a Slack workspace. This only needs to be done once per AWS account/slack workspace.
+
+First, configure the Slack workspace and channel:
+1. Open Slack and sign into the workspace where you want to receive alerts
+2. Cick Tools -> Apps in the left sidebar
+3. Check whether Amazon Q Developer is installed. If it isn't, install it.
+4. Create a channel or open an existing channel where you wish to receive alerts
+5. Open the channel and type the message `/invite @Amazon Q.` and send it in the channel. If prompted, choose "Invite Them"
+
+Then, configure the Amazon Q client:
+1. Sign into the AWS browser console and go to https://console.aws.amazon.com/chatbot/
+2. Click "Configured Clients". If your Slack workspace isn't listed, click "Configure new client". You'll be redirected to Slack's authorization page to request permission for Amazon Q Developer in chat applications to access your information
+3. Select the workspace you'd like to use from the dropdown, and click "Allow".
+
+### Initialise and apply the terraform configuration
+
+Navigate to the infrastructure/slack-alerts directory, and sign into AWS via the GDS shell.
 
 ```bash
 cd infrastructure/slack-alerts
 
 gds aws once-onwardjourney-development-admin --shell
 ```
-
-## 1. New account or configuration
-This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different slack channel or workspace). If you just need to add a user workspace, skip to section 2 (Adding a new user workspace).
-
-### Initialise the configuration
 
 If `slack-alerts.config` doesn't exist in the slack-alerts directory, create it, and paste in the text below. Replace `<your-AWS-account-ID>` with your AWS account ID.
 
@@ -24,32 +40,66 @@ use_lockfile = true
 encrypt = true
 key = "shared-infrastructure/slack-alerts.tfstate"
 ```
+Ensure that you are using the default terraform workspace with
+ ```bash
+ terraform workspace list
+ ```
+ You should see `*default` - note the asterisk(*)
 
-then, run:
+Then, run:
 ```bash
 terraform init -reconfigure -backend-config="slack-alerts.config"
 ```
 
-### Create or edit a chat client
-Amazon Q chat clients can only be created in the browser, to enable authentication with a Slack workspace. This only needs to be done once per AWS account/slack workspace.
 
-First, configure the Slack workspace and channel:
-1. Open Slack and sign into the workspace where you want to receive alerts
-2. Cick Tools -> Apps in the left sidebar
-3. Check whether Amazon Q Developer is installed. If it isn't, install it.
-4. Create a channel or open an existing channel where you wish to receive alerts
-5. Type the message `/invite @Amazon Q.` and send it in the channel. If prompted, choose "Invite Them"
+Set up Terraform variables:
+1. Get the channel ID and workspace ID for the channel/workspace you configured earlier (see https://slack.com/intl/en-gb/help/articles/221769328-Locate-your-Slack-URL-or-ID for instructions on how to get these IDs)
+2. Update `infrastructure/slack-alerts/local.auto.tfvars` with the following (if it doesn't exist, create it):
+```hcl
+slack_channel_id = "<your slack channel ID>"
+slack_workspace_id = "<your slack workspace ID>"
+```
 
-Then, configure the Amazon Q client:
-1. Sign into the AWS browser console and go to https://console.aws.amazon.com/chatbot/
-2. Click "Configured Clients". If your Slack workspace isn't listed, click "Configure new client". You'll be redirected to Slack's authorization page to request permission for Amazon Q Developer in chat applications to access your information
-3. Select the workspace you'd like to use from the dropdown, and click "Allow".
+After that, run:
+
+```bash
+terraform apply
+```
+Type `yes` when prompted to save the configuration. Go to Section 2 to set up alerting for your workspace.
 
 
-<!-- how to set up the channel configuration, apply terraform, get SNS topic ARN -->
+## Section 2: Adding a new user workspace
 
-## 2. Adding a new user workspace
+Follow these instructions if you already have a slack workspace and channel configured for receiving error alerts, and you need to set up a new user workspace.
 
-If you already have alerting set up and only need to add a
+Navigate to `infrastructure/services`. If you haven't already, authenticate using the GDS AWS shell, and get the SNS topic ARN for your error alerts:
 
-<!-- tbc -->
+```bash
+# change working directory
+cd infrastructure/services
+
+# authenticate if you haven't already
+gds aws once-onwardjourney-development-admin --shell
+
+# output the SNS topic ARN to the console and copy it to the clipboard
+aws sns list-topics --query "Topics[?ends_with(TopicArn, ':oj-aws-errors')].TopicArn" --output text | sed 's/.*/"&"/'
+```
+
+in `local.auto.tfvars`, update the value for `sns_topic_arn` with the ARN you just copied. Ensure it is wrapped in double quotes (""). It should look like this, with `<your AWS account>` replaced with your AWS account ID:
+```hcl
+sns_topic_arn  = "arn:aws:sns:eu-west-2:<your AWS account>:oj-aws-errors"
+```
+
+**Note:** For the above step, ensure you are editing the version of `local.auto.tfvars` in the correct directory (`infrastructure/services`, not `infrastructure/slack-alerts`)
+
+Before applying, check that you are in your user workspace by running `terraform worksapce list`. If you don't see an asterisk(*) next to your workspace name, switch into your workspace with:
+```bash
+terraform workspace select <workspace_name>
+```
+Finally, run:
+```bash
+terraform apply
+```
+Alerting should now be set up, and you should receive a message in the configured Slack channel if any errors or failures occur in any of the lambda functions in your workspace.
+
+**Note**: Error alerting is set up for all existing lambda functions. If any new functions or resources are created, or if any existing functions are renamed, they won't trigger alerts unless their names are added to the `locals` block in `infrastructure/services/alerting.tf`

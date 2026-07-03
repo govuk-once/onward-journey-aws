@@ -6,12 +6,12 @@ variable "sns_topic_arn" {
 
 locals {
   sns_topic_arn = var.sns_topic_arn
-  main_functions = [
-    "${var.environment}-rds-seeder",
-    "${var.environment}-crm-tool",
-    "${var.environment}-rds-init",
-    "${var.environment}-rds-tool",
-    "${var.environment}-orchestrator"
+  main_log_groups = [
+    "/aws/lambda/${var.environment}-rds-seeder",
+    "/aws/lambda/${var.environment}-crm-tool",
+    "/aws/lambda/${var.environment}-rds-init",
+    "/aws/lambda/${var.environment}-rds-tool",
+    "/aws/lambda/${var.environment}-orchestrator"
   ]
   kb_sync_functions = [
     "${var.environment}-kb-sync-fetch-articles",
@@ -23,36 +23,36 @@ locals {
   sync_machine = "${var.environment}-kb-sync-machine"
 
 }
-# ============== Main Lambdas ======================================
-resource "aws_cloudwatch_log_metric_filter" "main_function_errors" {
-  for_each = toset(local.main_functions)
-  name     = "${each.key}-error-filter"
+# ============== Main Log Groups ======================================
+resource "aws_cloudwatch_log_metric_filter" "logged_errors" {
+  for_each = toset(local.main_log_groups)
+  name     = "${regex("[^/]+$", each.key)}-error-filter"
   pattern  = "?ERROR ?Error ?error ?Exception ?exception ?Fail ?fail"
 
   # Link the filter to the auto-created log groups for each function
-  log_group_name = "/aws/lambda/${each.key}"
+  log_group_name = each.key
 
   # use the filter to increment a metric
   metric_transformation {
-    name          = "${each.key}-errors"
+    name          = "${regex("[^/]+$", each.key)}-errors"
     namespace     = "Custom/Lambda"
     value         = "1"
     default_value = "0"
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "main_function_errors" {
-  for_each = toset(local.main_functions)
+resource "aws_cloudwatch_metric_alarm" "logged_errors" {
+  for_each = toset(local.main_log_groups)
 
-  alarm_name                = "${each.key}-error"
+  alarm_name                = "${regex("[^/]+$", each.key)}-error"
   comparison_operator       = "GreaterThanOrEqualToThreshold"
   evaluation_periods        = 1
-  metric_name               = aws_cloudwatch_log_metric_filter.main_function_errors[each.key].metric_transformation[0].name
-  namespace                 = aws_cloudwatch_log_metric_filter.main_function_errors[each.key].metric_transformation[0].namespace
+  metric_name               = aws_cloudwatch_log_metric_filter.logged_errors[each.key].metric_transformation[0].name
+  namespace                 = aws_cloudwatch_log_metric_filter.logged_errors[each.key].metric_transformation[0].namespace
   period                    = 60
   statistic                 = "Sum"
   threshold                 = 1
-  alarm_description         = "Triggers if an error message is detected in the logs of any of the main lambda functions. An error was detected in ${each.key}"
+  alarm_description         = "Triggers if an error message is detected in Cloudwatch logs. An error was detected in the logs for ${each.key}"
   insufficient_data_actions = []
   alarm_actions             = [local.sns_topic_arn]
   treat_missing_data        = "notBreaching"

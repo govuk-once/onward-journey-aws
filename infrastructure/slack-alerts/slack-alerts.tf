@@ -43,3 +43,8 @@ resource "aws_iam_role_policy_attachment" "amazon_q_logs_access" {
   role       = aws_iam_role.amazon_q.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
 }
+
+output "sns_topic_arn" {
+  value       = aws_sns_topic.oj_aws_errors.arn
+  description = "SNS topic ARN"
+}

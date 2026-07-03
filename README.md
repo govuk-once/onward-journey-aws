@@ -59,7 +59,7 @@ workspace_key_prefix = "environment"
 ```
 
 ### Create your Local Variables
-You must set your environment name, account ID, and a placeholder for the SNS topic used for error alerting
+You must set your environment name, account ID, and a placeholder for the SNS topic used for error alerting.
 
 update `infrastructure/services/local.auto.tfvars` with the following:
 ```hcl

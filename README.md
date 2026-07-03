@@ -71,7 +71,7 @@ aws_account_id = "<AWS account ID>"
 We use the GDS CLI to assume roles on our development machines. To see a list of relevant roles, run `gds aws | grep onwardjourney`. You can use these roles by running e.g. `gds aws <role-name> -- terraform plan`, or start a new authenticated shell session with `gds aws <role-name> -- $SHELL`.
 
 ### Phase 1: The Foundation (VPC)
-**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**. If you are deploying to an AWS acscount with shared infrastructure already in place, skip to Phase 3.
+**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**.
 
 **CRITICAL:** This layer MUST be deployed using the **`default`** Terraform workspace.
 
@@ -90,48 +90,8 @@ terraform plan
 # 4. Deploy to the 'default' workspace
 terraform apply
 ```
-### Phase 2: Set Alerting Channel
-Set up a channel to get automated error alerting via Slack.
 
-**Note:** You only need to run this phase if you are deploying to a **new AWS account**, or want to configure a **new Slack workspace or channel** to receive alerts.
-
-<!-- placeholder. We first need to explain how to authenticate a slack workspace, create a channel in Slack and invite Amazon Q. This is a bit long to put in here so perhaps the details of Phase 2 could go in a separate file. But the issue is it's kind of necessary because if the slack client isn't at least set up, there might be errors when trying to apply services/alerting.tf
-How can we put the minimum here to make sure everything runs, then move the rest of the setup into a separate README?
- -->
-
-Create a config file:
-
-```bash
-cd infrastructure/slack-alerts
-touch slack-alerts.config
-```
-Copy the following into ```slack-alerts.config```, replacing *your-AWS-account-ID* with your own account ID:
-```
-region       = "eu-west-2"
-bucket       = "govuk-once-onwardjourney-development-<your-AWS-account-ID>-tfstate"
-use_lockfile = true
-encrypt      = true
-key          = "shared-infrastructure/slack-alerts.tfstate"
-```
-
-
-
-```bash
-# 1. Initialise pointing to the slack-alerts config (staying within the infrastructure/slack-alerts working directory)
-terraform init -reconfigure -backend-config="./slack-alerts.config"
-
-# 2. Workspace Check - As with the VPC deploy, you should be in "default"
-terraform workspace list
-
-# 3. Plan - To view what changes your terraform code will make to the 'default' shared network
-terraform plan
-
-# 4. Deploy to the 'default' workspace
-terraform apply
-```
-
-
-### Phase 3: Your Developer Workspace (Services)
+### Phase 2: Your Developer Workspace (Services)
 Most daily development happens here. This layer uses **individual developer workspaces** for isolation. Follow these steps for a complete deployment of the services infrastructure:
 
 **1. Initialise and Select Workspace**

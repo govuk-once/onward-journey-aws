@@ -87,7 +87,7 @@ aws sns list-topics --query "Topics[?ends_with(TopicArn, ':oj-aws-errors')].Topi
 
 in `local.auto.tfvars`, update the value for `sns_topic_arn` with the ARN you just copied. Ensure it is wrapped in double quotes (""). It should look like this, with `<your AWS account>` replaced with your AWS account ID:
 ```hcl
-sns_topic_arn  = "arn:aws:sns:eu-west-2:<your AWS account>:oj-aws-errors"
+sns_topic_arn = "arn:aws:sns:eu-west-2:<your AWS account>:oj-aws-errors"
 ```
 
 **Note:** For the above step, ensure you are editing the version of `local.auto.tfvars` in the correct directory (`infrastructure/services`, not `infrastructure/slack-alerts`)

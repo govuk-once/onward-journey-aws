@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    # backend config in slack.config. Initialise with: terraform init -reconfigure -backend-config="../environments/slack.config"
+    # backend configuration passed in dynamically via slack-alerts.config
   }
 }
 

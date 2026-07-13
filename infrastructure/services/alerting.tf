@@ -7,12 +7,13 @@ variable "sns_topic_arn" {
 locals {
   sns_topic_arn = var.sns_topic_arn
   main_log_groups = [
-    "/aws/lambda/${var.environment}-rds-seeder",
-    "/aws/lambda/${var.environment}-crm-tool",
-    "/aws/lambda/${var.environment}-rds-init",
-    "/aws/lambda/${var.environment}-rds-tool",
-    "/aws/lambda/${var.environment}-orchestrator"
+    aws_cloudwatch_log_group.rds_seeder.name,
+    aws_cloudwatch_log_group.crm_tool.name,
+    aws_cloudwatch_log_group.rds_init.name,
+    aws_cloudwatch_log_group.rds_tool.name,
+    aws_cloudwatch_log_group.orchestrator.name
   ]
+
   kb_sync_functions = [
     "${var.environment}-kb-sync-fetch-articles",
     "${var.environment}-kb-sync-upsert",

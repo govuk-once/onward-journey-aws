@@ -107,14 +107,33 @@ Alerting should now be set up, and you should receive a message in the configure
 
 Error alerting is set up to monitor log groups for all existing lambda functions and step functions. If any new functions or resources are created, or if any existing functions are renamed, they won't trigger alerts automatically.
 
-To monitor a new or renamed resource and turn on error alerts:
-- Sign into the AWS browser console and navigate to the Cloudwatch dashboard, then click **Log Management** under **Logs**.
-- find the log group for the resource you want to monitor
-- copy the log group name, e.g. `/aws/lambda/myworkspace-orchestrator`
-- in the terminal on your local machine, navigate to `infrastructure/services`
-- open `alerting.tf` in a text editor
-- add the log group name to the `main_log_groups` list inside the `locals` block, wrapped in quotes ("")
-- replace your Terraform workspace name with `${var.environment}`. E.g. `/aws/lambda/myworkspace-orchestrator` becomes `/aws/lambda/${var.environment}-orchestrator`
-- run `terraform apply` and type `yes` to accept the changes
+If you create a new resource using terraform in the infrastructure/services directory, ensure that it triggers alerts by following these steps:
+1. Declare a Cloudwatch log group alongside your new resource. Use the code below, Replacing `<name-ref>` and `<name-tag>` with a name that will help you identify your function or resource.
 
-Alerting should now be set up for the new log group that you have added.
+```hcl
+resource "aws_cloudwatch_log_group" "<name-ref>" {
+  name              = "/aws/lambda/${var.environment}-<name-tag>"
+  retention_in_days = 14
+}
+```
+
+2. In `infrastructure/services/alerting.tf`, add a reference to your new function or resource inside locals.main_log_groups, as below. The `<name-ref>` should match the resource identifier you gave to your new aws_cloudwatch_log_group block in step 1:
+
+```hcl
+locals {
+  sns_topic_arn = var.sns_topic_arn
+  main_log_groups = [
+    aws_cloudwatch_log_group.rds_seeder.name,
+    aws_cloudwatch_log_group.crm_tool.name,
+    aws_cloudwatch_log_group.rds_init.name,
+    aws_cloudwatch_log_group.rds_tool.name,
+    aws_cloudwatch_log_group.orchestrator.name,
+
+    ... add a reference to your new resource here, e.g.:
+
+    aws_cloudwatch_log_group.<name-ref>.name
+
+  ]
+```
+
+Run `terraform apply` and type `yes` to accept the changes. Alerting should now be set up for the new log group that you have added.

@@ -92,7 +92,7 @@ sns_topic_arn  = "arn:aws:sns:eu-west-2:<your AWS account>:oj-aws-errors"
 
 **Note:** For the above step, ensure you are editing the version of `local.auto.tfvars` in the correct directory (`infrastructure/services`, not `infrastructure/slack-alerts`)
 
-Before applying, check that you are in your user workspace by running `terraform worksapce list`. If you don't see an asterisk(*) next to your workspace name, switch into your workspace with:
+Before applying, check that you are in your user workspace by running `terraform workspace list`. If you don't see an asterisk(*) next to your workspace name, switch into your workspace with:
 ```bash
 terraform workspace select <workspace_name>
 ```

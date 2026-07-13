@@ -1,13 +1,13 @@
 # Onward Journey - Error Alerting
 
-Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user workspace where it is already set up in other workspaces.
+Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user with their own Terraform workspace.
 
 
 ## Section 1: New account or configuration
-This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different slack channel or workspace). If you just need to add a user workspace, skip to section 2 (Adding a new user workspace).
+This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different Slack channel/workspace). If you just need to add a terraform workspace for a new developer, skip to section 2.
 
 ### Create or edit a chat client
-Amazon Q chat clients can only be created in the browser, to enable authentication with a Slack workspace. This only needs to be done once per AWS account/slack workspace.
+Amazon Q chat clients can only be created in the browser, to enable authentication with a Slack workspace. This only needs to be done once per AWS account/Slack workspace.
 
 First, configure the Slack workspace and channel:
 1. Open Slack and sign into the workspace where you want to receive alerts
@@ -40,7 +40,7 @@ use_lockfile = true
 encrypt = true
 key = "shared-infrastructure/slack-alerts.tfstate"
 ```
-Ensure that you are using the default terraform workspace with
+Ensure that you are using the default Terraform workspace with
  ```bash
  terraform workspace list
  ```
@@ -53,11 +53,11 @@ terraform init -reconfigure -backend-config="slack-alerts.config"
 
 
 Set up Terraform variables:
-1. Get the channel ID and workspace ID for the channel/workspace you configured earlier (see https://slack.com/intl/en-gb/help/articles/221769328-Locate-your-Slack-URL-or-ID for instructions on how to get these IDs)
+1. Get the channel ID and workspace ID for the Slack channel/workspace you configured earlier (see https://slack.com/intl/en-gb/help/articles/221769328-Locate-your-Slack-URL-or-ID for instructions on how to get these IDs)
 2. Update `infrastructure/slack-alerts/local.auto.tfvars` with the following (if it doesn't exist, create it):
 ```hcl
-slack_channel_id = "<your slack channel ID>"
-slack_workspace_id = "<your slack workspace ID>"
+slack_channel_id = "<your Slack channel ID>"
+slack_workspace_id = "<your Slack workspace ID>"
 ```
 
 After that, run:
@@ -65,12 +65,12 @@ After that, run:
 ```bash
 terraform apply
 ```
-Type `yes` when prompted to save the configuration. Go to Section 2 to set up alerting for your workspace.
+Type `yes` when prompted to save the configuration. Go to Section 2 to set up alerting for your Terraform workspace.
 
 
-## Section 2: Adding a new user workspace
+## Section 2: Adding a new Terraform developer workspace
 
-Follow these instructions if you already have a slack workspace and channel configured for receiving error alerts, and you need to set up a new user workspace.
+Follow these instructions if you already have a Slack workspace and channel configured for receiving error alerts, and you need to set up a new developer workspace.
 
 Navigate to `infrastructure/services`. If you haven't already, authenticate using the GDS AWS shell, and get the SNS topic ARN for your error alerts:
 
@@ -92,7 +92,7 @@ sns_topic_arn = "arn:aws:sns:eu-west-2:<your AWS account>:oj-aws-errors"
 
 **Note:** For the above step, ensure you are editing the version of `local.auto.tfvars` in the correct directory (`infrastructure/services`, not `infrastructure/slack-alerts`)
 
-Before applying, check that you are in your user workspace by running `terraform workspace list`. If you don't see an asterisk(*) next to your workspace name, switch into your workspace with:
+Before applying, check that you are in your Terraform developer workspace by running `terraform workspace list`. If you don't see an asterisk(*) next to your workspace name, switch into your workspace with:
 ```bash
 terraform workspace select <workspace_name>
 ```
@@ -100,7 +100,7 @@ Finally, run:
 ```bash
 terraform apply
 ```
-Alerting should now be set up, and you should receive a message in the configured Slack channel if any errors or failures occur in any of the lambda functions in your workspace.
+Alerting should now be set up, and you should receive a message in the configured Slack channel if any errors or failures occur in any of the lambda functions in your Terraform workspace.
 
 ## Section 3: Adding new functions and resources
 
@@ -113,7 +113,7 @@ To monitor a new or renamed resource and turn on error alerts:
 - in the terminal on your local machine, navigate to `infrastructure/services`
 - open `alerting.tf` in a text editor
 - add the log group name to the `main_log_groups` list inside the `locals` block, wrapped in quotes ("")
-- replace your workspace name with `${var.environment}`. E.g. `/aws/lambda/myworkspace-orchestrator` becomes `/aws/lambda/${var.environment}-orchestrator`
+- replace your Terraform workspace name with `${var.environment}`. E.g. `/aws/lambda/myworkspace-orchestrator` becomes `/aws/lambda/${var.environment}-orchestrator`
 - run `terraform apply` and type `yes` to accept the changes
 
 Alerting should now be set up for the new log group that you have added.

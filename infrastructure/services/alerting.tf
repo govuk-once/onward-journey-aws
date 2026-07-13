@@ -15,11 +15,11 @@ locals {
   ]
 
   kb_sync_functions = [
-    "${var.environment}-kb-sync-fetch-articles",
-    "${var.environment}-kb-sync-upsert",
-    "${var.environment}-kb-sync-check-sync-meta",
-    "${var.environment}-kb-sync-update-sync-meta",
-    "${var.environment}-kb-sync-check-kb-meta",
+    aws_cloudwatch_log_group.kb_sync_fetch_articles.name,
+    aws_cloudwatch_log_group.kb_sync_upsert.name,
+    aws_cloudwatch_log_group.kb_sync_check_sync_meta.name,
+    aws_cloudwatch_log_group.kb_sync_update_sync_meta.name,
+    aws_cloudwatch_log_group.kb_sync_check_kb_meta.name
   ]
   sync_machine = "${var.environment}-kb-sync-machine"
 
@@ -63,11 +63,11 @@ resource "aws_cloudwatch_metric_alarm" "logged_errors" {
 
 resource "aws_cloudwatch_log_metric_filter" "kb_sync_lambda_errors" {
   for_each = toset(local.kb_sync_functions)
-  name     = "${each.key}-error-filter"
+  name     = "${regex("[^/]+$", each.key)}-error-filter"
   pattern  = "?ERROR ?Error ?error ?Exception ?exception ?Fail ?fail"
 
   # Link the filter to the auto-created log groups for each function
-  log_group_name = "/aws/lambda/${each.key}"
+  log_group_name = each.key
 
   # use the filter to increment a metric
   metric_transformation {

@@ -1,10 +1,11 @@
 # Onward Journey - Error Alerting
 
-Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new user with their own Terraform workspace.
+Onward Journey sends automated alerts to a configured Slack channel, whenever an AWS lambda function fails or logs an error. Messages are routed to Slack via Cloudwatch alarms, Simple Notification Service (SNS) and Amazon Q Developer in chat applications (formerly known as AWS Chatbot). This guide will help you set up  alerting in Slack for Onward Journey. The steps differ depending on whether you need to set up or reconfigure alerts for all users, or just add a new developer with their own Terraform workspace.
 
 
 ## Section 1: New account or configuration
-This section explains how to set up alerting on a new AWS account or one where alerting hasn't been set up yet, or when you need to reconfigure the client and channel (e.g. to move alerts to a different Slack channel/workspace). If you just need to add a terraform workspace for a new developer, skip to section 2.
+
+This is a **one-time step**  to be completed only the first time you deploy Onward Journey to a new AWS account, or with a new Slack workspace or channel. To add a developer to an **existing account**, skip to section 2.
 
 ### Create or edit a chat client
 Amazon Q chat clients can only be created in the browser, to enable authentication with a Slack workspace. This only needs to be done once per AWS account/Slack workspace.

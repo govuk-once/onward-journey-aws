@@ -162,7 +162,7 @@ resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
 # Group for the RDS Seeder Lambda (MCP Server).
 resource "aws_security_group" "rds_seeder_sg" {
   name        = "${var.environment}-rds-seeder-sg"
-  description = "Allows RDS Seeder to reach RDS and AWS Services"
+  description = "Allows Data Services to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
 
   egress {

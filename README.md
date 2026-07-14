@@ -59,10 +59,13 @@ workspace_key_prefix = "environment"
 ```
 
 ### Create your Local Variables
-You must set your environment name and account ID in `infrastructure/services/local.auto.tfvars`:
+You must set your environment name, account ID, and a placeholder for the SNS topic used for error alerting.
+
+update `infrastructure/services/local.auto.tfvars` with the following:
 ```hcl
 environment    = "<your initials>"
 aws_account_id = "<AWS account ID>"
+sns_topic_arn  = null
 ```
 
 
@@ -132,7 +135,9 @@ terraform apply
 **6. Integration Testing**
 Once the stack is green, follow the [Backend Integration Testing Guide](tests/README.md) to verify the deployment via the CLI.
 
+### Phase 3: Error Alerting
 
+To set up error alerting in Slack (or another chat application), navigate to `infrastructure/slack-alerts` and follow the README instructions inside that directory.
 
 ## Troubleshooting
 

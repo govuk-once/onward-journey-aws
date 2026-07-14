@@ -3,6 +3,7 @@
 
 # Ignore environment-specific tf backend config files
 */environments/*.config
+slack-alerts/*.config
 
 # Ignore local tfvars files
 */local.auto.tfvars

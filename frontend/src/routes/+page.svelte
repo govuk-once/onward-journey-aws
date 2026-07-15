@@ -8,7 +8,7 @@
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
   import { onMount } from "svelte";
-  import { env } from "$env/dynamic/public";
+  import { PUBLIC_ORCHESTRATOR_URL } from "$env/static/public";
 
   let connectionType: 'AI' | 'HUMAN' = $state('AI');
   let isConnecting: boolean = $state(false);
@@ -21,7 +21,7 @@
 
   const CONNECTING_MESSAGE_ID = "connecting-to-human-advisor";
 
-  const orchestratorUrl = env.PUBLIC_ORCHESTRATOR_URL;
+  const orchestratorUrl = PUBLIC_ORCHESTRATOR_URL;
   if (!orchestratorUrl) {
     console.warn("PUBLIC_ORCHESTRATOR_URL not set. AI Chat will not be available.");
   } else {

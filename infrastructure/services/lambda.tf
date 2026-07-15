@@ -192,7 +192,10 @@ resource "aws_lambda_function_url" "orchestrator_url" {
   cors {
     allow_credentials = true
     # TODO: Restrict to your specific frontend domain in production
-    allow_origins = ["http://localhost:5173"] # Local Svelte Dev Server
+    allow_origins = [
+      "http://localhost:5173",
+      "https://main.${aws_amplify_app.frontend.id}.amplifyapp.com",
+    ]
     allow_methods = ["POST"]
     allow_headers = ["content-type"]
     max_age       = 86400 # Cache permission for 24 hours (86400 seconds) to prevent lag

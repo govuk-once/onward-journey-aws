@@ -243,3 +243,6 @@ tests/test_event.json
 
 #DeepEval
 .deepeval
+
+#SvelteKit exceptions
+!frontend/src/lib/

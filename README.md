@@ -54,9 +54,8 @@ region               = "eu-west-2"
 bucket               = "govuk-once-onwardjourney-development-<AWS account ID>-tfstate"
 use_lockfile         = true
 encrypt              = true
-key                  = "onward-journey.tfstate"
-workspace_key_prefix = "environment"
 ```
+*Note: You do not need to set `key` or `workspace_key_prefix` here. We use a layered architecture where specific component files (`vpc.config`, `services.config`, `slack.config`) automatically handle the state file paths for you to prevent accidental overwrites.*
 
 ### Create your Local Variables
 You must set your environment name, account ID, and a placeholder for the SNS topic used for error alerting.
@@ -81,8 +80,8 @@ We use the GDS CLI to assume roles on our development machines. To see a list of
 ```bash
 cd infrastructure/vpc
 
-# 1. Initialise - pointing to your config
-terraform init -reconfigure -backend-config="../environments/<environment_name>.config"
+# 1. Initialise - combining your environment config with the specific VPC config
+terraform init -backend-config="../environments/<environment_name>.config" -backend-config="vpc.config" -reconfigure
 
 # 2. Workspace Check - Ensure you are in 'default'. An asterisk will be displayed next to the selected workspace.
 terraform workspace list
@@ -101,8 +100,8 @@ Most daily development happens here. This layer uses **individual developer work
 ```bash
 cd infrastructure/services
 
-# Initialise pointing to your config
-terraform init -reconfigure -backend-config="../environments/<environment_name>.config"
+# Initialise - combining your environment config with the specific services config
+terraform init -backend-config="../environments/<environment_name>.config" -backend-config="services.config" -reconfigure
 
 # Select or Create your unique workspace. For development, replace <workspace_name> with your initials
 terraform workspace select <workspace_name> || terraform workspace new <workspace_name>

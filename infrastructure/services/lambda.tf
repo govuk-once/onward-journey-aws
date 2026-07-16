@@ -186,7 +186,7 @@ resource "aws_lambda_function" "crm_tool" {
 # Enables the RESPONSE_STREAM mode for real-time interaction with the Svelte frontend.
 resource "aws_lambda_function_url" "orchestrator_url" {
   function_name      = aws_lambda_function.orchestrator.function_name
-  authorization_type = "NONE" # TODO: Using AWS_IAM for production environments is recommended
+  authorization_type = "AWS_IAM"
   invoke_mode        = "RESPONSE_STREAM"
 
   cors {
@@ -197,27 +197,23 @@ resource "aws_lambda_function_url" "orchestrator_url" {
       "https://main.${aws_amplify_app.frontend.id}.amplifyapp.com",
     ]
     allow_methods = ["POST"]
-    allow_headers = ["content-type"]
+    # SigV4 signing headers required in addition to content-type
+    allow_headers = ["content-type", "x-amz-date", "x-amz-security-token", "authorization", "x-amz-content-sha256"]
     max_age       = 86400 # Cache permission for 24 hours (86400 seconds) to prevent lag
   }
 }
 
 # PERMISSIONS
-# STATEMENT 1: The "Front Door"
-resource "aws_lambda_permission" "allow_public_url_access" {
-  statement_id           = "FunctionURLAllowPublicAccess"
+# The Lambda URL uses AWS_IAM auth. Access is controlled via the IAM policy
+# attached to the Cognito unauthenticated role (see cognito.tf).
+# We still need a resource-based policy statement so that IAM-authenticated
+# callers are allowed to reach the URL endpoint.
+resource "aws_lambda_permission" "allow_iam_url_access" {
+  statement_id           = "FunctionURLAllowIAMAccess"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.orchestrator.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
-}
-# STATEMENT 2: The "Streaming Handshake"
-resource "aws_lambda_permission" "allow_url_invoke_fallback" {
-  statement_id             = "FunctionURLInvokeFallback"
-  action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.orchestrator.function_name
-  principal                = "*"
-  invoked_via_function_url = true
+  principal              = aws_iam_role.cognito_anon_role.arn
+  function_url_auth_type = "AWS_IAM"
 }
 
 output "orchestrator_url" {

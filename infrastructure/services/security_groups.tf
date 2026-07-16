@@ -5,6 +5,7 @@
  * least privilege, restricting traffic to specific security group IDs.
  */
 
+# ============= SECURITY GROUPS ===================================================
 # ORCHESTRATOR SECURITY GROUP
 # Controls traffic for the Lambda-based logic layer.
 resource "aws_security_group" "orchestrator" {
@@ -86,16 +87,7 @@ resource "aws_security_group" "bedrock" {
   }
 }
 
-# Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
-resource "aws_security_group_rule" "allow_orchestrator_to_endpoints" {
-  description              = "HTTPS from Orchestrator"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.vpc_endpoints.id
-  source_security_group_id = aws_security_group.orchestrator.id
-}
+
 
 # RDS METADATA STORE SECURITY GROUP
 # Firewall for the RDS instance hosting department contact metadata.
@@ -117,46 +109,7 @@ resource "aws_security_group" "rds_metadata" {
   }
 }
 
-# Allow Tooling & Seeder to reach RDS
-resource "aws_security_group_rule" "allow_rds_seeder_to_rds" {
-  description              = "PostgreSQL from RDS Seeder"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_seeder_sg.id
-}
 
-resource "aws_security_group_rule" "allow_rds_tool_to_rds" {
-  description              = "PostgreSQL from RDS Tool"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_tool_sg.id
-}
-
-resource "aws_security_group_rule" "allow_rds_init_to_rds" {
-  description              = "PostgreSQL from RDS Init"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_init_sg.id
-}
-
-resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
-  description              = "PostgreSQL from KB Sync Pipeline"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.kb_sync_sg.id
-}
 
 # RDS SEEDER SECURITY GROUP
 # Group for the RDS Seeder Lambda (MCP Server).
@@ -204,15 +157,6 @@ resource "aws_security_group" "rds_init_sg" {
   name        = "${var.environment}-rds-init-sg"
   description = "Allows RDS Init to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name = "${var.environment}-rds-init-sg"
   }
@@ -236,6 +180,60 @@ resource "aws_security_group" "kb_sync_sg" {
   tags = {
     Name = "${var.environment}-kb-sync-sg"
   }
+}
+
+# ============ INGRESS RULES ======================================================
+
+# Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
+resource "aws_security_group_rule" "allow_orchestrator_to_endpoints" {
+  description              = "HTTPS from Orchestrator"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.vpc_endpoints.id
+  source_security_group_id = aws_security_group.orchestrator.id
+}
+
+# Allow Tooling & Seeder to reach RDS
+resource "aws_security_group_rule" "allow_rds_seeder_to_rds" {
+  description              = "PostgreSQL from RDS Seeder"
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_metadata.id
+  source_security_group_id = aws_security_group.rds_seeder_sg.id
+}
+
+resource "aws_security_group_rule" "allow_rds_tool_to_rds" {
+  description              = "PostgreSQL from RDS Tool"
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_metadata.id
+  source_security_group_id = aws_security_group.rds_tool_sg.id
+}
+
+resource "aws_security_group_rule" "allow_rds_init_to_rds" {
+  description              = "PostgreSQL from RDS Init"
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_metadata.id
+  source_security_group_id = aws_security_group.rds_init_sg.id
+}
+
+resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
+  description              = "PostgreSQL from KB Sync Pipeline"
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_metadata.id
+  source_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
 # Ingress rules allowing authorized data services to reach AWS service endpoints.
@@ -278,4 +276,26 @@ resource "aws_security_group_rule" "allow_kb_sync_to_endpoints" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.vpc_endpoints.id
   source_security_group_id = aws_security_group.kb_sync_sg.id
+}
+
+
+
+# ======================= EGRESS RULES ==================================================
+
+resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_rds" {
+  description                  = "Allow outbound traffic from RDS Init to RDS"
+  security_group_id            = aws_security_group.rds_init_sg.id
+  referenced_security_group_id = aws_security_group.rds_metadata.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_secrets_manager" {
+  description                  = "Allow outbound traffic from RDS Init to Secrets Manager"
+  security_group_id            = aws_security_group.rds_init_sg.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 445
+  to_port                      = 445
 }

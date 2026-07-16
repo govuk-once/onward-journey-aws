@@ -39,6 +39,11 @@ To create a production version of your app:
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+The frontend uses `@sveltejs/adapter-static` and is configured as a Single Page Application.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+You can preview the production build locally with `npm run preview`.
+**Note on CORS:** When previewing locally, you must run it on port 5173 so the Orchestrator Lambda allows the cross-origin request:
+
+```sh
+npm run preview -- --port 5173
+```

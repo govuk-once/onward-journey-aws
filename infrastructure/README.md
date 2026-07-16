@@ -17,6 +17,9 @@ To simplify connectivity and manage quotas, the networking layer is **shared and
 
 - **Shared Resources:** `main-vpc`, `app-pvt-2a/b` (Private), and `dmz-pub-2a` (Public).
 - **VPC Endpoints:** We provision interface and gateway endpoints for **Bedrock**, **Secrets Manager**, and **S3**. This allows the isolated stack to communicate with AWS services securely without leaving the private network.
+- **⚠️ Deployment Instructions:**
+Because the network belongs to everyone, you must use the dedicated VPC configuration to prevent your local workspace from overwriting the shared state. When initialising the VPC layer, you must combine your environment config with the vpc config:
+`terraform init -backend-config=../environments/<your-env>.config -backend-config=vpc.config`
 - **Protection:** These resources use the `prevent_destroy = true` lifecycle guardrail to prevent accidental network disruption.
 - **⚠️ Tear Down Warning:** If you must destroy the VPC, you must first manually comment out the `prevent_destroy` lines in `infrastructure/vpc/vpc.tf`. **Do not do this unless you are certain no other developer is using the network.**
 

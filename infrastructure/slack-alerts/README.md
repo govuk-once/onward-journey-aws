@@ -32,24 +32,16 @@ cd infrastructure/slack-alerts
 gds aws once-onwardjourney-development-admin --shell
 ```
 
-If `slack-alerts.config` doesn't exist in the slack-alerts directory, create it, and paste in the text below. Replace `<your-AWS-account-ID>` with your AWS account ID.
-
-```hcl
-region = "eu-west-2"
-bucket = "govuk-once-onwardjourney-development-<your-AWS-account-ID>-tfstate"
-use_lockfile = true
-encrypt = true
-key = "shared-infrastructure/slack-alerts.tfstate"
-```
 Ensure that you are using the default Terraform workspace with
  ```bash
  terraform workspace list
  ```
  You should see `*default` - note the asterisk(*)
 
-Then, run:
+ Because the alerting infrastructure is shared across the account, you must combine your environment configuration with the dedicated slack.config file. This ensures the state is stored securely in the shared infrastructure path without duplicating backend variables:
+
 ```bash
-terraform init -reconfigure -backend-config="slack-alerts.config"
+terraform init -backend-config=../environments/<your-env>.config -backend-config=slack.config -reconfigure"
 ```
 
 

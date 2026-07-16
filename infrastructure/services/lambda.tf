@@ -214,6 +214,9 @@ resource "aws_lambda_permission" "allow_iam_url_access" {
   function_name          = aws_lambda_function.orchestrator.function_name
   principal              = aws_iam_role.cognito_anon_role.arn
   function_url_auth_type = "AWS_IAM"
+
+  # Wait for IAM to sync before applying the permission
+  depends_on = [time_sleep.wait_for_iam_propagation]
 }
 
 output "orchestrator_url" {

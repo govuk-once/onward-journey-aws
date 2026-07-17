@@ -38,6 +38,10 @@ jobs:
       - name: Run SvelteKit Check
         working-directory: frontend
         run: npm run check
+        env:
+          PUBLIC_ORCHESTRATOR_URL: "https://dummy-url.com"
+          PUBLIC_COGNITO_IDENTITY_POOL_ID: "dummy-pool-id"
+          PUBLIC_AWS_REGION: "eu-west-2"
 
   unit-test:
     runs-on: ubuntu-latest

@@ -203,22 +203,6 @@ resource "aws_lambda_function_url" "orchestrator_url" {
   }
 }
 
-# PERMISSIONS
-# The Lambda URL uses AWS_IAM auth. Access is controlled via the IAM policy
-# attached to the Cognito unauthenticated role (see cognito.tf).
-# We still need a resource-based policy statement so that IAM-authenticated
-# callers are allowed to reach the URL endpoint.
-resource "aws_lambda_permission" "allow_iam_url_access" {
-  statement_id           = "FunctionURLAllowIAMAccess"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.orchestrator.function_name
-  principal              = aws_iam_role.cognito_anon_role.arn
-  function_url_auth_type = "AWS_IAM"
-
-  # Wait for IAM to sync before applying the permission
-  depends_on = [time_sleep.wait_for_iam_propagation]
-}
-
 output "orchestrator_url" {
   description = "The streaming HTTP endpoint for the Orchestrator"
   value       = aws_lambda_function_url.orchestrator_url.function_url

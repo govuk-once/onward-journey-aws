@@ -622,6 +622,5 @@ resource "time_sleep" "wait_for_iam_propagation" {
 
   depends_on = [
     aws_iam_role_policy.agentcore_gateway_invocation,
-    aws_iam_role.cognito_anon_role # <-- Add this line
   ]
 }

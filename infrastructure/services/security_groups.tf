@@ -117,15 +117,6 @@ resource "aws_security_group" "rds_seeder_sg" {
   name        = "${var.environment}-rds-seeder-sg"
   description = "Allows Data Services to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name = "${var.environment}-rds-seeder-sg"
   }
@@ -137,15 +128,6 @@ resource "aws_security_group" "rds_tool_sg" {
   name        = "${var.environment}-rds-tool-sg"
   description = "Allows RDS Tool to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name = "${var.environment}-rds-tool-sg"
   }
@@ -280,7 +262,7 @@ resource "aws_security_group_rule" "allow_kb_sync_to_endpoints" {
 
 
 
-# ======================= EGRESS RULES ==================================================
+# ======================= EGRESS RULES (INTERNAL) ===========================================
 
 resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_rds" {
   description                  = "Allow outbound traffic from RDS Init to RDS"
@@ -291,6 +273,26 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_rds" {
   to_port                      = 5432
 }
 
+resource "aws_vpc_security_group_egress_rule" "allow_rds_seeder_to_rds" {
+  description                  = "Allow outbound traffic from RDS Seeder to RDS"
+  security_group_id            = aws_security_group.rds_seeder_sg.id
+  referenced_security_group_id = aws_security_group.rds_metadata.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_rds" {
+  description                  = "Allow outbound traffic from RDS Tool to RDS"
+  security_group_id            = aws_security_group.rds_tool_sg.id
+  referenced_security_group_id = aws_security_group.rds_metadata.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+
+
 resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_secrets_manager" {
   description                  = "Allow outbound traffic from RDS Init to Secrets Manager"
   security_group_id            = aws_security_group.rds_init_sg.id
@@ -298,4 +300,43 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_secrets_manager
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_rds_seeder_to_vpc_endpoints" {
+  description                  = "Allow outbound traffic from RDS Seeder to VPC endpoints"
+  security_group_id            = aws_security_group.rds_seeder_sg.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
+  description                  = "Allow outbound traffic from RDS Tool to Bedrock"
+  security_group_id            = aws_security_group.rds_tool_sg.id
+  referenced_security_group_id = aws_security_group.bedrock.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+
+# ========================= EGRESS RULES (EXTERNAL) ==================================
+
+resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
+  security_group_id = aws_security_group.rds_seeder_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "Allow outbound HTTPS traffic to the internet from RDS Seeder"
+}
+
+resource "aws_vpc_security_group_egress_rule" "rds_tool_external_https" {
+  security_group_id = aws_security_group.rds_tool_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "Allow outbound HTTPS traffic to the internet from RDS Tool"
 }

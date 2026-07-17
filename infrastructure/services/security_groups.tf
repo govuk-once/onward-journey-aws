@@ -296,6 +296,6 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_secrets_manager
   security_group_id            = aws_security_group.rds_init_sg.id
   referenced_security_group_id = aws_security_group.secrets_manager.id
   ip_protocol                  = "tcp"
-  from_port                    = 445
-  to_port                      = 445
+  from_port                    = 443
+  to_port                      = 443
 }

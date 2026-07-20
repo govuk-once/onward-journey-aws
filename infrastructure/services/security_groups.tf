@@ -320,25 +320,17 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
 
 
 # ========================= EGRESS RULES (EXTERNAL) ==================================
-# NOTE:
-# RDS functions were working with these rules, but they should to be replaced with internal rules.
-# Currently, RDS Seeder can't talk to S3 to get the csv data.
-# no security group for S3, need to create?
 
-# resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
-#   security_group_id = aws_security_group.rds_seeder_sg.id
-#   cidr_ipv4         = "0.0.0.0/0"
-#   ip_protocol       = "tcp"
-#   from_port         = 443
-#   to_port           = 443
-#   description       = "Allow outbound HTTPS traffic to the internet from RDS Seeder"
-# }
+# fetch the official AWS-managed S3 Prefix List
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
 
-# resource "aws_vpc_security_group_egress_rule" "rds_tool_external_https" {
-#   security_group_id = aws_security_group.rds_tool_sg.id
-#   cidr_ipv4         = "0.0.0.0/0"
-#   ip_protocol       = "tcp"
-#   from_port         = 443
-#   to_port           = 443
-#   description       = "Allow outbound HTTPS traffic to the internet from RDS Tool"
-# }
+# allow external egress from RDS seeder to S3 only, by referencing the AWS-managed S3 Prefix List
+resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
+  security_group_id = aws_security_group.rds_seeder_sg.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.s3.id
+}

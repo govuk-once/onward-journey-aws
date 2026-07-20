@@ -165,7 +165,7 @@ resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
   source_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
-# ----- Ingress rules allowing authorized data services to reach AWS service endpoints. -----
+# ----- Ingress rules allowing authorised data services to reach AWS service endpoints. -----
 
 resource "aws_security_group_rule" "allow_rds_seeder_to_endpoints" {
   description              = "Allow RDS seeder to reach Bedrock/SecretsManager endpoints"
@@ -263,7 +263,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
   to_port                      = 443
 }
 
-# allow orchestrator to VPC endpints
+# Allow orchestrator to VPC endpoints
 resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_vpc_endpoints" {
   description                  = "Allow outbound traffic from Orchestrator to VPC endpoints"
   security_group_id            = aws_security_group.orchestrator.id
@@ -273,7 +273,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_vpc_endpoin
   to_port                      = 443
 }
 
-# allow KB Sync Lambdas to RDS
+# Allow KB Sync Lambdas to RDS
 resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_RDS" {
   description                  = "Allow outbound traffic from KB Sync Lambdas to RDS"
   security_group_id            = aws_security_group.kb_sync_sg.id
@@ -283,7 +283,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_RDS" {
   to_port                      = 5432
 }
 
-# allow KB Sync Lambdas to Bedrock
+# Allow KB Sync Lambdas to Bedrock
 resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock" {
   description                  = "Allow outbound traffic from KB Sync Lambdas to Bedrock"
   security_group_id            = aws_security_group.kb_sync_sg.id
@@ -295,12 +295,12 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
 
 # ========================= EGRESS RULES (EXTERNAL) ==================================
 
-# fetch the official AWS-managed S3 Prefix List
+# Fetch the official AWS-managed S3 prefix list
 data "aws_prefix_list" "s3" {
   name = "com.amazonaws.${var.aws_region}.s3"
 }
 
-# allow external egress from RDS seeder to S3 only, by referencing the AWS-managed S3 Prefix List
+# Allow external egress from RDS seeder to S3 only, by referencing the AWS-managed S3 prefix list
 resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
   security_group_id = aws_security_group.rds_seeder_sg.id
   ip_protocol       = "tcp"

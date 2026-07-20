@@ -314,8 +314,8 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
   security_group_id            = aws_security_group.rds_tool_sg.id
   referenced_security_group_id = aws_security_group.bedrock.id
   ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
+  from_port                    = 443
+  to_port                      = 443
 }
 
 

@@ -13,15 +13,6 @@ resource "aws_security_group" "orchestrator" {
   description = "Security group for the Orchestration Layer for environment: ${var.environment}"
   vpc_id      = local.vpc_id
 
-  # Allow all outbound traffic for calling Bedrock APIs and querying tool endpoints.
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name = "${var.environment}-orchestrator-sg"
   }
@@ -33,14 +24,6 @@ resource "aws_security_group" "vpc_endpoints" {
   name        = "${var.environment}-vpc-endpoints-sg"
   description = "Private interface for the Orchestrator to reach Bedrock and Secrets Manager"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name = "${var.environment}-vpc-endpoints-sg"
@@ -54,14 +37,6 @@ resource "aws_security_group" "secrets_manager" {
   description = "Private interface for RDS Init to reach Secrets Manager"
   vpc_id      = local.vpc_id
 
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name = "${var.environment}-secrets-manager-sg"
   }
@@ -73,14 +48,6 @@ resource "aws_security_group" "bedrock" {
   name        = "${var.environment}-bedrock-sg"
   description = "Private interface for the RDS Tool to reach Bedrock"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name = "${var.environment}-bedrock-sg"
@@ -95,14 +62,6 @@ resource "aws_security_group" "rds_metadata" {
   name        = "${var.environment}-rds-metadata-sg-v2"
   description = "Allows authorized data services to query the Department Contacts database"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name = "${var.environment}-rds-metadata-sg-v2"
@@ -150,14 +109,6 @@ resource "aws_security_group" "kb_sync_sg" {
   name        = "${var.environment}-kb-sync-sg"
   description = "Security group for KB Sync Lambdas to access RDS and Bedrock"
   vpc_id      = local.vpc_id
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name = "${var.environment}-kb-sync-sg"
@@ -312,6 +263,36 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_seeder_to_vpc_endpoints
 resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
   description                  = "Allow outbound traffic from RDS Tool to Bedrock"
   security_group_id            = aws_security_group.rds_tool_sg.id
+  referenced_security_group_id = aws_security_group.bedrock.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+# allow orchestrator to VPC endpints
+resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_vpc_endpoints" {
+  description                  = "Allow outbound traffic from Orchestrator to VPC endpoints"
+  security_group_id            = aws_security_group.orchestrator.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+# allow KB Sync Lambdas to RDS
+resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_RDS" {
+  description                  = "Allow outbound traffic from KB Sync Lambdas to RDS"
+  security_group_id            = aws_security_group.kb_sync_sg.id
+  referenced_security_group_id = aws_security_group.rds_metadata.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+# allow KB Sync Lambdas to Bedrock
+resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock" {
+  description                  = "Allow outbound traffic from KB Sync Lambdas to Bedrock"
+  security_group_id            = aws_security_group.kb_sync_sg.id
   referenced_security_group_id = aws_security_group.bedrock.id
   ip_protocol                  = "tcp"
   from_port                    = 443

@@ -54,8 +54,6 @@ resource "aws_security_group" "bedrock" {
   }
 }
 
-
-
 # RDS METADATA STORE SECURITY GROUP
 # Firewall for the RDS instance hosting department contact metadata.
 resource "aws_security_group" "rds_metadata" {
@@ -67,8 +65,6 @@ resource "aws_security_group" "rds_metadata" {
     Name = "${var.environment}-rds-metadata-sg-v2"
   }
 }
-
-
 
 # RDS SEEDER SECURITY GROUP
 # Group for the RDS Seeder Lambda (MCP Server).
@@ -169,7 +165,7 @@ resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
   source_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
-# Ingress rules allowing authorized data services to reach AWS service endpoints.
+# ----- Ingress rules allowing authorized data services to reach AWS service endpoints. -----
 
 resource "aws_security_group_rule" "allow_rds_seeder_to_endpoints" {
   description              = "Allow RDS seeder to reach Bedrock/SecretsManager endpoints"
@@ -210,8 +206,6 @@ resource "aws_security_group_rule" "allow_kb_sync_to_endpoints" {
   security_group_id        = aws_security_group.vpc_endpoints.id
   source_security_group_id = aws_security_group.kb_sync_sg.id
 }
-
-
 
 # ======================= EGRESS RULES (INTERNAL) ===========================================
 
@@ -298,7 +292,6 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
   from_port                    = 443
   to_port                      = 443
 }
-
 
 # ========================= EGRESS RULES (EXTERNAL) ==================================
 

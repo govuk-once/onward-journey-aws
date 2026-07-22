@@ -1,3 +1,6 @@
+import { AwsClient } from "aws4fetch";
+import { getAwsCredentials } from "./awsCredentials";
+
 export interface OrchestratorMessage {
     text: string;
     isSignal: boolean;
@@ -13,16 +16,31 @@ export interface OrchestratorCallbacks {
 
 export class OrchestratorClient {
     private url: string;
+    private identityPoolId: string;
+    private region: string;
 
-    constructor(url: string) {
+    constructor(url: string, identityPoolId: string, region: string) {
         this.url = url;
+        this.identityPoolId = identityPoolId;
+        this.region = region;
     }
 
     async sendMessage(message: string, threadId: string, callbacks: OrchestratorCallbacks) {
         try {
-            const response = await fetch(this.url, {
+            // Fetch (possibly cached) temporary credentials from Cognito
+            const creds = await getAwsCredentials(this.identityPoolId, this.region);
+
+            // Build a SigV4-signing fetch client for this request
+            const aws = new AwsClient({
+                accessKeyId: creds.accessKeyId,
+                secretAccessKey: creds.secretAccessKey,
+                sessionToken: creds.sessionToken,
+                region: this.region,
+                service: "lambda",
+            });
+
+            const response = await aws.fetch(this.url, {
                 method: 'POST',
-                credentials: "include",
                 headers: {
                     'Content-Type': 'application/json',
                 },

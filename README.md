@@ -65,6 +65,8 @@ update `infrastructure/services/local.auto.tfvars` with the following:
 environment    = "<your initials>"
 aws_account_id = "<AWS account ID>"
 sns_topic_arn  = null
+frontend_basic_auth_username = "<your secure username>"
+frontend_basic_auth_password = "<your secure password>"
 ```
 
 

@@ -1,21 +1,59 @@
-import { OrchestratorClient, type OrchestratorCallbacks } from "./orchestratorClient";
 import { jest, expect, describe, it, beforeEach, afterEach } from "@jest/globals";
+import type { OrchestratorCallbacks } from "./orchestratorClient";
+
+// ---------------------------------------------------------------------------
+// ESM-compatible mocking via jest.unstable_mockModule
+// With --experimental-vm-modules, we use dynamic import() AFTER mocks are set up.
+// ---------------------------------------------------------------------------
+
+// Persistent mock fetch delegated to by the AwsClient mock
+const mockAwsFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+
+// Mock aws4fetch before the module under test is imported
+jest.unstable_mockModule("aws4fetch", () => ({
+    AwsClient: jest.fn().mockImplementation(() => ({
+        fetch: (...args: Parameters<typeof fetch>) => mockAwsFetch(...args)
+    }))
+}));
+
+// Mock awsCredentials before the module under test is imported
+jest.unstable_mockModule("./awsCredentials", () => ({
+    getAwsCredentials: jest.fn<() => Promise<{
+        accessKeyId: string;
+        secretAccessKey: string;
+        sessionToken: string;
+        expiration: Date;
+    }>>().mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        sessionToken: "AQoXnyc4lcK4w/mock-session-token",
+        expiration: new Date(Date.now() + 3600_000)
+    })
+}));
+
+// Dynamically import AFTER mocks are registered
+const { OrchestratorClient } = await import("./orchestratorClient");
+
+// ---------------------------------------------------------------------------
 
 describe("OrchestratorClient", () => {
-    let client: OrchestratorClient;
+    let client: InstanceType<typeof OrchestratorClient>;
     let callbacks: OrchestratorCallbacks;
+
     const mockUrl = "https://api.example.com/orchestrator";
+    const mockPoolId = "eu-west-2:00000000-0000-0000-0000-000000000000";
+    const mockRegion = "eu-west-2";
 
     beforeEach(() => {
-        client = new OrchestratorClient(mockUrl);
+        mockAwsFetch.mockReset();
+
+        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion);
         callbacks = {
             onResponse: jest.fn<(response: string) => Promise<void> | void>().mockImplementation(() => {}),
             onSignal: jest.fn<(signal: string, payload: unknown) => Promise<void> | void>().mockImplementation(() => {}),
             onComplete: jest.fn<() => Promise<void> | void>().mockImplementation(() => {}),
             onError: jest.fn<(error: unknown) => void>(),
         } as unknown as OrchestratorCallbacks;
-
-        global.fetch = jest.fn() as unknown as typeof fetch;
     });
 
     afterEach(() => {
@@ -23,12 +61,9 @@ describe("OrchestratorClient", () => {
     });
 
     it("should handle a successful JSON response", async () => {
-        const mockApiResponse = {
-            response: "Hello from the AI!"
-        };
+        const mockApiResponse = { response: "Hello from the AI!" };
 
-        const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-        mockFetch.mockResolvedValueOnce({
+        mockAwsFetch.mockResolvedValueOnce({
             ok: true,
             headers: new Headers({ "content-type": "application/json" }),
             json: async () => mockApiResponse
@@ -36,7 +71,7 @@ describe("OrchestratorClient", () => {
 
         await client.sendMessage("hello", "thread-123", callbacks);
 
-        expect(global.fetch).toHaveBeenCalledWith(mockUrl, expect.objectContaining({
+        expect(mockAwsFetch).toHaveBeenCalledWith(mockUrl, expect.objectContaining({
             method: 'POST',
             body: JSON.stringify({ message: "hello", thread_id: "thread-123", actor_id: "test" })
         }));
@@ -52,8 +87,7 @@ describe("OrchestratorClient", () => {
             response: `Connecting you now. SIGNAL: handoff ${JSON.stringify(signalPayload)}`
         };
 
-        const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-        mockFetch.mockResolvedValueOnce({
+        mockAwsFetch.mockResolvedValueOnce({
             ok: true,
             headers: new Headers({ "content-type": "application/json" }),
             json: async () => mockApiResponse
@@ -71,8 +105,7 @@ describe("OrchestratorClient", () => {
             body: JSON.stringify({ response: "Response from Lambda" })
         };
 
-        const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-        mockFetch.mockResolvedValueOnce({
+        mockAwsFetch.mockResolvedValueOnce({
             ok: true,
             headers: new Headers({ "content-type": "application/json" }),
             json: async () => mockApiResponse
@@ -85,8 +118,7 @@ describe("OrchestratorClient", () => {
 
     it("should call onError when fetch fails", async () => {
         const error = new Error("Network failure");
-        const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-        mockFetch.mockRejectedValueOnce(error);
+        mockAwsFetch.mockRejectedValueOnce(error);
 
         await client.sendMessage("hello", "thread-123", callbacks);
 
@@ -95,8 +127,7 @@ describe("OrchestratorClient", () => {
     });
 
     it("should call onError when response is not ok", async () => {
-        const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-        mockFetch.mockResolvedValueOnce({
+        mockAwsFetch.mockResolvedValueOnce({
             ok: false,
             status: 500
         } as Response);

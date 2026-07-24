@@ -139,7 +139,7 @@ resource "aws_lambda_function" "rds_tool" {
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.rds_seeder_sg.id] # Reuse seeder SG for DB access
+    security_group_ids = [aws_security_group.rds_tool_sg.id]
   }
 
   environment {
@@ -227,7 +227,7 @@ resource "aws_lambda_function" "rds_init" {
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.rds_seeder_sg.id]
+    security_group_ids = [aws_security_group.rds_init_sg.id]
   }
 
   environment {

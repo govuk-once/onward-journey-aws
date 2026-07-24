@@ -12,7 +12,7 @@ resource "aws_vpc_endpoint" "bedrock" {
 
   # Deploying into the private application subnets
   subnet_ids          = local.private_subnet_ids
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id, aws_security_group.bedrock.id]
   private_dns_enabled = false
 
   tags = { Name = "${var.environment}-bedrock-endpoint" }
@@ -25,7 +25,7 @@ resource "aws_vpc_endpoint" "secrets" {
   vpc_endpoint_type = "Interface"
 
   subnet_ids          = local.private_subnet_ids
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id, aws_security_group.secrets_manager.id]
   private_dns_enabled = false
 
   tags = { Name = "${var.environment}-secrets-endpoint" }

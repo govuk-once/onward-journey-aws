@@ -33,7 +33,7 @@ resource "aws_security_group" "vpc_endpoints" {
 # SECRETS MANAGER SECURITY GROUP
 # Provides a secure ingress point for RDS Init to access the secrets manager VPC endpoint only
 resource "aws_security_group" "secrets_manager" {
-  name        = "${var.environment}-secrets-manger-sg"
+  name        = "${var.environment}-secrets-manager-sg"
   description = "Private interface for RDS Init to reach Secrets Manager"
   vpc_id      = local.vpc_id
 

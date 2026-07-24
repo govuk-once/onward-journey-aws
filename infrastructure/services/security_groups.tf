@@ -114,97 +114,88 @@ resource "aws_security_group" "kb_sync_sg" {
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
-resource "aws_security_group_rule" "allow_orchestrator_to_endpoints" {
-  description              = "HTTPS from Orchestrator"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.vpc_endpoints.id
-  source_security_group_id = aws_security_group.orchestrator.id
+resource "aws_vpc_security_group_ingress_rule" "allow_orchestrator_to_endpoints" {
+  description                  = "HTTPS from Orchestrator"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.orchestrator.id
 }
 
 # Allow Tooling & Seeder to reach RDS
-resource "aws_security_group_rule" "allow_rds_seeder_to_rds" {
-  description              = "PostgreSQL from RDS Seeder"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_seeder_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_seeder_to_rds" {
+  description                  = "PostgreSQL from RDS Seeder"
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.rds_metadata.id
+  referenced_security_group_id = aws_security_group.rds_seeder_sg.id
 }
 
-resource "aws_security_group_rule" "allow_rds_tool_to_rds" {
-  description              = "PostgreSQL from RDS Tool"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_tool_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_tool_to_rds" {
+  description                  = "PostgreSQL from RDS Tool"
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.rds_metadata.id
+  referenced_security_group_id = aws_security_group.rds_tool_sg.id
 }
 
-resource "aws_security_group_rule" "allow_rds_init_to_rds" {
-  description              = "PostgreSQL from RDS Init"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.rds_init_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_init_to_rds" {
+  description                  = "PostgreSQL from RDS Init"
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.rds_metadata.id
+  referenced_security_group_id = aws_security_group.rds_init_sg.id
 }
 
-resource "aws_security_group_rule" "allow_kb_sync_to_rds" {
-  description              = "PostgreSQL from KB Sync Pipeline"
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rds_metadata.id
-  source_security_group_id = aws_security_group.kb_sync_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_rds" {
+  description                  = "PostgreSQL from KB Sync Pipeline"
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.rds_metadata.id
+  referenced_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
 # ----- Ingress rules allowing authorised data services to reach AWS service endpoints. -----
 
-resource "aws_security_group_rule" "allow_rds_seeder_to_endpoints" {
-  description              = "Allow RDS seeder to reach Bedrock/SecretsManager endpoints"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.vpc_endpoints.id
-  source_security_group_id = aws_security_group.rds_seeder_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_seeder_to_endpoints" {
+  description                  = "Allow RDS seeder to reach Bedrock/SecretsManager endpoints"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.rds_seeder_sg.id
 }
 
-resource "aws_security_group_rule" "allow_rds_tool_to_bedrock" {
-  description              = "Allow RDS query tool to reach Bedrock endpoint"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.bedrock.id
-  source_security_group_id = aws_security_group.rds_tool_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_tool_to_bedrock" {
+  description                  = "Allow RDS query tool to reach Bedrock endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.bedrock.id
+  referenced_security_group_id = aws_security_group.rds_tool_sg.id
 }
 
-resource "aws_security_group_rule" "allow_rds_init_to_secrets_manager" {
-  description              = "Allow RDS init tool to reach SecretsManager endpoint"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.secrets_manager.id
-  source_security_group_id = aws_security_group.rds_init_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_rds_init_to_secrets_manager" {
+  description                  = "Allow RDS init tool to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.rds_init_sg.id
 }
 
-resource "aws_security_group_rule" "allow_kb_sync_to_endpoints" {
-  description              = "Allow KB sync pipeline to reach Bedrock/SecretsManager endpoints"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.vpc_endpoints.id
-  source_security_group_id = aws_security_group.kb_sync_sg.id
+resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_endpoints" {
+  description                  = "Allow KB sync pipeline to reach Bedrock/SecretsManager endpoints"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
 # ======================= EGRESS RULES (INTERNAL) ===========================================

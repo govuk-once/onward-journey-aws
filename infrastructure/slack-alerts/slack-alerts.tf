@@ -49,3 +49,50 @@ output "sns_topic_arn" {
   value       = aws_sns_topic.oj_aws_errors.arn
   description = "SNS topic ARN"
 }
+
+resource "aws_cloudwatch_event_rule" "global_lambda_errors" {
+  name        = "capture-all-lambda-errors"
+  description = "Triggers on any Lambda function failure across all workspaces"
+  event_pattern = jsonencode({
+    "source" : ["aws.lambda"],
+    "detail-type" : ["Lambda Function Invocation Result - Failure"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "sns_lambda_target" {
+  rule      = aws_cloudwatch_event_rule.global_lambda_errors.name
+  target_id = "SendToSNS"
+  arn       = aws_sns_topic.oj_aws_errors.arn
+}
+
+resource "aws_cloudwatch_event_rule" "global_sfn_errors" {
+  name        = "capture-all-sfn-errors"
+  description = "Triggers on any Step Function failure"
+  event_pattern = jsonencode({
+    "source" : ["aws.states"],
+    "detail-type" : ["Step Functions Execution Status Change"],
+    "detail" : { "status" : ["FAILED", "TIMED_OUT", "ABORTED"] }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "sns_sfn_target" {
+  rule      = aws_cloudwatch_event_rule.global_sfn_errors.name
+  target_id = "SendToSNS"
+  arn       = aws_sns_topic.oj_aws_errors.arn
+}
+
+resource "aws_cloudwatch_event_rule" "global_bedrock_errors" {
+  name        = "capture-all-bedrock-errors"
+  description = "Triggers on Bedrock Agent execution failures"
+  event_pattern = jsonencode({
+    "source" : ["aws.bedrock"],
+    "detail-type" : ["Bedrock Agent Invocation State Change"],
+    "detail" : { "status" : ["FAILED", "ERROR"] }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "sns_bedrock_target" {
+  rule      = aws_cloudwatch_event_rule.global_bedrock_errors.name
+  target_id = "SendToSNS"
+  arn       = aws_sns_topic.oj_aws_errors.arn
+}

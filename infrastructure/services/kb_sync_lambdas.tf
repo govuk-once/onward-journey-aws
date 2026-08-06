@@ -14,6 +14,7 @@ resource "aws_lambda_function" "kb_sync_check_kb_meta" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
+  architectures    = ["arm64"]
 
   environment {
     variables = {
@@ -40,6 +41,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -75,6 +77,7 @@ resource "aws_lambda_function" "kb_sync_fetch_articles" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 60
+  architectures    = ["arm64"]
 
   environment {
     variables = {
@@ -101,6 +104,7 @@ resource "aws_lambda_function" "kb_sync_upsert" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 1024
   timeout          = 30
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -137,6 +141,7 @@ resource "aws_lambda_function" "kb_sync_update_sync_meta" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids

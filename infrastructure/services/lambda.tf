@@ -27,7 +27,8 @@ resource "aws_lambda_layer_version" "shared_layers" {
   # would cause 'terraform plan' to crash because the file doesn't exist yet.
   description = "${each.value.description}. Build hash: ${each.value.trigger}"
 
-  compatible_runtimes = ["python3.12"]
+  compatible_runtimes      = ["python3.12"]
+  compatible_architectures = ["arm64"]
 
   # Ensure the build process completes before we try to upload the layer.
   # IMPORTANT: If you add a new layer to shared_layer_configs, you MUST add its
@@ -51,6 +52,7 @@ resource "aws_lambda_function" "rds_seeder" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 900
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -93,6 +95,7 @@ resource "aws_lambda_function" "orchestrator" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 1024
   timeout          = 120
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -136,6 +139,7 @@ resource "aws_lambda_function" "rds_tool" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 120
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids
@@ -172,6 +176,7 @@ resource "aws_lambda_function" "crm_tool" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
+  architectures    = ["arm64"]
 
   environment {
     variables = {
@@ -224,6 +229,7 @@ resource "aws_lambda_function" "rds_init" {
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 300
+  architectures    = ["arm64"]
 
   vpc_config {
     subnet_ids         = local.private_subnet_ids

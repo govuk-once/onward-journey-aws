@@ -18,3 +18,27 @@ variable "aws_region" {
   description = "The AWS region to deploy resources into (e.g. eu-west-2)."
   default     = "eu-west-2"
 }
+
+variable "authorizer_lambda_invoke_arn" {
+  description = "The invoke ARN of the custom Authorizer Lambda function"
+  type        = string
+  default     = ""
+}
+
+variable "authorizer_lambda_function_name" {
+  description = "The function name of the custom Authorizer Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "processor_lambda_invoke_arn" {
+  description = "The invoke ARN of the backend Processor Lambda function"
+  type        = string
+  default     = ""
+}
+
+variable "processor_lambda_function_name" {
+  description = "The function name of the backend Processor Lambda"
+  type        = string
+  default     = ""
+}

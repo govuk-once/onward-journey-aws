@@ -624,3 +624,54 @@ resource "time_sleep" "wait_for_iam_propagation" {
     aws_iam_role_policy.agentcore_gateway_invocation,
   ]
 }
+
+##  AGENTCORE RUNTIME ROLES
+
+resource "aws_iam_role" "agentcore_runtime_execution_role" {
+  name = "${var.environment}-agentcore-runtime-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock-agentcore.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Grants explicit permission to invoke VPC-bound Tool Lambdas
+# AgentCore Runtime natively assumes this role to automatically generate SigV4 signatures
+resource "aws_iam_policy" "agentcore_runtime_lambda_invoke" {
+  name        = "${var.environment}-agentcore-runtime-lambda-invoke-policy"
+  description = "Allows AgentCore Runtime Orchestrator to invoke tool Lambdas"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "lambda:InvokeFunction"
+        Resource = [
+          aws_lambda_function.crm_tool.arn,
+          aws_lambda_function.rds_tool.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_lambda_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = aws_iam_policy.agentcore_runtime_lambda_invoke.arn
+}
+
+# Required to allow AgentCore Runtime to deploy Elastic Network Interfaces (ENIs) into private subnets
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_vpc_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}

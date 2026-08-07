@@ -11,6 +11,13 @@ output "tool_interface_id" {
   value       = aws_bedrockagentcore_gateway.tool_interface.gateway_id
 }
 
+## AGENTCORE RUNTIME
+
+output "agentcore_runtime_id" {
+  description = "The ID of the new AgentCore runtime for console testing"
+  value       = aws_bedrockagentcore_agent_runtime.orchestrator_runtime.agent_runtime_id
+}
+
 ## RESOURCE ARNs
 # Required for IAM policies and cross-account references.
 

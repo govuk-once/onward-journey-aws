@@ -108,33 +108,3 @@ resource "aws_vpc_endpoint" "bedrock_gateway" {
 
   tags = { Name = "${var.environment}-bedrock-gateway-endpoint" }
 }
-
-# CloudWatch Logs Endpoint - required for AgentCore telemetry and error logging
-resource "aws_vpc_endpoint" "logs" {
-  vpc_id            = local.vpc_id
-  service_name      = "com.amazonaws.${var.aws_region}.logs"
-  vpc_endpoint_type = "Interface"
-
-  subnet_ids         = local.private_subnet_ids
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-  # if having this as true causes Terraform state collisions for other developers
-  # spinning up their own workspaces, move this resource to vpc.tf
-  private_dns_enabled = true
-
-  tags = { Name = "${var.environment}-logs-endpoint" }
-}
-
-# STS Endpoint - required for Boto3 and AgentCore to fetch IAM credentials
-resource "aws_vpc_endpoint" "sts" {
-  vpc_id            = local.vpc_id
-  service_name      = "com.amazonaws.${var.aws_region}.sts"
-  vpc_endpoint_type = "Interface"
-
-  subnet_ids         = local.private_subnet_ids
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-  # if having this as true causes Terraform state collisions for other developers
-  # spinning up their own workspaces, move this resource to vpc.tf
-  private_dns_enabled = true
-
-  tags = { Name = "${var.environment}-sts-endpoint" }
-}

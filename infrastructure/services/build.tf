@@ -48,12 +48,13 @@ locals {
     mkdir -p "$STAGING_DIR/python"
 
     # 2. INSTALL DEPENDENCIES
-    echo "Installing external dependencies from pyproject.toml..."
+    echo "Installing external dependencies..."
     cd "$APP_DIR"
 
-    # We use uv to install dependencies into the layer's python directory.
-    # We explicitly target the Lambda's runtime platform (Amazon Linux 2023 / manylinux_2_28).
-    # Since we use absolute paths for --target, we never lose the folder!
+    # Export dependencies from uv.lock (excluding dev dependencies)
+    uv export --format requirements-txt --no-dev -o layer-requirements.txt
+
+    # Install using the exported requirements
     uv pip install \
       --target "$STAGING_DIR/python" \
       --python-platform aarch64-manylinux_2_28 \
@@ -61,7 +62,10 @@ locals {
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
-      -r pyproject.toml
+      -r layer-requirements.txt
+
+    # Clean up the temporary export
+    rm -f layer-requirements.txt
 
     # 3. OPTIMISE SIZE
     echo "Cleaning up pre-installed and temporary files..."
@@ -123,9 +127,13 @@ locals {
     rm -f "$OUTPUT_ZIP"
     mkdir -p "$STAGING_DIR"
 
-    echo "Installing dependencies for AgentCore..."
+    echo "Installing dependencies for Agencore..."
     cd "$APP_DIR"
 
+    # Export dependencies from uv.lock (excluding dev dependencies)
+    uv export --format requirements-txt --no-dev -o layer-requirements.txt
+
+    # Install using the exported requirements
     uv pip install \
       --target "$STAGING_DIR" \
       --python-platform aarch64-manylinux_2_28 \
@@ -133,7 +141,10 @@ locals {
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
-      -r pyproject.toml
+      -r layer-requirements.txt
+
+    # Clean up the temporary export
+    rm -f layer-requirements.txt
 
     echo "Cleaning up __pycache__..."
     find "$STAGING_DIR" -name "__pycache__" -type d -exec rm -rf {} +

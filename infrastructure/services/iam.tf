@@ -804,3 +804,25 @@ resource "aws_iam_role_policy_attachment" "agentcore_runtime_api_gw_attach" {
   role       = aws_iam_role.agentcore_runtime_execution_role.name
   policy_arn = aws_iam_policy.agentcore_runtime_api_gw_management.arn
 }
+
+# policy to allow resources such as Lambda functions to create EventBridge events
+resource "aws_iam_policy" "eventbridge_put_event_policy" {
+  name        = "${var.environment}-eventbridge-put-event-policy"
+  description = "Allows resources to create events in EventBridge"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow",
+        Action   = "events:PutEvents"
+        Resource = data.aws_cloudwatch_event_bus.default.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "inference_put_events" {
+  role       = aws_iam_role.inference.name
+  policy_arn = aws_iam_policy.eventbridge_put_event_policy.arn
+}

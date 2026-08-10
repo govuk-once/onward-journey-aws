@@ -72,3 +72,8 @@ resource "aws_cloudwatch_event_target" "kb_sync_target" {
     "sync_type" : "scheduled"
   })
 }
+
+# use default EventBridge event bus
+data "aws_cloudwatch_event_bus" "default" {
+  name = "default"
+}

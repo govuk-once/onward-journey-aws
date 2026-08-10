@@ -118,6 +118,21 @@ resource "aws_lambda_function" "orchestrator" {
   depends_on = [aws_cloudwatch_log_group.orchestrator]
 }
 
+resource "aws_lambda_function_event_invoke_config" "orchestrator" {
+  function_name = aws_lambda_function.orchestrator.function_name
+
+  maximum_event_age_in_seconds = 60
+  maximum_retry_attempts       = 2
+
+  destination_config {
+    on_failure {
+      destination = data.aws_cloudwatch_event_bus.default.arn
+    }
+    on_success {
+      destination = data.aws_cloudwatch_event_bus.default.arn
+    }
+  }
+}
 
 ## TOOL LAYER: RDS SEARCH TOOL (MCP SERVER)
 # Standardised interface for the Orchestrator to query the registry via Gateway.

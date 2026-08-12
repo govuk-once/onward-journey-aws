@@ -178,3 +178,66 @@ resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
     aws_lambda_permission.allow_bedrock_gateway_crm
   ]
 }
+
+# -------------------------------------------------------------------------
+# AGENTCORE RUNTIME INFRASTRUCTURE
+# -------------------------------------------------------------------------
+
+# S3 Upload & AgentCore Runtime Provisioning
+# AgentCore Runtime requires the ZIP to be hosted in S3 for Direct Code Deployment.
+resource "aws_s3_object" "agentcore_runtime_deployment_zip" {
+  bucket = aws_s3_bucket.infrastructure.id
+
+  key = "builds/agentcore_runtime_payload.zip"
+
+  source      = abspath("${path.module}/../../dist/agentcore_payload.zip")
+  source_hash = local.agentcore_trigger_hash
+  # Wait for the local build script to finish before uploading
+  depends_on = [null_resource.build_agentcore_payload]
+}
+
+# Provision the actual AgentCore execution environment
+resource "aws_bedrockagentcore_agent_runtime" "orchestrator_runtime" {
+  # Name must not contain hyphens (including the var.environment variable)
+  agent_runtime_name = "${var.environment}_agentcore_runtime_orchestrator"
+  role_arn           = aws_iam_role.agentcore_runtime_execution_role.arn
+
+  # AgentCore relies on an artifact block to pull the S3 hosted payload
+  agent_runtime_artifact {
+    code_configuration {
+      runtime     = "PYTHON_3_12"
+      entry_point = ["orchestrator.py"]
+
+      code {
+        s3 {
+          bucket = aws_s3_object.agentcore_runtime_deployment_zip.bucket
+          prefix = aws_s3_object.agentcore_runtime_deployment_zip.key
+        }
+      }
+    }
+  }
+
+  # Maps the runtime to private subnets so it can securely access internal AWS APIs
+  # (Bedrock, AgentCore Gateway, CloudWatch) via VPC Endpoints without traversing the public internet.
+  network_configuration {
+    network_mode = "VPC"
+    network_mode_config {
+      subnets = local.private_subnet_ids
+      # Reusing existing orchestrator security group
+      security_groups = [aws_security_group.orchestrator.id]
+    }
+  }
+
+  environment_variables = {
+    ENV_PREFIX                 = var.environment
+    AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.bedrock_agentcore.dns_entry[0]["dns_name"]
+    BEDROCK_RUNTIME_ENDPOINT   = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
+    SECRETS_ENDPOINT_URL       = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+    GATEWAY_ENDPOINT_URL       = aws_vpc_endpoint.bedrock_gateway.dns_entry[0]["dns_name"]
+    GATEWAY_URL                = "https://${aws_bedrockagentcore_gateway.tool_interface.gateway_id}.gateway.bedrock-agentcore.${var.aws_region}.amazonaws.com/mcp"
+    MEMORY_ID                  = aws_bedrockagentcore_memory.agent_chat_context.id
+
+    # Injecting the hash forces AgentCore to pull the new ZIP when the code changes
+    _DEPLOYMENT_HASH = aws_s3_object.agentcore_runtime_deployment_zip.source_hash
+  }
+}

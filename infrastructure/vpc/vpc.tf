@@ -72,3 +72,44 @@ resource "aws_vpc_endpoint_route_table_association" "s3_main" {
   vpc_endpoint_id = aws_vpc_endpoint.s3.id
   route_table_id  = aws_vpc.main.main_route_table_id
 }
+# --- SHARED INTERFACE ENDPOINTS ---
+# 4. Security Group for Shared Endpoints
+resource "aws_security_group" "shared_endpoints_sg" {
+  name        = "shared-endpoints-sg"
+  description = "Allow HTTPS traffic from within the VPC to shared endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+}
+
+# 5. CloudWatch Logs Endpoint - required for AgentCore Runtime telemetry and error logging
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${data.aws_region.current.id}.logs"
+  vpc_endpoint_type = "Interface"
+
+  # Dynamically fetches the IDs of the two private subnets created at the top of this file
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = { Name = "shared-logs-endpoint" }
+}
+
+# 6. STS Endpoint - required for Boto3 and AgentCore Runtime to fetch IAM credentials
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${data.aws_region.current.id}.sts"
+  vpc_endpoint_type = "Interface"
+
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = { Name = "shared-sts-endpoint" }
+}

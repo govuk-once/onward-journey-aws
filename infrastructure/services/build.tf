@@ -9,19 +9,29 @@ locals {
   core_output_zip          = abspath("${path.module}/../../dist/core_layer_payload.zip")
   integrations_output_zip  = abspath("${path.module}/../../dist/integrations_layer_payload.zip")
 
+  agentcore_staging_dir = abspath("${path.module}/../../dist/agentcore_staging")
+  agentcore_output_zip  = abspath("${path.module}/../../dist/agentcore_payload.zip")
+
   # 2. Track source code changes
   core_layer_triggers = {
     lock_file    = filemd5("${local.app_dir}/uv.lock")
     shared_utils = sha1(join("", [for f in fileset("${local.app_dir}/shared/utils/", "**/*.py") : filemd5("${local.app_dir}/shared/utils/${f}")]))
+    build_script = sha1(local.core_build_command)
   }
 
   integrations_layer_triggers = {
     integrations = sha1(join("", [for f in fileset("${local.app_dir}/shared/integrations/", "**/*.py") : filemd5("${local.app_dir}/shared/integrations/${f}")]))
+    build_script = sha1(local.integrations_build_command)
+  }
+  agentcore_triggers = {
+    lock_file   = filemd5("${local.app_dir}/uv.lock")
+    source_file = filemd5("${local.app_dir}/agentcore/orchestrator/orchestrator.py")
   }
 
   # Generate unique IDs for each layer
   core_trigger_hash         = sha1(jsonencode(local.core_layer_triggers))
   integrations_trigger_hash = sha1(jsonencode(local.integrations_layer_triggers))
+  agentcore_trigger_hash    = sha1(jsonencode(local.agentcore_triggers))
 
   # 3. Build scripts
   core_build_command = <<EOT
@@ -38,20 +48,24 @@ locals {
     mkdir -p "$STAGING_DIR/python"
 
     # 2. INSTALL DEPENDENCIES
-    echo "Installing external dependencies from pyproject.toml..."
+    echo "Installing external dependencies..."
     cd "$APP_DIR"
 
-    # We use uv to install dependencies into the layer's python directory.
-    # We explicitly target the Lambda's runtime platform (Amazon Linux 2023 / manylinux_2_28).
-    # Since we use absolute paths for --target, we never lose the folder!
+    # Export dependencies from uv.lock (excluding dev dependencies)
+    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
+
+    # Install using the exported, locked requirements
     uv pip install \
       --target "$STAGING_DIR/python" \
-      --python-platform x86_64-manylinux_2_28 \
+      --python-platform aarch64-manylinux_2_28 \
       --python-version 3.12 \
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
-      -r pyproject.toml
+      -r "$STAGING_DIR/requirements.txt"
+
+    # Clean up the temporary export
+    rm -f "$STAGING_DIR/requirements.txt"
 
     # 3. OPTIMISE SIZE
     echo "Cleaning up pre-installed and temporary files..."
@@ -99,6 +113,51 @@ locals {
 
     echo "Integrations Lambda Layer build complete."
     EOT
+
+  agentcore_build_command = <<EOT
+    set -e
+    echo "Starting AgentCore build..."
+
+    STAGING_DIR="${local.agentcore_staging_dir}"
+    OUTPUT_ZIP="${local.agentcore_output_zip}"
+    APP_DIR="${local.app_dir}"
+
+    # Prepare staging directory
+    rm -rf "$STAGING_DIR"
+    rm -f "$OUTPUT_ZIP"
+    mkdir -p "$STAGING_DIR"
+
+    echo "Installing dependencies for AgentCore..."
+    cd "$APP_DIR"
+
+    # Export dependencies from uv.lock (excluding dev dependencies)
+    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
+
+    # Install using the exported requirements
+    uv pip install \
+      --target "$STAGING_DIR" \
+      --python-platform aarch64-manylinux_2_28 \
+      --python-version 3.12 \
+      --only-binary=:all: \
+      --link-mode copy \
+      --no-cache \
+      -r "$STAGING_DIR/requirements.txt"
+
+    # Clean up the temporary export
+    rm -f "$STAGING_DIR/requirements.txt"
+
+    echo "Cleaning up __pycache__..."
+    find "$STAGING_DIR" -name "__pycache__" -type d -exec rm -rf {} +
+
+    # Copy the new AgentCore entrypoint into the root of the staging folder
+    cp "$APP_DIR/agentcore/orchestrator/orchestrator.py" "$STAGING_DIR/"
+
+    echo "Zipping AgentCore deployment package..."
+    cd "$STAGING_DIR"
+    zip -r "$OUTPUT_ZIP" . > /dev/null
+
+    echo "AgentCore build complete."
+    EOT
 }
 
 resource "null_resource" "build_core_layer" {
@@ -120,6 +179,16 @@ resource "null_resource" "build_integrations_layer" {
 
   provisioner "local-exec" {
     command = local.integrations_build_command
+  }
+}
+resource "null_resource" "build_agentcore_payload" {
+  triggers = {
+    build_hash   = local.agentcore_trigger_hash
+    build_script = sha1(local.agentcore_build_command)
+  }
+
+  provisioner "local-exec" {
+    command = local.agentcore_build_command
   }
 }
 

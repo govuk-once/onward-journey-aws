@@ -624,3 +624,57 @@ resource "time_sleep" "wait_for_iam_propagation" {
     aws_iam_role_policy.agentcore_gateway_invocation,
   ]
 }
+
+# -------------------------------------------------------------------------
+# AGENTCORE RUNTIME ROLES
+# -------------------------------------------------------------------------
+
+resource "aws_iam_role" "agentcore_runtime_execution_role" {
+  name = "${var.environment}-agentcore-runtime-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock-agentcore.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Grants explicit, least-privilege permission to invoke specific tools via the Gateway.
+resource "aws_iam_policy" "agentcore_runtime_gateway_invoke" {
+  name        = "${var.environment}-agentcore-runtime-gateway-invoke-policy"
+  description = "Allows AgentCore Runtime Orchestrator to invoke specific tools via the Gateway"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "bedrock-agentcore:InvokeGateway"
+        # Explicitly restrict access to only the CRM and RDS paths
+        Resource = [
+          "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.rds_search_tool.name}",
+          "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.crm_availability.name}",
+          "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.crm_handoff.name}"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_gateway_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = aws_iam_policy.agentcore_runtime_gateway_invoke.arn
+}
+
+# Required to allow AgentCore Runtime to deploy Elastic Network Interfaces (ENIs) into private subnets
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_vpc_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}

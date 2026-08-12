@@ -34,7 +34,6 @@ resource "aws_s3_object" "mock_data_upload" {
   etag     = filemd5("${path.module}/mock_data/${each.value}") # Terraform uses this to detect if the local file has changed. If it changes, Terraform will update the S3 object on 'apply'.
 }
 
-
 ## Bucket for per workspace infrastructure (i.e. Agentcore Runtime build zips)
 resource "aws_s3_bucket" "infrastructure" {
   bucket = "onward-journey-${var.environment}-infrastructure"

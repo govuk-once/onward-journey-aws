@@ -186,11 +186,12 @@ resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
 # S3 Upload & AgentCore Runtime Provisioning
 # AgentCore Runtime requires the ZIP to be hosted in S3 for Direct Code Deployment.
 resource "aws_s3_object" "agentcore_runtime_deployment_zip" {
-  bucket      = aws_s3_bucket.dataset_storage.id
-  key         = "deployments/agentcore_runtime_payload.zip"
+  bucket = aws_s3_bucket.infrastructure.id
+
+  key = "builds/agentcore_runtime_payload.zip"
+
   source      = abspath("${path.module}/../../dist/agentcore_payload.zip")
   source_hash = local.agentcore_trigger_hash
-
   # Wait for the local build script to finish before uploading
   depends_on = [null_resource.build_agentcore_payload]
 }
@@ -216,7 +217,8 @@ resource "aws_bedrockagentcore_agent_runtime" "orchestrator_runtime" {
     }
   }
 
-  # Maps the runtime to private subnets so it can access RDS and VPC endpoints
+  # Maps the runtime to private subnets so it can securely access internal AWS APIs
+  # (Bedrock, AgentCore Gateway, CloudWatch) via VPC Endpoints without traversing the public internet.
   network_configuration {
     network_mode = "VPC"
     network_mode_config {

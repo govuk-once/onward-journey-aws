@@ -52,9 +52,9 @@ locals {
     cd "$APP_DIR"
 
     # Export dependencies from uv.lock (excluding dev dependencies)
-    uv export --format requirements-txt --no-dev -o layer-requirements.txt
+    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
 
-    # Install using the exported requirements
+    # Install using the exported, locked requirements
     uv pip install \
       --target "$STAGING_DIR/python" \
       --python-platform aarch64-manylinux_2_28 \
@@ -62,10 +62,10 @@ locals {
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
-      -r layer-requirements.txt
+      -r "$STAGING_DIR/requirements.txt"
 
     # Clean up the temporary export
-    rm -f layer-requirements.txt
+    rm -f "$STAGING_DIR/requirements.txt"
 
     # 3. OPTIMISE SIZE
     echo "Cleaning up pre-installed and temporary files..."
@@ -127,11 +127,11 @@ locals {
     rm -f "$OUTPUT_ZIP"
     mkdir -p "$STAGING_DIR"
 
-    echo "Installing dependencies for Agencore..."
+    echo "Installing dependencies for AgentCore..."
     cd "$APP_DIR"
 
     # Export dependencies from uv.lock (excluding dev dependencies)
-    uv export --format requirements-txt --no-dev -o layer-requirements.txt
+    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
 
     # Install using the exported requirements
     uv pip install \
@@ -141,10 +141,10 @@ locals {
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
-      -r layer-requirements.txt
+      -r "$STAGING_DIR/requirements.txt"
 
     # Clean up the temporary export
-    rm -f layer-requirements.txt
+    rm -f "$STAGING_DIR/requirements.txt"
 
     echo "Cleaning up __pycache__..."
     find "$STAGING_DIR" -name "__pycache__" -type d -exec rm -rf {} +

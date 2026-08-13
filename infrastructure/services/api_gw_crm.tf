@@ -1,4 +1,18 @@
-# Instantiates the generic REST API module specifically for Content Guru Storm webhooks
+# -----------------------------------------------------------------------------
+# AUTHORISER LAMBDA MODULES
+# -----------------------------------------------------------------------------
+module "contentguru_webhook_authorizer" {
+  source = "../modules/api_gw_authorizer_token"
+
+  environment           = var.environment
+  authorizer_name       = "contentguru-webhook"
+  lambda_source_dir     = "${path.module}/../../app/lambdas/api_gw_authorizer_token"
+  log_retention_in_days = 14
+}
+
+# -----------------------------------------------------------------------------
+# API GATEWAY REST MODULES
+# -----------------------------------------------------------------------------
 module "contentguru_webhook_gateway" {
   source = "../modules/api_gw_rest"
 
@@ -7,8 +21,8 @@ module "contentguru_webhook_gateway" {
   api_description = "Inbound REST API Gateway for Content Guru Storm webhooks"
   path_parts      = ["contentguru", "webhook"]
 
-  authorizer_lambda_invoke_arn    = var.authorizer_lambda_invoke_arn
-  authorizer_lambda_function_name = var.authorizer_lambda_function_name
+  authorizer_lambda_invoke_arn    = module.contentguru_webhook_authorizer.invoke_arn
+  authorizer_lambda_function_name = module.contentguru_webhook_authorizer.function_name
 
   processor_lambda_invoke_arn    = var.processor_lambda_invoke_arn
   processor_lambda_function_name = var.processor_lambda_function_name

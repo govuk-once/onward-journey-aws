@@ -1,11 +1,11 @@
 # DEPENDENCY: slack-alerting shared infrastructure (infrastructure/slack-alerting) must be applied before this workspace
-variable "sns_topic_arn" {
-  type        = string
-  description = "The ARN of the SNS topic for AWS error alerting via Slack"
+data "aws_sns_topic" "slack_alerts" {
+  name = "oj-aws-errors"
 }
 
 locals {
-  sns_topic_arn = var.sns_topic_arn
+  sns_topic_arn = data.aws_sns_topic.slack_alerts.arn
+
   main_log_groups = [
     aws_cloudwatch_log_group.rds_seeder.name,
     aws_cloudwatch_log_group.crm_tool.name,

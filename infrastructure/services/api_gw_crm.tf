@@ -2,11 +2,10 @@
 # AUTHORISER LAMBDA MODULES
 # -----------------------------------------------------------------------------
 module "contentguru_webhook_authorizer" {
-  source = "../modules/api_gw_authorizer_token"
-
+  source                = "../modules/api_gw_authorizer_signature"
   environment           = var.environment
   authorizer_name       = "contentguru-webhook"
-  lambda_source_dir     = "${path.module}/../../app/lambdas/api_gw_authorizer_token"
+  lambda_source_dir     = "${path.module}/../../app/lambdas/api_gw_authorizer_signature"
   log_retention_in_days = 14
 }
 

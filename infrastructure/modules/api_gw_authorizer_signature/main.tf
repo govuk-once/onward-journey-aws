@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
-# SECRETS MANAGER (To store the shared authentication token)
+# SECRETS MANAGER (To store the shared HMAC signing secret)
 # -----------------------------------------------------------------------------
-resource "aws_secretsmanager_secret" "auth_token" {
-  name        = "${var.environment}/${var.authorizer_name}/auth-token"
-  description = "Authentication token for ${var.authorizer_name} inbound webhook requests"
+resource "aws_secretsmanager_secret" "signing_secret" {
+  name        = "${var.environment}/${var.authorizer_name}/signing-secret"
+  description = "HMAC-SHA256 signing secret for ${var.authorizer_name} inbound webhook requests"
 }
 
 # (Note: The actual secret value is not defined in Terraform to prevent exposing it in state.
@@ -31,7 +31,7 @@ resource "aws_iam_role" "authorizer_role" {
 
 resource "aws_iam_policy" "authorizer_policy" {
   name        = "${var.environment}-${var.authorizer_name}-authorizer-policy"
-  description = "Permissions for Authorizer Lambda to read secrets and write logs"
+  description = "Permissions for Signature Authorizer Lambda to read secrets and write logs"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -39,7 +39,7 @@ resource "aws_iam_policy" "authorizer_policy" {
       {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = aws_secretsmanager_secret.auth_token.arn
+        Resource = aws_secretsmanager_secret.signing_secret.arn
       },
       {
         Effect = "Allow"
@@ -80,7 +80,7 @@ resource "aws_lambda_function" "authorizer" {
 
   environment {
     variables = {
-      SECRET_ARN   = aws_secretsmanager_secret.auth_token.arn
+      SECRET_ARN   = aws_secretsmanager_secret.signing_secret.arn
       PRINCIPAL_ID = var.authorizer_name
     }
   }

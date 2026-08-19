@@ -44,39 +44,61 @@ To maintain consistency and reduce duplication, all common operations should be 
 
 ## Testing
 
-### Pytest and DeepEval
-We have a suite of quasi-integration tests using `pytest` and `DeepEval` which currently test the routing and output behaviour of the Orchestrator lambda. The tests are located in the `tests/orchestrator/test_handley.py` file.
+The test suite is split into fast, offline **Unit Tests** and AWS-dependent **Integration / LLM Judge Tests**.
 
-The same tests will run regardless of whether you use the `pytest` or `deepeval` command, but the output in the terminal will differ.
+### Unit Tests
+Unit tests run entirely offline and execute quickly without requiring AWS credentials.
 
-To run the tests using the following commands, you must be logged into the authenticated GDS AWS shell (`gds aws <role-name> -- $SHELL`) and be in the `tests/orchestrator` directory.
+To run all unit tests:
+```bash
+# From the app/ directory
+uv run pytest
+```
+
+---
+
+### Integration & DeepEval Tests
+Integration tests test the routing, tool calling, and output behavior of Lambdas and workflows against AWS services (such as Bedrock LLM judges).
+
+#### Prerequisite
+To run integration tests, you must be logged into an authenticated GDS AWS shell from the `app/` directory:
+
+```bash
+gds aws <role-name> -- $SHELL
+```
 
 #### Pytest
+Pytest provides minimal logging, displaying detailed output and judge reasoning only on test failures:
 
-Using Pytest, the tests will run with a minimal logging output. You will only see the judge agent's reasoning in the event of a test failure.
+```bash
+# Run ALL integration tests
+uv run pytest tests/integration
 
-To run all tests:
+# Run a specific integration test suite (e.g., orchestrator)
+uv run pytest tests/integration/orchestrator
 
-`pytest test_handler.py`
-
-To run a single test, append the test function name as per the following example:
-
-`pytest test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
+# Run a single test function
+uv run pytest tests/integration/orchestrator/test_orchestrator_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+```
 
 #### DeepEval
+DeepEval provides rich terminal output, summarising LLM judge scores and evaluation metrics for both passing and failing tests:
 
-DeepEval provides comprehensive logging, including a summary of the judge agent's reasoning (including for passing tests).
+```bash
+# Run ALL integration tests with DeepEval
+uv run deepeval test run tests/integration
 
-To run all tests:
+# Run a specific integration test suite (e.g., orchestrator)
+uv run deepeval test run tests/integration/orchestrator
 
-`uv run deepeval test run test_handler.py`
+# Run a single test function
+uv run deepeval test run tests/integration/orchestrator/test_orchestrator_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+```
 
-To run a single test, append the test function name as per the following example:
+---
 
-`uv run deepeval test run test_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat`
-
-### Integration post-deployment
-Verification of the Lambda logic should be performed after deployment using the integration tests located in the **root** `tests/` directory:
+### Integration Post-Deployment
+Verification of Lambda logic after deployment should be performed using the integration scripts located in the **root** `tests/` directory:
 
 ```bash
 # From the project root

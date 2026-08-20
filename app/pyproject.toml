@@ -11,6 +11,9 @@ dependencies = [
     "pg8000>=1.31.2",
     "langgraph-checkpoint-aws>=1.0.4",
     "bedrock-agentcore>=1.20.0",
+    "mcp-proxy-for-aws>=1.6.4",
+    "mcp>=1.29.0",
+    "httpx>=0.28.1",
 ]
 
 [tool.setuptools]

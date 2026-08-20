@@ -23,8 +23,9 @@ module "contentguru_webhook_gateway" {
   authorizer_lambda_invoke_arn    = module.contentguru_webhook_authorizer.invoke_arn
   authorizer_lambda_function_name = module.contentguru_webhook_authorizer.function_name
 
-  processor_lambda_invoke_arn    = var.processor_lambda_invoke_arn
-  processor_lambda_function_name = var.processor_lambda_function_name
+  # TODO(JOUR-346): Replace empty string with the real processor Lambda function name and invoke ARN once downstream compute is provisioned
+  processor_lambda_function_name = ""
+  processor_lambda_invoke_arn    = ""
 
   # WAF rate limits fall back to module defaults (100 req / 300 sec) in variables.tf
   # unless explicitly overridden here.

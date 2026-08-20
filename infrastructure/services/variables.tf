@@ -19,14 +19,15 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
-variable "processor_lambda_invoke_arn" {
-  description = "The invoke ARN of the backend Processor Lambda function"
-  type        = string
-  default     = ""
-}
+# TODO(JOUR-346): Uncomment when adding the processor Lambda
+# variable "processor_lambda_invoke_arn" {
+#   description = "The invoke ARN of the backend Processor Lambda function"
+#   type        = string
+#   default     = ""
+# }
 
-variable "processor_lambda_function_name" {
-  description = "The function name of the backend Processor Lambda"
-  type        = string
-  default     = ""
-}
+# variable "processor_lambda_function_name" {
+#   description = "The function name of the backend Processor Lambda"
+#   type        = string
+#   default     = ""
+# }

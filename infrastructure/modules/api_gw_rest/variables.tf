@@ -24,14 +24,18 @@ variable "authorizer_lambda_invoke_arn" {
   type        = string
 }
 
+# TODO(JOUR-346): Remove 'default = ""' once downstream webhook processor Lambda is built
 variable "authorizer_lambda_function_name" {
   description = "The function name of the Authorizer Lambda (needed for invocation permissions)"
   type        = string
+  default     = ""
 }
 
+# TODO(JOUR-346): Remove 'default = ""' once downstream webhook processor Lambda is built
 variable "processor_lambda_invoke_arn" {
   description = "The invoke ARN of the backend Lambda function processing validated webhook payloads"
   type        = string
+  default     = ""
 }
 
 variable "processor_lambda_function_name" {

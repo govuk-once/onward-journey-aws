@@ -41,7 +41,9 @@ resource "aws_api_gateway_method" "post_method" {
 # -----------------------------------------------------------------------------
 # BACKEND PROCESSOR LAMBDA INTEGRATION (AWS_PROXY)
 # -----------------------------------------------------------------------------
+# TODO(JOUR-346): Enable integration and invocation permission once processor Lambda is created
 resource "aws_api_gateway_integration" "post_integration" {
+  count                   = var.processor_lambda_invoke_arn != "" ? 1 : 0
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = local.target_resource_id
   http_method             = aws_api_gateway_method.post_method.http_method
@@ -51,6 +53,7 @@ resource "aws_api_gateway_integration" "post_integration" {
 }
 
 resource "aws_lambda_permission" "processor_invoke" {
+  count         = var.processor_lambda_function_name != "" ? 1 : 0
   statement_id  = "AllowAPIGatewayInvokeProcessor-${var.api_name}"
   action        = "lambda:InvokeFunction"
   function_name = var.processor_lambda_function_name
@@ -89,7 +92,8 @@ resource "aws_api_gateway_deployment" "deployment" {
       aws_api_gateway_resource.level1.id,
       length(aws_api_gateway_resource.level2) > 0 ? aws_api_gateway_resource.level2[0].id : "",
       aws_api_gateway_method.post_method.id,
-      aws_api_gateway_integration.post_integration.id,
+      # TODO(JOUR-346): Simplify to <aws_api_gateway_integration.post_integration.id> once processor Lambda is integrated
+      length(aws_api_gateway_integration.post_integration) > 0 ? aws_api_gateway_integration.post_integration[0].id : "",
     ]))
   }
 

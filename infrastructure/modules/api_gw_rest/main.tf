@@ -41,17 +41,45 @@ resource "aws_api_gateway_method" "post_method" {
 # -----------------------------------------------------------------------------
 # BACKEND PROCESSOR LAMBDA INTEGRATION (AWS_PROXY)
 # -----------------------------------------------------------------------------
-# TODO(JOUR-346): Enable integration and invocation permission once processor Lambda is created
+# TODO(JOUR-346): Revert type to "AWS_PROXY", restore uri = var.processor_lambda_invoke_arn, and remove request_templates once processor Lambda exists
 resource "aws_api_gateway_integration" "post_integration" {
-  count                   = var.processor_lambda_invoke_arn != "" ? 1 : 0
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = local.target_resource_id
   http_method             = aws_api_gateway_method.post_method.http_method
   integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = var.processor_lambda_invoke_arn
+  type                    = var.processor_lambda_invoke_arn != "" ? "AWS_PROXY" : "MOCK"
+  uri                     = var.processor_lambda_invoke_arn != "" ? var.processor_lambda_invoke_arn : null
+
+  request_templates = var.processor_lambda_invoke_arn == "" ? {
+    "application/json" = "{\"statusCode\": 200}"
+  } : null
 }
 
+# TODO(JOUR-346): Delete mock method response once processor Lambda is integrated via AWS_PROXY
+resource "aws_api_gateway_method_response" "response_200" {
+  count       = var.processor_lambda_invoke_arn == "" ? 1 : 0
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = local.target_resource_id
+  http_method = aws_api_gateway_method.post_method.http_method
+  status_code = "200"
+}
+
+# TODO(JOUR-346): Delete mock integration response once processor Lambda is integrated via AWS_PROXY
+resource "aws_api_gateway_integration_response" "integration_response_200" {
+  count       = var.processor_lambda_invoke_arn == "" ? 1 : 0
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = local.target_resource_id
+  http_method = aws_api_gateway_method.post_method.http_method
+  status_code = aws_api_gateway_method_response.response_200[0].status_code
+
+  response_templates = {
+    "application/json" = "{\"message\": \"Authorizer verification successful (Mock Backend)\"}"
+  }
+
+  depends_on = [aws_api_gateway_integration.post_integration]
+}
+
+# TODO(JOUR-346): Remove count guard once downstream processor Lambda function is provisioned
 resource "aws_lambda_permission" "processor_invoke" {
   count         = var.processor_lambda_function_name != "" ? 1 : 0
   statement_id  = "AllowAPIGatewayInvokeProcessor-${var.api_name}"
@@ -69,7 +97,7 @@ resource "aws_api_gateway_authorizer" "authorizer" {
   rest_api_id            = aws_api_gateway_rest_api.api.id
   authorizer_uri         = var.authorizer_lambda_invoke_arn
   authorizer_credentials = ""
-  identity_source        = "method.request.header.Authorization"
+  identity_source        = "method.request.header.X-Storm-Signature"
   type                   = "REQUEST"
 }
 
@@ -92,14 +120,19 @@ resource "aws_api_gateway_deployment" "deployment" {
       aws_api_gateway_resource.level1.id,
       length(aws_api_gateway_resource.level2) > 0 ? aws_api_gateway_resource.level2[0].id : "",
       aws_api_gateway_method.post_method.id,
-      # TODO(JOUR-346): Simplify to <aws_api_gateway_integration.post_integration.id> once processor Lambda is integrated
-      length(aws_api_gateway_integration.post_integration) > 0 ? aws_api_gateway_integration.post_integration[0].id : "",
+      aws_api_gateway_integration.post_integration.id,
     ]))
   }
 
   lifecycle {
     create_before_destroy = true
   }
+
+  # TODO(JOUR-346): Remove aws_api_gateway_integration_response.integration_response_200 from depends_on once mock integration is removed
+  depends_on = [
+    aws_api_gateway_integration.post_integration,
+    aws_api_gateway_integration_response.integration_response_200
+  ]
 }
 
 resource "aws_api_gateway_stage" "stage" {

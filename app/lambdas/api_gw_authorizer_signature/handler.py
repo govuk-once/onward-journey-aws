@@ -54,13 +54,21 @@ def lambda_handler(event, context):
     headers = event.get("headers") or {}
     principal_id = os.environ.get("PRINCIPAL_ID", "content-guru-authorizer")
 
-    # Extract signature header (case-insensitive header lookup)
+    # Extract signature header (case-insensitive lookup for X-Storm-Signature)
     incoming_signature = next(
         (v for k, v in headers.items() if k.lower() == "x-storm-signature"), None
     )
     payload_body = event.get("body") or ""
 
-    if not incoming_signature or not payload_body:
+    # Safe debug logs: evaluate presence and length without dumping sensitive content
+    has_signature = bool(incoming_signature)
+    body_length = len(payload_body)
+    print(
+        f"DEBUG: Executing authorizer for resource={method_arn} | Has X-Storm-Signature={has_signature} | Body length={body_length}"
+    )
+
+    if not incoming_signature:
+        print("DENY: Request rejected due to missing X-Storm-Signature header")
         return generate_iam_policy("unauthorized", "Deny", method_arn)
 
     try:
@@ -73,12 +81,15 @@ def lambda_handler(event, context):
             hashlib.sha256,
         ).hexdigest()
 
-        # Prevent timing attacks: hmac.compare_digest compares all characters in equal time regardless of where a mismatch occurs, preventing attackers from guessing the hash.
-        if hmac.compare_digest(incoming_signature, expected_signature):
+        is_valid = hmac.compare_digest(incoming_signature, expected_signature)
+        print(f"DEBUG: Signature verification match={is_valid}")
+
+        if is_valid:
             return generate_iam_policy(principal_id, "Allow", method_arn)
         else:
+            print("DENY: Request rejected due to signature mismatch")
             return generate_iam_policy("unauthorized", "Deny", method_arn)
 
     except Exception as e:
-        print(f"Error executing signature authoriser: {str(e)}")
+        print(f"ERROR: Authorizer execution failed: {type(e).__name__}")
         return generate_iam_policy("unauthorized", "Deny", method_arn)

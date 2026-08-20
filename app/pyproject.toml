@@ -1,15 +1,24 @@
 [project]
 name = "onward-journey"
 version = "0.1.0"
-description = "GOV.UK Onward Journey - AgentCore/Lambda Hybrid Orchestrator"
+description = "GOV.UK Onward Journey backend"
 readme = "README.md"
 requires-python = ">=3.12"
+# Shared packages needed by BOTH Lambdas and the AgentCore runtime (will change when orchestrator lambda removed)
 dependencies = [
     "langchain-aws>=1.2.2",
     "langgraph>=0.2.60",
     "langchain-core>=1.3.3",
-    "pg8000>=1.31.2",
     "langgraph-checkpoint-aws>=1.0.4",
+]
+
+[project.optional-dependencies]
+# Packages needed ONLY by the Lambdas
+lambdas = [
+    "pg8000>=1.31.2",
+]
+# Packages needed ONLY by OJ AgentCore Runtime
+agentcore = [
     "bedrock-agentcore>=1.20.0",
     "mcp-proxy-for-aws>=1.6.4",
     "mcp>=1.29.0",

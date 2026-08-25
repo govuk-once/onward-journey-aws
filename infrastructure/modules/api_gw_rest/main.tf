@@ -93,12 +93,13 @@ resource "aws_lambda_permission" "processor_invoke" {
 # CUSTOM LAMBDA AUTHORIZER
 # -----------------------------------------------------------------------------
 resource "aws_api_gateway_authorizer" "authorizer" {
-  name                   = "${var.environment}-${var.api_name}-authorizer"
-  rest_api_id            = aws_api_gateway_rest_api.api.id
-  authorizer_uri         = var.authorizer_lambda_invoke_arn
-  authorizer_credentials = ""
-  identity_source        = "method.request.header.X-Storm-Signature"
-  type                   = "REQUEST"
+  name                             = "${var.environment}-${var.api_name}-authorizer"
+  rest_api_id                      = aws_api_gateway_rest_api.api.id
+  authorizer_uri                   = var.authorizer_lambda_invoke_arn
+  authorizer_credentials           = ""
+  identity_source                  = "method.request.header.X-Storm-Signature"
+  type                             = "REQUEST"
+  authorizer_result_ttl_in_seconds = 0
 }
 
 resource "aws_lambda_permission" "authorizer_invoke" {

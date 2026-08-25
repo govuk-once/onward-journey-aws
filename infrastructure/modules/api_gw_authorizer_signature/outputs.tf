@@ -1,5 +1,5 @@
 output "invoke_arn" {
-  description = "The Invoke ARN of the Singature Authorizer Lambda"
+  description = "The Invoke ARN of the Signature Authorizer Lambda"
   value       = aws_lambda_function.authorizer.invoke_arn
 }
 

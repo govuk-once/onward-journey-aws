@@ -13,7 +13,7 @@ resource "aws_secretsmanager_secret" "signing_secret" {
 # IAM ROLE & POLICIES
 # -----------------------------------------------------------------------------
 resource "aws_iam_role" "authorizer_role" {
-  name = "${var.environment}-${var.authorizer_name}-authorizer-role"
+  name = "${var.environment}-${var.authorizer_name}-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -30,7 +30,7 @@ resource "aws_iam_role" "authorizer_role" {
 }
 
 resource "aws_iam_policy" "authorizer_policy" {
-  name        = "${var.environment}-${var.authorizer_name}-authorizer-policy"
+  name        = "${var.environment}-${var.authorizer_name}-policy"
   description = "Permissions for Signature Authorizer Lambda to read secrets and write logs"
 
   policy = jsonencode({
@@ -44,11 +44,10 @@ resource "aws_iam_policy" "authorizer_policy" {
       {
         Effect = "Allow"
         Action = [
-          "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = "${aws_cloudwatch_log_group.lambda_logs.arn}:*"
       }
     ]
   })
@@ -69,14 +68,17 @@ data "archive_file" "lambda_zip" {
 }
 
 resource "aws_lambda_function" "authorizer" {
-  function_name = "${var.environment}-${var.authorizer_name}-authorizer"
-  role          = aws_iam_role.authorizer_role.arn
-  handler       = "handler.lambda_handler"
-  runtime       = "python3.12"
-  architectures = ["arm64"]
-
+  function_name    = "${var.environment}-${var.authorizer_name}"
+  role             = aws_iam_role.authorizer_role.arn
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs
+  ]
 
   environment {
     variables = {
@@ -87,6 +89,6 @@ resource "aws_lambda_function" "authorizer" {
 }
 
 resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.authorizer.function_name}"
+  name              = "/aws/lambda/${var.environment}-${var.authorizer_name}"
   retention_in_days = var.log_retention_in_days
 }

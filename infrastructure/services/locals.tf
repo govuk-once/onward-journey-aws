@@ -10,4 +10,14 @@ locals {
     for pipeline in local.raw_pipeline_config.pipelines :
     pipeline.name => pipeline if pipeline.enabled
   }
+
+  eu_inference_regions = [
+    "eu-west-1",    # Ireland
+    "eu-west-2",    # London
+    "eu-west-3",    # Paris
+    "eu-central-1", # Frankfurt
+    "eu-north-1",   # Stockholm
+    "eu-south-1",   # Milan
+    "eu-south-2"    # Spain
+  ]
 }

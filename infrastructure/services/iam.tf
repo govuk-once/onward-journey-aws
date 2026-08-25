@@ -659,6 +659,7 @@ resource "aws_iam_policy" "agentcore_runtime_gateway_invoke" {
         Action = "bedrock-agentcore:InvokeGateway"
         # Explicitly restrict access to only the CRM and RDS paths
         Resource = [
+          "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}",
           "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.rds_search_tool.name}",
           "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.crm_availability.name}",
           "arn:aws:bedrock-agentcore:${var.aws_region}:${var.aws_account_id}:gateway/${aws_bedrockagentcore_gateway.tool_interface.gateway_id}/target/${aws_bedrockagentcore_gateway_target.crm_handoff.name}"
@@ -677,4 +678,50 @@ resource "aws_iam_role_policy_attachment" "agentcore_runtime_gateway_attach" {
 resource "aws_iam_role_policy_attachment" "agentcore_runtime_vpc_attach" {
   role       = aws_iam_role.agentcore_runtime_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Grants the AgentCore Runtime permission to read/write conversation history and invoke Bedrock models
+resource "aws_iam_policy" "agentcore_runtime_memory_and_inference" {
+  name        = "${var.environment}-agentcore-runtime-memory-inference-policy"
+  description = "Allows AgentCore to access memory and invoke Claude strictly within the EU"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "MemoryAccess"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:ListEvents",
+          "bedrock-agentcore:GetEvent",
+          "bedrock-agentcore:PutEvent",
+          "bedrock-agentcore:CreateEvent",
+          "bedrock-agentcore:GetMemory"
+        ]
+        Resource = [
+          aws_bedrockagentcore_memory.agent_chat_context.arn
+        ]
+      },
+      {
+        Sid    = "BedrockModelInvoke"
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = concat(
+          # Dynamically generates strict ARNs for the foundation model in ONLY the allowed EU regions
+          [for region in local.eu_inference_regions : "arn:aws:bedrock:${region}::foundation-model/anthropic.claude-*"],
+
+          # Allows access to the EU geographic inference profile in your source region
+          ["arn:aws:bedrock:${var.aws_region}:${var.aws_account_id}:inference-profile/eu.anthropic.claude-*"]
+        )
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_memory_inference_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = aws_iam_policy.agentcore_runtime_memory_and_inference.arn
 }

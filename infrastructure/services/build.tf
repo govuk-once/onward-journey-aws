@@ -51,9 +51,8 @@ locals {
     echo "Installing external dependencies..."
     cd "$APP_DIR"
 
-    # Export dependencies from uv.lock (excluding dev dependencies)
-    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
-
+    # Export base + lambda dependencies (excluding dev and agentcore)
+    uv export --format requirements-txt --no-dev --extra lambdas -o "$STAGING_DIR/requirements.txt"
     # Install using the exported, locked requirements
     uv pip install \
       --target "$STAGING_DIR/python" \
@@ -130,8 +129,8 @@ locals {
     echo "Installing dependencies for AgentCore..."
     cd "$APP_DIR"
 
-    # Export dependencies from uv.lock (excluding dev dependencies)
-    uv export --format requirements-txt --no-dev -o "$STAGING_DIR/requirements.txt"
+    # Export base + agentcore dependencies (excluding dev and lambdas)
+    uv export --format requirements-txt --no-dev --extra agentcore -o "$STAGING_DIR/requirements.txt"
 
     # Install using the exported requirements
     uv pip install \

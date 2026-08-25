@@ -65,7 +65,7 @@ def build_event():
 
 
 class TestHeaderValidation:
-    """Tests evaluating header verification prior to payload processing."""
+    """Tests evaluating header verification and normalisation prior to payload processing."""
 
     def test_returns_iam_deny_policy_when_signature_header_is_missing(
         self, build_event
@@ -74,6 +74,32 @@ class TestHeaderValidation:
         response = lambda_handler(event, None)
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+
+    @pytest.mark.parametrize(
+        "header_key, transform_signature",
+        [
+            ("x-storm-signature", lambda sig: sig.upper()),  # Uppercase hex
+            (
+                "X-STORM-SIGNATURE",
+                lambda sig: f"  {sig}  ",
+            ),  # Leading/trailing whitespace
+            (
+                "X-Storm-Signature",
+                lambda sig: f"\n\t{sig.upper()}\t",
+            ),  # Newlines, tabs, and uppercase
+        ],
+    )
+    def test_returns_iam_allow_policy_for_unnormalized_signature_headers(
+        self, mock_signing_secret, build_event, header_key, transform_signature
+    ):
+        valid_sig = _calculate_hmac(TEST_SECRET, DEFAULT_SAMPLE_BODY)
+        unnormalized_sig = transform_signature(valid_sig)
+        event = build_event(headers={header_key: unnormalized_sig})
+
+        response = lambda_handler(event, None)
+
+        assert response["policyDocument"]["Statement"][0]["Effect"] == "Allow"
+        assert response["principalId"] == "contentguru-webhook"
 
 
 class TestRawPayloadEvaluation:

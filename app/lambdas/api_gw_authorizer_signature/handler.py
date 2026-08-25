@@ -55,10 +55,12 @@ def lambda_handler(event, context):
     headers = event.get("headers") or {}
     principal_id = os.environ.get("PRINCIPAL_ID", "content-guru-authorizer")
 
-    # Extract signature header (case-insensitive lookup for X-Storm-Signature)
-    incoming_signature = next(
+    # Extract signature header (case-insensitive lookup with whitespace and casing normalization for X-Storm-Signature)
+    raw_signature = next(
         (v for k, v in headers.items() if k.lower() == "x-storm-signature"), None
     )
+    incoming_signature = raw_signature.strip().lower() if raw_signature else None
+
     payload_body = event.get("body") or ""
     is_base64_encoded = event.get("isBase64Encoded", False)
 

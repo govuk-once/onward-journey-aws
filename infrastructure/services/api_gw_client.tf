@@ -25,11 +25,6 @@ module "ws_client_router_lambda" {
   policy_statements = [
     {
       Effect   = "Allow"
-      Action   = ["execute-api:ManageConnections"]
-      Resource = "${module.client_websocket_gateway.execution_arn}/*"
-    },
-    {
-      Effect   = "Allow"
       Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
       Resource = "${aws_bedrockagentcore_agent_runtime.orchestrator_runtime.agent_runtime_arn}*"
     }

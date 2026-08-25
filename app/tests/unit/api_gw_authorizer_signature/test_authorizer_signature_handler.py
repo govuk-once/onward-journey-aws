@@ -1,5 +1,6 @@
-import hmac
+import base64
 import hashlib
+import hmac
 import pytest
 from app.lambdas.api_gw_authorizer_signature.handler import lambda_handler
 
@@ -45,18 +46,38 @@ def mock_signing_secret(mocker, mock_env_vars):
 def build_event():
     """Factory fixture to generate standardised API Gateway authorizer event dicts."""
 
-    def _builder(headers=None, body=DEFAULT_SAMPLE_BODY, method_arn=DEFAULT_METHOD_ARN):
-        return {
+    def _builder(
+        headers=None,
+        body=DEFAULT_SAMPLE_BODY,
+        method_arn=DEFAULT_METHOD_ARN,
+        is_base64_encoded=False,
+    ):
+        event = {
             "headers": headers if headers is not None else {},
             "body": body,
             "methodArn": method_arn,
         }
+        if is_base64_encoded:
+            event["isBase64Encoded"] = True
+        return event
 
     return _builder
 
 
-class TestSignatureAuthorizerPolicyEvaluation:
-    """Tests evaluating signature verification and IAM policy generation."""
+class TestHeaderValidation:
+    """Tests evaluating header verification prior to payload processing."""
+
+    def test_returns_iam_deny_policy_when_signature_header_is_missing(
+        self, build_event
+    ):
+        event = build_event(headers={})
+        response = lambda_handler(event, None)
+
+        assert response["policyDocument"]["Statement"][0]["Effect"] == "Deny"
+
+
+class TestRawPayloadEvaluation:
+    """Tests evaluating signature verification and IAM policy generation over unencoded string bodies."""
 
     def test_returns_iam_allow_policy_and_principal_for_valid_hmac(
         self, mock_signing_secret, build_event
@@ -78,10 +99,40 @@ class TestSignatureAuthorizerPolicyEvaluation:
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Deny"
 
-    def test_returns_iam_deny_policy_when_signature_header_is_missing(
-        self, build_event
+
+class TestBase64PayloadEvaluation:
+    """Tests evaluating signature verification and IAM policy generation over base64-encoded request bodies."""
+
+    def test_returns_iam_allow_policy_and_principal_for_valid_hmac(
+        self, mock_signing_secret, build_event
     ):
-        event = build_event(headers={})
+        raw_body = DEFAULT_SAMPLE_BODY
+        valid_sig = _calculate_hmac(TEST_SECRET, raw_body)
+        base64_body = base64.b64encode(raw_body.encode("utf-8")).decode("utf-8")
+
+        event = build_event(
+            headers={"x-storm-signature": valid_sig},
+            body=base64_body,
+            is_base64_encoded=True,
+        )
+
+        response = lambda_handler(event, None)
+
+        assert response["policyDocument"]["Statement"][0]["Effect"] == "Allow"
+        assert response["principalId"] == "contentguru-webhook"
+
+    def test_returns_iam_deny_policy_for_invalid_hmac_hash(
+        self, mock_signing_secret, build_event
+    ):
+        raw_body = DEFAULT_SAMPLE_BODY
+        base64_body = base64.b64encode(raw_body.encode("utf-8")).decode("utf-8")
+
+        event = build_event(
+            headers={"x-storm-signature": "tampered-hash-value"},
+            body=base64_body,
+            is_base64_encoded=True,
+        )
+
         response = lambda_handler(event, None)
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Deny"

@@ -14,6 +14,7 @@ Based on the verification result, it generates and returns an IAM policy
 import os
 import hmac
 import hashlib
+import base64
 import boto3
 
 # Initialise client outside handler for connection reuse across warm starts
@@ -59,12 +60,13 @@ def lambda_handler(event, context):
         (v for k, v in headers.items() if k.lower() == "x-storm-signature"), None
     )
     payload_body = event.get("body") or ""
+    is_base64_encoded = event.get("isBase64Encoded", False)
 
     # Safe debug logs: evaluate presence and length without dumping sensitive content
     has_signature = bool(incoming_signature)
     body_length = len(payload_body)
     print(
-        f"DEBUG: Executing authorizer for resource={method_arn} | Has X-Storm-Signature={has_signature} | Body length={body_length}"
+        f"DEBUG: Executing authorizer for resource={method_arn} | Has X-Storm-Signature={has_signature} | Body length={body_length} | Base64={is_base64_encoded}"
     )
 
     if not incoming_signature:
@@ -74,10 +76,18 @@ def lambda_handler(event, context):
     try:
         signing_secret = get_signing_secret()
 
-        # Calculate expected HMAC-SHA256 signature hash
+        # Extract raw body bytes based on API Gateway encoding flag
+        if is_base64_encoded:
+            body_bytes = base64.b64decode(payload_body)
+        elif isinstance(payload_body, str):
+            body_bytes = payload_body.encode("utf-8")
+        else:
+            body_bytes = payload_body
+
+        # Calculate expected HMAC-SHA256 signature hash over raw body bytes
         expected_signature = hmac.new(
             signing_secret.encode("utf-8"),
-            payload_body.encode("utf-8"),
+            body_bytes,
             hashlib.sha256,
         ).hexdigest()
 

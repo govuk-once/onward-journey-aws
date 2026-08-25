@@ -119,9 +119,31 @@ resource "aws_api_gateway_deployment" "deployment" {
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.level1.id,
+      # Level 1 Path
+      aws_api_gateway_resource.level1.id,
+      aws_api_gateway_resource.level1.path_part,
+
+      # Level 2 Path (Optional)
       length(aws_api_gateway_resource.level2) > 0 ? aws_api_gateway_resource.level2[0].id : "",
+      length(aws_api_gateway_resource.level2) > 0 ? aws_api_gateway_resource.level2[0].path_part : "",
+
+      # Method & Integration
       aws_api_gateway_method.post_method.id,
+      aws_api_gateway_method.post_method.authorization,
+      aws_api_gateway_method.post_method.authorizer_id,
       aws_api_gateway_integration.post_integration.id,
+      aws_api_gateway_integration.post_integration.uri,
+      aws_api_gateway_integration.post_integration.type,
+
+      # Authorizer
+      aws_api_gateway_authorizer.authorizer.id,
+      aws_api_gateway_authorizer.authorizer.authorizer_uri,
+      aws_api_gateway_authorizer.authorizer.authorizer_result_ttl_in_seconds,
+      aws_api_gateway_authorizer.authorizer.identity_source,
+
+      # Responses
+      aws_api_gateway_method_response.response_200.id,
+      aws_api_gateway_integration_response.integration_response_200.id
     ]))
   }
 

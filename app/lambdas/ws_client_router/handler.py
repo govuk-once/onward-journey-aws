@@ -2,15 +2,16 @@
 WebSocket Client Router Lambda Function.
 
 Handles client connection lifecycles ($connect, $disconnect) and routes incoming
-user messages ($default). Currently dispatches messages and session context to the
-Bedrock AgentCore runtime for AI processing, with future scope to dynamically route
-frames to either AgentCore AI or the CRM live chat queue based on active session state.
+user messages ($default). Dispatches messages and session context to the Bedrock
+AgentCore runtime for AI processing, with future scope to dynamically route frames
+to either AgentCore AI or the CRM live chat queue based on session state.
 """
 
 import json
 import logging
 import os
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -41,6 +42,12 @@ def lambda_handler(event, context):
         return {"statusCode": 200, "body": "Disconnected"}
 
     elif route_key == "$default":
+        if not AGENT_RUNTIME_ARN:
+            logger.error(
+                f"Routing failed for connection={connection_id}: AGENT_RUNTIME_ARN environment variable is missing"
+            )
+            return {"statusCode": 500, "body": "Server configuration error"}
+
         raw_body = event.get("body", "{}")
 
         # Robust body extraction handling both stringified JSON and raw strings
@@ -48,6 +55,9 @@ def lambda_handler(event, context):
             try:
                 body = json.loads(raw_body)
             except json.JSONDecodeError:
+                logger.warning(
+                    f"Non-JSON payload received for connection={connection_id}"
+                )
                 body = {"message": raw_body}
         else:
             body = raw_body or {}
@@ -68,7 +78,8 @@ def lambda_handler(event, context):
             }
 
         logger.info(
-            f"Routing message from connection={connection_id} to AgentCore Runtime ARN={AGENT_RUNTIME_ARN} (length={len(user_message)})"
+            f"Routing message for connection={connection_id} | thread_id={thread_id} | "
+            f"AgentCore Runtime ARN={AGENT_RUNTIME_ARN} | message_length={len(user_message)}"
         )
 
         # Package session context alongside user message for outbound socket pushes & memory isolation
@@ -88,14 +99,34 @@ def lambda_handler(event, context):
                 runtimeSessionId=connection_id,
                 inputText=json.dumps(payload),
             )
-            logger.info(f"Successfully routed payload for connection={connection_id}")
+            logger.info(
+                f"Successfully routed payload for connection={connection_id} | thread_id={thread_id}"
+            )
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "UnknownError")
+            error_msg = e.response.get("Error", {}).get(
+                "Message", "No message provided"
+            )
+            request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+
+            logger.error(
+                f"AWS ClientError invoking AgentCore runtime for connection={connection_id} | "
+                f"Code={error_code} | RequestId={request_id} | Message={error_msg}",
+                exc_info=True,
+            )
+            return {"statusCode": 500, "body": "Failed to route message to AI agent"}
 
         except Exception as e:
             logger.error(
-                f"Error invoking AgentCore runtime: {type(e).__name__} - {str(e)}"
+                f"Unexpected error invoking AgentCore runtime for connection={connection_id}: {type(e).__name__}",
+                exc_info=True,
             )
             return {"statusCode": 500, "body": "Failed to route message to AI agent"}
 
         return {"statusCode": 200, "body": "Message routed"}
 
+    logger.warning(
+        f"Unsupported route received: route={route_key} | ConnectionId={connection_id}"
+    )
     return {"statusCode": 400, "body": "Unsupported route"}

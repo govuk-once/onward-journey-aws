@@ -18,3 +18,15 @@ variable "api_description" {
   type        = string
   default     = "Inbound WebSocket API Gateway for client connections"
 }
+
+variable "throttling_burst_limit" {
+  description = "Maximum peak request rate allowed by API Gateway"
+  type        = number
+  default     = 200
+}
+
+variable "throttling_rate_limit" {
+  description = "Maximum steady-state request rate allowed by API Gateway"
+  type        = number
+  default     = 100
+}

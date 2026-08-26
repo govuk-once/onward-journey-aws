@@ -34,10 +34,13 @@ resource "aws_apigatewayv2_stage" "stage" {
   name        = var.environment
   auto_deploy = true
 
+
   default_route_settings {
     # Disabled to prevent user chat payloads from being saved to CloudWatch.
     # Set to "ERROR" (or "INFO" - risks displaying PII) temporarily for perimeter debugging if API Gateway fails to invoke Lambda.
     logging_level            = "OFF"
     detailed_metrics_enabled = true
+    throttling_burst_limit   = var.throttling_burst_limit
+    throttling_rate_limit    = var.throttling_rate_limit
   }
 }

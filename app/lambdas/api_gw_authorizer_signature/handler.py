@@ -53,7 +53,7 @@ def lambda_handler(event, context):
     """Parse incoming Storm verification payload and compare HMAC-SHA256 signature hash."""
     method_arn = event.get("methodArn", "*")
     headers = event.get("headers") or {}
-    principal_id = os.environ.get("PRINCIPAL_ID", "content-guru-authorizer")
+    principal_id = os.environ.get("PRINCIPAL_ID", "contentguru-authorizer")
 
     # Extract signature header (case-insensitive lookup with whitespace and casing normalization for X-Storm-Signature)
     raw_signature = next(

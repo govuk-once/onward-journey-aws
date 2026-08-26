@@ -4,7 +4,7 @@ variable "environment" {
 }
 
 variable "authorizer_name" {
-  description = "Identifier for the authorizer (e.g., contentguru-webhook)"
+  description = "Identifier for the authorizer (e.g., crm-contentguru-wh)"
   type        = string
 }
 

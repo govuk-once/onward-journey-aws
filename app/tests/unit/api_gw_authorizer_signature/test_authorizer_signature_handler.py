@@ -7,7 +7,7 @@ from app.lambdas.api_gw_authorizer_signature.handler import lambda_handler
 TEST_SECRET = "Mock-secret-key-123"
 DEFAULT_SAMPLE_BODY = '{"event": "chat_message", "text": "Hello World"}'
 DEFAULT_METHOD_ARN = (
-    "arn:aws:execute-api:eu-west-2:12345:api/stage/POST/content-guru/webhook"
+    "arn:aws:execute-api:eu-west-2:12345:api/stage/POST/contentguru/webhook"
 )
 
 
@@ -30,7 +30,7 @@ def clear_handler_cache_before_each_test():
 def mock_env_vars(monkeypatch):
     """Provide default environment variables for Lambda execution."""
     monkeypatch.setenv("SECRET_ARN", "arn:aws:secretsmanager:eu-west-2:123:secret:test")
-    monkeypatch.setenv("PRINCIPAL_ID", "contentguru-webhook")
+    monkeypatch.setenv("PRINCIPAL_ID", "crm-contentguru-wh")
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestHeaderValidation:
         response = lambda_handler(event, None)
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Allow"
-        assert response["principalId"] == "contentguru-webhook"
+        assert response["principalId"] == "crm-contentguru-wh"
 
 
 class TestRawPayloadEvaluation:
@@ -114,7 +114,7 @@ class TestRawPayloadEvaluation:
         response = lambda_handler(event, None)
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Allow"
-        assert response["principalId"] == "contentguru-webhook"
+        assert response["principalId"] == "crm-contentguru-wh"
 
     def test_returns_iam_deny_policy_for_invalid_hmac_hash(
         self, mock_signing_secret, build_event
@@ -145,7 +145,7 @@ class TestBase64PayloadEvaluation:
         response = lambda_handler(event, None)
 
         assert response["policyDocument"]["Statement"][0]["Effect"] == "Allow"
-        assert response["principalId"] == "contentguru-webhook"
+        assert response["principalId"] == "crm-contentguru-wh"
 
     def test_returns_iam_deny_policy_for_invalid_hmac_hash(
         self, mock_signing_secret, build_event

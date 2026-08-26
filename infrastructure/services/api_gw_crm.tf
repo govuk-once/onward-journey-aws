@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # AUTHORISER LAMBDA MODULES
 # -----------------------------------------------------------------------------
-module "contentguru_webhook_authorizer" {
+module "crm_contentguru_wh_authorizer" {
   source                = "../modules/api_gw_authorizer_signature"
   environment           = var.environment
   authorizer_name       = "contentguru-webhook"
@@ -12,7 +12,7 @@ module "contentguru_webhook_authorizer" {
 # -----------------------------------------------------------------------------
 # API GATEWAY REST MODULES
 # -----------------------------------------------------------------------------
-module "contentguru_webhook_gateway" {
+module "crm_contentguru_wh_gateway" {
   source = "../modules/api_gw_rest"
 
   environment     = var.environment
@@ -20,8 +20,8 @@ module "contentguru_webhook_gateway" {
   api_description = "Inbound REST API Gateway for Content Guru Storm webhooks"
   path_parts      = ["contentguru", "webhook"]
 
-  authorizer_lambda_invoke_arn    = module.contentguru_webhook_authorizer.invoke_arn
-  authorizer_lambda_function_name = module.contentguru_webhook_authorizer.function_name
+  authorizer_lambda_invoke_arn    = module.crm_contentguru_wh_authorizer.invoke_arn
+  authorizer_lambda_function_name = module.crm_contentguru_wh_authorizer.function_name
 
   # TODO(JOUR-346): Replace empty string with the real processor Lambda function name and invoke ARN once downstream compute is provisioned
   processor_lambda_function_name = ""
@@ -33,7 +33,7 @@ module "contentguru_webhook_gateway" {
   # TODO(JOUR-299): Recalibrate WAF rate limit threshold prior to production release.
 }
 
-output "contentguru_webhook_url" {
+output "crm_contentguru_wh_url" {
   description = "The target URL to register in Content Guru Storm Integrate (CRM management)"
-  value       = module.contentguru_webhook_gateway.webhook_endpoint_url
+  value       = module.crm_contentguru_wh_gateway.webhook_endpoint_url
 }

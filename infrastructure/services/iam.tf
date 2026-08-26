@@ -549,6 +549,58 @@ resource "aws_iam_policy" "kb_sync_crm_permissions" {
   })
 }
 
+## KB SYNC CLEANUP: IAM ROLE & POLICIES
+resource "aws_iam_role" "kb_sync_cleanup_role" {
+  name = "${var.environment}-kb-sync-cleanup-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach standard VPC execution role (provides ENI creation for VPC and CloudWatch logging)
+resource "aws_iam_role_policy_attachment" "kb_sync_cleanup_vpc_access" {
+  role       = aws_iam_role.kb_sync_cleanup_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Explicitly allow reading the DB password secret
+resource "aws_iam_policy" "kb_sync_cleanup_secrets_policy" {
+  name        = "${var.environment}-kb-sync-cleanup-secrets-policy"
+  description = "Allows KB Sync cleanup lambda to fetch RDS credentials"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kb_sync_cleanup_secrets_attach" {
+  role       = aws_iam_role.kb_sync_cleanup_role.name
+  policy_arn = aws_iam_policy.kb_sync_cleanup_secrets_policy.arn
+}
+
+
+
 resource "aws_iam_role_policy_attachment" "kb_sync_crm_main" {
   role       = aws_iam_role.kb_sync_crm_role.name
   policy_arn = aws_iam_policy.kb_sync_crm_permissions.arn

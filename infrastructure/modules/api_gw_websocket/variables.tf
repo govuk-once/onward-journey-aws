@@ -12,3 +12,9 @@ variable "target_lambda_arn" {
   description = "Invoke ARN of the router Lambda handling WebSocket routes"
   type        = string
 }
+
+variable "api_description" {
+  description = "Description of the WebSocket API Gateway instance"
+  type        = string
+  default     = "Inbound WebSocket API Gateway for client connections"
+}

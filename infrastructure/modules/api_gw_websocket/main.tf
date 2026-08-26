@@ -2,6 +2,7 @@ resource "aws_apigatewayv2_api" "websocket" {
   name                       = "${var.environment}-${var.api_name}-ws-gw"
   protocol_type              = "WEBSOCKET"
   route_selection_expression = "$request.body.action"
+  description                = var.api_description
 }
 
 resource "aws_apigatewayv2_integration" "router" {

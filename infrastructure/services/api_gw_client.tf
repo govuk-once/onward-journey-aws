@@ -1,20 +1,21 @@
 # -----------------------------------------------------------------------------
 # WEBSOCKET API GATEWAY
 # -----------------------------------------------------------------------------
-module "client_websocket_gateway" {
+module "client_ws_gateway" {
   source            = "../modules/api_gw_websocket"
   environment       = var.environment
   api_name          = "client"
-  target_lambda_arn = module.ws_client_router_lambda.invoke_arn
+  target_lambda_arn = module.client_ws_router_lambda.invoke_arn
+  api_description   = "Inbound WebSocket API Gateway for client browser connections"
 }
 
 # -----------------------------------------------------------------------------
 # WEBSOCKET ROUTER LAMBDA
 # -----------------------------------------------------------------------------
-module "ws_client_router_lambda" {
+module "client_ws_router_lambda" {
   source        = "../modules/lambda"
   environment   = var.environment
-  function_name = "ws_client_router"
+  function_name = "client_ws_router"
   timeout       = 29
 
   environment_variables = {
@@ -37,7 +38,7 @@ module "ws_client_router_lambda" {
 resource "aws_lambda_permission" "allow_websocket_invoke" {
   statement_id  = "AllowWebSocketGatewayInvokeClient"
   action        = "lambda:InvokeFunction"
-  function_name = module.ws_client_router_lambda.function_name
+  function_name = module.client_ws_router_lambda.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${module.client_websocket_gateway.execution_arn}/*/*"
+  source_arn    = "${module.client_ws_gateway.execution_arn}/*/*"
 }

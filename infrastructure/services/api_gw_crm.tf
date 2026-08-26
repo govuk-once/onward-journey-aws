@@ -16,7 +16,7 @@ module "crm_contentguru_wh_gateway" {
   source = "../modules/api_gw_rest"
 
   environment     = var.environment
-  api_name        = "crm_contentguru_wh"
+  api_name        = "crm-contentguru-wh"
   api_description = "Inbound REST API Gateway for Content Guru Storm webhooks"
   path_parts      = ["contentguru", "webhook"]
 

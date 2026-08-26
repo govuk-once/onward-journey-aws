@@ -64,9 +64,9 @@ def lambda_handler(event, context):
 
         user_message = body.get("message")
         actor_id = body.get("actor_id")
-        thread_id = body.get("thread_id")
+        thread_id = str(body.get("thread_id", ""))
 
-        # Strict validation: require user_message, actor_id, and thread_id
+        # Validation: require required fields and enforce Bedrock >= 33 char requirement on thread_id
         if not user_message or not actor_id or not thread_id:
             logger.warning(
                 f"Validation failed for connection={connection_id}. "
@@ -75,6 +75,15 @@ def lambda_handler(event, context):
             return {
                 "statusCode": 400,
                 "body": "Missing required payload attributes: 'message', 'actor_id', or 'thread_id'",
+            }
+
+        if len(thread_id) < 33:
+            logger.warning(
+                f"Validation failed for connection={connection_id}: thread_id length ({len(thread_id)}) is under minimum 33 chars"
+            )
+            return {
+                "statusCode": 400,
+                "body": "Invalid 'thread_id': Must be at least 33 characters long (e.g. UUIDv4 string)",
             }
 
         logger.info(
@@ -96,8 +105,10 @@ def lambda_handler(event, context):
             # TODO: Add dynamic session evaluation to determine whether to route payload to AgentCore AI or CRM live chat queue
             AGENTCORE_CLIENT.invoke_agent_runtime(
                 agentRuntimeArn=AGENT_RUNTIME_ARN,
-                runtimeSessionId=connection_id,
-                inputText=json.dumps(payload),
+                runtimeSessionId=thread_id,
+                contentType="application/json",
+                accept="application/json",
+                payload=json.dumps(payload).encode("utf-8"),
             )
             logger.info(
                 f"Successfully routed payload for connection={connection_id} | thread_id={thread_id}"

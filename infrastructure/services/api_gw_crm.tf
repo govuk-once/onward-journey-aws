@@ -4,7 +4,7 @@
 module "crm_contentguru_wh_authorizer" {
   source                = "../modules/api_gw_authorizer_signature"
   environment           = var.environment
-  authorizer_name       = "contentguru-webhook"
+  authorizer_name       = "crm_contentguru_wh"
   lambda_source_dir     = "${path.module}/../../app/lambdas/api_gw_authorizer_signature"
   log_retention_in_days = 14
 }
@@ -16,7 +16,7 @@ module "crm_contentguru_wh_gateway" {
   source = "../modules/api_gw_rest"
 
   environment     = var.environment
-  api_name        = "contentguru-webhook"
+  api_name        = "crm_contentguru_wh"
   api_description = "Inbound REST API Gateway for Content Guru Storm webhooks"
   path_parts      = ["contentguru", "webhook"]
 

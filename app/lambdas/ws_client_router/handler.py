@@ -52,18 +52,33 @@ def lambda_handler(event, context):
         else:
             body = raw_body or {}
 
-        user_message = body.get("message", "")
+        user_message = body.get("message")
+        actor_id = body.get("actor_id")
+        thread_id = body.get("thread_id")
+
+        # Strict validation: require user_message, actor_id, and thread_id
+        if not user_message or not actor_id or not thread_id:
+            logger.warning(
+                f"Validation failed for connection={connection_id}. "
+                f"Missing required fields (message={bool(user_message)}, actor_id={bool(actor_id)}, thread_id={bool(thread_id)})"
+            )
+            return {
+                "statusCode": 400,
+                "body": "Missing required payload attributes: 'message', 'actor_id', or 'thread_id'",
+            }
 
         logger.info(
             f"Routing message from connection={connection_id} to AgentCore Runtime ARN={AGENT_RUNTIME_ARN} (length={len(user_message)})"
         )
 
-        # Package session context alongside user message for outbound socket pushes
+        # Package session context alongside user message for outbound socket pushes & memory isolation
         payload = {
             "message": user_message,
             "connection_id": connection_id,
             "domain_name": domain_name,
             "stage": stage,
+            "actor_id": actor_id,
+            "thread_id": thread_id,
         }
 
         try:

@@ -1,7 +1,11 @@
+locals {
+  source_directory = var.source_dir != "" ? var.source_dir : var.function_name
+}
+
 data "archive_file" "zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../../app/lambdas/${var.function_name}"
-  output_path = "${path.module}/../../../app/lambdas/${var.function_name}.zip"
+  source_dir  = "${path.module}/../../../app/lambdas/${local.source_directory}"
+  output_path = "${path.module}/../../../app/lambdas/${local.source_directory}.zip"
 }
 
 resource "aws_cloudwatch_log_group" "logs" {

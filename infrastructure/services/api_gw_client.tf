@@ -15,7 +15,8 @@ module "client_ws_gateway" {
 module "client_ws_router_lambda" {
   source        = "../modules/lambda"
   environment   = var.environment
-  function_name = "client_ws_router"
+  function_name = "client-ws-router"
+  source_dir    = "client_ws_router"
   timeout       = 29
 
   environment_variables = {

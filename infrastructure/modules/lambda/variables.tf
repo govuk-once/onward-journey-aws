@@ -37,3 +37,9 @@ variable "policy_statements" {
   type        = list(any)
   default     = null
 }
+
+variable "source_dir" {
+  description = "Name of the source directory under app/lambdas/ (defaults to function_name if omitted)"
+  type        = string
+  default     = ""
+}

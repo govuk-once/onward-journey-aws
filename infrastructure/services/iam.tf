@@ -725,3 +725,30 @@ resource "aws_iam_role_policy_attachment" "agentcore_runtime_memory_inference_at
   role       = aws_iam_role.agentcore_runtime_execution_role.name
   policy_arn = aws_iam_policy.agentcore_runtime_memory_and_inference.arn
 }
+
+# Grants AgentCore Runtime permission to post response frames back to active WebSockets
+resource "aws_iam_policy" "agentcore_runtime_api_gw_management" {
+  name        = "${var.environment}-agentcore-runtime-api-gw-policy"
+  description = "Allows AgentCore Runtime Orchestrator to post messages back to WebSocket clients"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "WebSocketPostToConnection"
+        Effect = "Allow"
+        Action = [
+          "execute-api:ManageConnections"
+        ]
+        Resource = [
+          "arn:aws:execute-api:${var.aws_region}:${var.aws_account_id}:*/*/*/@connections/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "agentcore_runtime_api_gw_attach" {
+  role       = aws_iam_role.agentcore_runtime_execution_role.name
+  policy_arn = aws_iam_policy.agentcore_runtime_api_gw_management.arn
+}

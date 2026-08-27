@@ -4,7 +4,7 @@ variable "environment" {
 }
 
 variable "api_name" {
-  description = "Generic identifier for the API Gateway (e.g., contentguru-webhook)"
+  description = "Generic identifier for the API Gateway (e.g., crm-contentguru-wh)"
   type        = string
 }
 

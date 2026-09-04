@@ -8,8 +8,11 @@ remote provider with the last recorded sync timestamp in the local database (RDS
 to determine if an update is necessary.
 """
 
+import os
 import json
 from utils.db import get_db_connection
+
+CONTACTS_TABLE_NAME = os.environ.get("CONTACTS_TABLE_NAME")
 
 def lambda_handler(event, context):
     """
@@ -44,7 +47,7 @@ def lambda_handler(event, context):
         # Verify the KB is still mapped to an active department (seeded via CSV).
         # If the KB ID was removed from the CSV, this prevents ghost syncing.
         mapped_result = conn.run(
-            "SELECT 1 FROM dept_contacts_v3 WHERE knowledge_base_identifier = :id",
+            f"SELECT 1 FROM {CONTACTS_TABLE_NAME} WHERE knowledge_base_identifier = :id",
             id=kb_identifier
         )
         is_mapped = bool(mapped_result)

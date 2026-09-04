@@ -50,6 +50,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
 
   environment {
     variables = {
+      CONTACTS_TABLE_NAME  = local.active_contacts_table
       DB_HOST              = aws_db_instance.dept_contacts_metadata.address
       DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER              = "rds_readonly_dept_contacts"

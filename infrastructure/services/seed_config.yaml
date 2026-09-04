@@ -51,3 +51,27 @@ tables:
         "description",
         "user_type",
       ]
+
+  - name: "dept_contacts_v4"
+    source_file: "mock_rag_data_v4.csv"
+    primary_key: "id"
+    columns:
+      department: "TEXT"
+      service_name: "TEXT"
+      topic: "TEXT"
+      tags: "TEXT"
+      description: "TEXT"
+      user_type: "TEXT"
+      phone_number: "TEXT"
+      live_chat_identifier: "TEXT"
+      knowledge_base_identifier: "TEXT"
+      embedding: "VECTOR(1024)"
+    embedding_source_cols:
+      [
+        "department",
+        "service_name",
+        "topic",
+        "tags",
+        "description",
+        "user_type",
+      ]

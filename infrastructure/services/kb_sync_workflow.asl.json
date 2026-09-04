@@ -48,6 +48,7 @@
         }
       ],
       "ResultSelector": {
+        "is_mapped.$": "$.Payload.is_mapped",
         "sync_required.$": "$.Payload.sync_required",
         "remote_modified_date.$": "$.Payload.remote_modified_date",
         "local_date.$": "$.Payload.local_date",
@@ -61,12 +62,42 @@
       "Type": "Choice",
       "Choices": [
         {
+          "Variable": "$.meta_check.is_mapped",
+          "BooleanEquals": false,
+          "Next": "CleanupUnmappedKB"
+        },
+        {
           "Variable": "$.meta_check.sync_required",
           "BooleanEquals": true,
           "Next": "FetchArticles"
         }
       ],
       "Default": "SyncSkipped"
+    },
+
+    "CleanupUnmappedKB": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${cleanup_unmapped_lambda_arn}",
+        "Payload": {
+          "kb_identifier.$": "$.meta_check.kb_identifier"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "UnmappedKBPurged"
+    },
+
+    "UnmappedKBPurged": {
+      "Type": "Succeed",
+      "Comment": "KB is no longer mapped in the database. All ghost data has been purged."
     },
 
     "SyncSkipped": {

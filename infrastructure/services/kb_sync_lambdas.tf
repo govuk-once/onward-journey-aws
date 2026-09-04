@@ -50,6 +50,7 @@ resource "aws_lambda_function" "kb_sync_check_sync_meta" {
 
   environment {
     variables = {
+      CONTACTS_TABLE_NAME  = local.active_contacts_table
       DB_HOST              = aws_db_instance.dept_contacts_metadata.address
       DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER              = "rds_readonly_dept_contacts"
@@ -159,4 +160,40 @@ resource "aws_lambda_function" "kb_sync_update_sync_meta" {
   }
 
   depends_on = [aws_cloudwatch_log_group.kb_sync_update_sync_meta]
+}
+
+## KB SYNC: CLEANUP UNMAPPED LAMBDA
+resource "aws_cloudwatch_log_group" "kb_sync_cleanup_unmapped" {
+  name              = "/aws/lambda/${var.environment}-kb-sync-cleanup-unmapped"
+  retention_in_days = 14
+}
+
+resource "aws_lambda_function" "kb_sync_cleanup_unmapped" {
+  filename         = data.archive_file.kb_sync_cleanup_unmapped_zip.output_path
+  source_code_hash = data.archive_file.kb_sync_cleanup_unmapped_zip.output_base64sha256
+  function_name    = "${var.environment}-kb-sync-cleanup-unmapped"
+  role             = aws_iam_role.kb_sync_cleanup_role.arn
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.12"
+  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
+  memory_size      = 512
+  timeout          = 30
+  architectures    = ["arm64"]
+
+  vpc_config {
+    subnet_ids         = local.private_subnet_ids
+    security_group_ids = [aws_security_group.kb_sync_sg.id]
+  }
+
+  environment {
+    variables = {
+      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
+      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
+      DB_USER              = aws_db_instance.dept_contacts_metadata.username
+      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.kb_sync_cleanup_unmapped]
 }

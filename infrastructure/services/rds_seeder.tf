@@ -6,6 +6,11 @@ locals {
   # Parse the YAML file into a Terraform object
   seed_config = yamldecode(file("${path.module}/seed_config.yaml"))
 
+  # Dynamically find the active contacts table.
+  # Filter for tables starting with "dept_contacts" and select the last one in the list.
+  contacts_tables       = [for t in local.seed_config.tables : t.name if startswith(t.name, "dept_contacts")]
+  active_contacts_table = local.contacts_tables[length(local.contacts_tables) - 1]
+
   # Dynamically build the trigger map: { "mock_rag_data.csv" = "dept_contacts" }
   data_sources = {
     for table in local.seed_config.tables : table.source_file => table.name

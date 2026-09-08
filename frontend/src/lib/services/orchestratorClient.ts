@@ -1,6 +1,3 @@
-import { AwsClient } from "aws4fetch";
-import { getAwsCredentials } from "./awsCredentials";
-
 export interface OrchestratorMessage {
     text: string;
     isSignal: boolean;
@@ -8,8 +5,9 @@ export interface OrchestratorMessage {
 }
 
 export interface OrchestratorCallbacks {
-    onResponse: (response: string) => Promise<void> | void;
-    onSignal: (signal: string, payload: unknown) => Promise<void> | void;
+    onChunk?: (chunk: string) => void; // Real-time streaming chunks
+    onResponse: (response: string) => Promise<void> | void; // Final accumulated text
+    onSignal: (state: string, payload: unknown) => Promise<void> | void; // CRM Handoffs
     onComplete: () => Promise<void> | void;
     onError: (error: unknown) => void;
 }
@@ -18,8 +16,12 @@ export class OrchestratorClient {
     private url: string;
     private identityPoolId: string;
     private region: string;
+    private ws: WebSocket | null = null;
 
     constructor(url: string, identityPoolId: string, region: string) {
+        // TODO: these parameters are retained so Svelte component instantiation doesn't break.
+        // They will potentially be useful when for Subtask 6 and implementation of
+        // presigned WSS URLs or passing Cognito tokens during the socket connection phase.
         this.url = url;
         this.identityPoolId = identityPoolId;
         this.region = region;
@@ -27,83 +29,90 @@ export class OrchestratorClient {
 
     async sendMessage(message: string, threadId: string, callbacks: OrchestratorCallbacks) {
         try {
-            // Fetch (possibly cached) temporary credentials from Cognito
-            const creds = await getAwsCredentials(this.identityPoolId, this.region);
-
-            // Build a SigV4-signing fetch client for this request
-            const aws = new AwsClient({
-                accessKeyId: creds.accessKeyId,
-                secretAccessKey: creds.secretAccessKey,
-                sessionToken: creds.sessionToken,
-                region: this.region,
-                service: "lambda",
-            });
-
-            const response = await aws.fetch(this.url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ message, thread_id: threadId, actor_id: 'test' })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            // 1. Initialize or reuse WebSocket connection
+            if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+                this.ws = new WebSocket(this.url);
             }
 
-            // Handle JSON responses
-            const contentType = response.headers.get("content-type");
-            if (contentType?.includes("application/json")) {
-                const data = await response.json();
-                console.log(`[OrchestratorClient] Raw JSON response (Thread: ${threadId}):`, data);
-                let responseText = data.response;
+            let fullText = "";
+            let streamTimeout: ReturnType<typeof setTimeout>;
 
-                // Handle stringified body from Lambda Proxy
-                if (!responseText && typeof data.body === "string") {
-                    try {
-                        const parsedBody = JSON.parse(data.body);
-                        responseText = parsedBody.response;
-                    } catch (_e) {
-                        console.error("Failed to parse response body as JSON", _e);
-                    }
-                }
-
-                if (responseText) {
-                    // Extract SIGNAL if present: SIGNAL: signalName {payload}
-                    const signalRegex = /SIGNAL:\s+(\w+)\s+(.*)$/s;
-                    const match = responseText.match(signalRegex);
-
-                    let cleanResponseText = responseText;
-                    let signalData: { name: string; payload: unknown } | null = null;
-
-                    if (match) {
-                        const signalName = match[1];
-                        const signalPayloadStr = match[2];
-                        let signalPayload: unknown = signalPayloadStr;
-
-                        try {
-                            signalPayload = JSON.parse(signalPayloadStr);
-                        } catch {
-                            // If not valid JSON, keep it as a string
-                        }
-
-                        signalData = { name: signalName, payload: signalPayload };
-                        cleanResponseText = responseText.replace(signalRegex, "").trim();
-                    }
-
-                    if (cleanResponseText) {
-                        await callbacks.onResponse(cleanResponseText);
-                    }
-
-                    if (signalData) {
-                        await callbacks.onSignal(signalData.name, signalData.payload);
-                    }
+            // Helper to cleanly finalize a message
+            const finalizeMessage = async () => {
+                if (fullText.trim()) {
+                    await callbacks.onResponse(fullText.trim());
                 }
                 await callbacks.onComplete();
-                return;
-            }
+                fullText = ""; // Reset buffer for the next message
+            };
 
-            throw new Error(`Unexpected response type: ${contentType}. Streaming is not supported.`);
+            // 2. Handle incoming JSON frames
+            this.ws.onmessage = async (event) => {
+                try {
+                    const frame = JSON.parse(event.data);
+
+                    switch (frame.type) {
+                        case "chunk":
+                            // Standard AI typing
+                            fullText += frame.text;
+                            if (callbacks.onChunk) callbacks.onChunk(frame.text);
+                            break;
+
+                        case "state_change":
+                            // Backend signaled a CRM handoff (e.g., state = HUMAN_CHAT)
+                            await callbacks.onSignal(frame.state, frame.payload);
+                            break;
+
+                        case "human_message":
+                            // TODO: when CRM agents reply (human chat)
+                            fullText += frame.text;
+                            if (callbacks.onChunk) callbacks.onChunk(frame.text);
+                            break;
+
+                        case "done":
+                            // AI has finished generating this turn
+                            clearTimeout(streamTimeout);
+                            await finalizeMessage();
+                            break;
+
+                        default:
+                            console.warn("[WebSocket] Unknown frame type received:", frame.type);
+                    }
+                } catch {
+                    console.error("[WebSocket] Failed to parse frame. Raw data:", event.data);
+                }
+
+                // Debounce Timer: Wait 2.5s for silence in case 'done' frame is dropped over the network
+                clearTimeout(streamTimeout);
+                streamTimeout = setTimeout(() => {
+                    finalizeMessage();
+                }, 2500);
+            };
+
+            // 3. Handle connection errors
+            this.ws.onerror = (error) => {
+                console.error("[WebSocket Error]", error);
+                callbacks.onError(error);
+            };
+
+            // 4. Send the user message payload
+            const payload = JSON.stringify({
+                message,
+                thread_id: threadId,
+                actor_id: 'test'
+            });
+
+            // If the socket is still opening, queue the send. Otherwise, send immediately.
+            if (this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.onopen = () => {
+                    console.log("[WebSocket] Connected successfully.");
+                    this.ws!.send(payload);
+                };
+            } else if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(payload);
+            } else {
+                throw new Error("WebSocket is in a closing or closed state.");
+            }
 
         } catch (error) {
             callbacks.onError(error);

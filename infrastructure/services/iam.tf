@@ -741,8 +741,8 @@ resource "aws_iam_policy" "agentcore_runtime_api_gw_management" {
           "execute-api:ManageConnections"
         ]
         Resource = [
-          "arn:aws:execute-api:${var.aws_region}:${var.aws_account_id}:*/*/*/@connections/*"
-        ]
+          # "arn:aws:execute-api:${var.aws_region}:${var.aws_account_id}:*/*/*/@connections/*"
+        "arn:aws:execute-api:*:*:*"]
       }
     ]
   })

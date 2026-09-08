@@ -32,7 +32,7 @@ resource "aws_subnet" "private" {
 
   tags = {
     Name = "app-pvt-2${count.index == 0 ? "a" : "b"}"
-    Tier = "app-private" # # Used by services/network_data.tf to identify targets for Lambda/RDS.
+    Tier = "app-private" # Used by services/network_data.tf to identify targets for Lambda/RDS.
   }
 }
 
@@ -72,6 +72,7 @@ resource "aws_vpc_endpoint_route_table_association" "s3_main" {
   vpc_endpoint_id = aws_vpc_endpoint.s3.id
   route_table_id  = aws_vpc.main.main_route_table_id
 }
+
 # --- SHARED INTERFACE ENDPOINTS ---
 # 4. Security Group for Shared Endpoints
 resource "aws_security_group" "shared_endpoints_sg" {
@@ -112,4 +113,17 @@ resource "aws_vpc_endpoint" "sts" {
   private_dns_enabled = true
 
   tags = { Name = "shared-sts-endpoint" }
+}
+
+# 7. Execute-API Endpoint - required for AgentCore Runtime to push WebSocket responses via API Gateway
+resource "aws_vpc_endpoint" "execute_api" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${data.aws_region.current.id}.execute-api"
+  vpc_endpoint_type = "Interface"
+
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = { Name = "shared-execute-api-endpoint" }
 }

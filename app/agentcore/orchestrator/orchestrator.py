@@ -11,6 +11,7 @@ import os
 import socket
 from typing import Annotated, TypedDict
 import httpx
+import boto3
 
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -22,6 +23,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
 from bedrock_agentcore import BedrockAgentCoreApp
+
+from botocore.config import Config
 
 from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 from mcp import ClientSession
@@ -76,8 +79,7 @@ ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
    - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
    - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
    - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
-   - ANCHORING THE SIGNAL: Once the tool returns a 'SIGNAL' string, you MUST confirm the connection to the user (e.g., "I'm connecting you now...") and then append the exact 'SIGNAL' string to the very end of your response.
-     The signal is a 'Switchboard Trigger' for the frontend system; you must not modify it or add any text after it.
+   - CONFIRMATION: Once the tool returns a 'SIGNAL' string, you MUST confirm the connection to the user (e.g., "I'm connecting you now..."). Do NOT output the 'SIGNAL' string or any JSON in your text response.
 5. DO NOT source information outside of the tools available to you.
 6. IMPORTANT: when providing contact details to the user, you MUST ALWAYS follow these rules:
     - ALWAYS use the exact, official service name provided in the database.
@@ -112,12 +114,6 @@ class State(TypedDict):
     """LangGraph state schema."""
     messages: Annotated[list, add_messages]
 
-llm = ChatBedrockConverse(
-    model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    region_name=AWS_REGION,
-    temperature=0,
-    endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
-)
 
 # --- CUSTOM VPCE TRANSPORT & FACTORY HOOK ---
 class VPCETransport(httpx.AsyncHTTPTransport):
@@ -275,49 +271,62 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
 tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
-llm_with_tools = llm.bind_tools(tools)
 
-async def chatbot(state: State, config: RunnableConfig):
-    """Primary reasoning node for the agent that uses the bound tools."""
-    messages = state["messages"]
+def get_graph_app():
+    """
+    Factory function to compile the LangGraph application.
+    Instantiating ChatBedrockConverse here, ensures fresh IAM/STS
+    credentials on every invocation, preventing ExpiredTokenException.
+    """
+    llm = ChatBedrockConverse(
+        model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        region_name=AWS_REGION,
+        temperature=0,
+        endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
+    )
+    llm_with_tools = llm.bind_tools(tools)
 
-    # Call the model asynchronously with the full, unfiltered state history.
-    response = await llm_with_tools.ainvoke(messages, config)
+    async def chatbot(state: State, config: RunnableConfig):
+        """Primary reasoning node for the agent that uses the bound tools."""
+        messages = state["messages"]
 
-    return {"messages": [response]}
+        # Call the model asynchronously with the full, unfiltered state history.
+        response = await llm_with_tools.ainvoke(messages, config)
 
-# Build the Graph
-workflow = StateGraph(State)
+        return {"messages": [response]}
 
-# 1. Add Nodes
-workflow.add_node("chatbot", chatbot)
-workflow.add_node("execute_tools", ToolNode(tools))
+    # Build the Graph
+    workflow = StateGraph(State)
 
-# 2. Define Flow
-workflow.add_edge(START, "chatbot")
+    # 1. Add Nodes
+    workflow.add_node("chatbot", chatbot)
+    workflow.add_node("execute_tools", ToolNode(tools))
 
-# 3. The LLM Decision Point
-workflow.add_conditional_edges(
-    "chatbot",
-    tools_condition,
-    {
-        "tools": "execute_tools",
-        "__end__": END,
-    },
-)
+    # 2. Define Flow
+    workflow.add_edge(START, "chatbot")
 
-# 4. The Return Loop
-# Every tool result must return to the chatbot to sync conversation state.
-workflow.add_edge("execute_tools", "chatbot")
+    # 3. The LLM Decision Point
+    workflow.add_conditional_edges(
+        "chatbot",
+        tools_condition,
+        {
+            "tools": "execute_tools",
+            "__end__": END,
+        },
+    )
 
-# Initialise AgentCore Memory (The "Checkpointer")
-checkpointer = AgentCoreMemorySaver(
-    memory_id=MEMORY_ID,
-    region_name=AWS_REGION,
-    endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
-)
+    # 4. The Return Loop
+    # Every tool result must return to the chatbot to sync conversation state.
+    workflow.add_edge("execute_tools", "chatbot")
 
-graph_app = workflow.compile(checkpointer=checkpointer)
+    # Initialise AgentCore Memory (The "Checkpointer")
+    checkpointer = AgentCoreMemorySaver(
+        memory_id=MEMORY_ID,
+        region_name=AWS_REGION,
+        endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
+    )
+
+    return workflow.compile(checkpointer=checkpointer)
 
 @app.entrypoint
 async def orchestrator_entrypoint(event):
@@ -356,6 +365,25 @@ async def orchestrator_entrypoint(event):
     # Config for LangGraph state (thread) and AgentCore identity (actor).
     config = {"configurable": {"thread_id": thread_id, "actor_id": actor_id}}
 
+    # Extract WebSocket metadata provided by the Router Lambda
+    connection_id = body.get("connection_id")
+    domain_name = body.get("domain_name")
+    stage = body.get("stage")
+
+   # Initialize the API Gateway Management client for WebSocket pushes
+    apigw_client = None
+    if connection_id and domain_name and stage:
+        endpoint_url = f"https://{domain_name}/{stage}"
+
+        boto_config = Config(connect_timeout=2, read_timeout=2)
+
+        apigw_client = boto3.client(
+            'apigatewaymanagementapi',
+            endpoint_url=endpoint_url,
+            region_name=AWS_REGION,
+            config=boto_config
+        )
+
     # Network Checks
     check_connection(AGENT_RUNTIME_URL, 443)
     check_connection(BEDROCK_RUNTIME_URL, 443)
@@ -373,6 +401,8 @@ async def orchestrator_entrypoint(event):
             ("user", str(user_input))
         ]
     }
+
+    graph_app = get_graph_app()
 
     # Execute the graph asynchronously via LangGraph streaming
     print("Executing LangGraph workflow natively...")
@@ -418,17 +448,65 @@ async def orchestrator_entrypoint(event):
                 logged_message_ids.add(msg_id)
         # -----------------------------------------
 
-        # --- YIELDING LOGIC (For the client stream) ---
-        # Only yield content generated by the 'chatbot' node to the client
+        # --- WEBSOCKET PUSH LOGIC ---
+
+        # 1. Intercept CRM Handoffs Natively
+        if is_tool_result and getattr(chunk, 'name', '') == "crm_live_chat_tools":
+            tool_text = str(chunk.content)
+            if "SIGNAL" in tool_text:
+                handoff_frame = json.dumps({
+                    "type": "state_change",
+                    "state": "HUMAN_CHAT",
+                    "payload": tool_text
+                })
+                if apigw_client and connection_id:
+                    try:
+                        apigw_client.post_to_connection(
+                            ConnectionId=connection_id,
+                            Data=handoff_frame.encode('utf-8')
+                        )
+                    except Exception as e:
+                        print(f"Error pushing handoff frame to WebSocket: {str(e)}")
+                else:
+                    yield handoff_frame
+
+        # 2. Push AI Text as JSON Chunks
         if node == "chatbot" and has_content:
+            tokens_to_send = []
             if isinstance(chunk.content, list):
                 for block in chunk.content:
                     if isinstance(block, dict) and block.get("type") == "text":
-                        # Using yield to send chunks in real-time
-                        yield block.get("text", "")
+                        tokens_to_send.append(block.get("text", ""))
             elif isinstance(chunk.content, str):
-                yield chunk.content
+                tokens_to_send.append(chunk.content)
+
+            for token in tokens_to_send:
+                if token:
+                    chunk_frame = json.dumps({"type": "chunk", "text": token})
+                    if apigw_client and connection_id:
+                        try:
+                            apigw_client.post_to_connection(
+                                ConnectionId=connection_id,
+                                Data=chunk_frame.encode('utf-8')
+                            )
+                        except Exception as e:
+                            print(f"Error pushing chunk to WebSocket: {str(e)}")
+                    else:
+                        yield chunk_frame  # Console fallback
 
     print("Execution finished successfully")
+
+    # --- 3. Push Completion Frame ---
+    done_frame = json.dumps({"type": "done"})
+    if apigw_client and connection_id:
+        try:
+            apigw_client.post_to_connection(
+                ConnectionId=connection_id,
+                Data=done_frame.encode('utf-8')
+            )
+        except Exception as e:
+            print(f"Error pushing done frame to WebSocket: {str(e)}")
+    else:
+        yield done_frame
 
 app.run()

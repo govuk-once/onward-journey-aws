@@ -9,6 +9,7 @@ provider (e.g., Genesys) to determine if a local sync is required.
 import json
 from integrations.factory import ProviderFactory, Capability
 
+
 def lambda_handler(event, context):
     """
     Fetches the remote modification date for a specific Knowledge Base.
@@ -39,7 +40,7 @@ def lambda_handler(event, context):
         return {
             "kb_identifier": kb_identifier,
             "remote_modified_date": remote_date,
-            "platform": provider.config["platform"]
+            "platform": provider.config["platform"],
         }
     except Exception as e:
         print(f"❌ [ERROR] KB Metadata Check Failure: {str(e)}")

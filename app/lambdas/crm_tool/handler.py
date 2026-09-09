@@ -17,6 +17,7 @@ import json
 from integrations.factory import ProviderFactory, Capability
 from integrations.tooling import log_metric
 
+
 def lambda_handler(event, context):
     """
     Entry point for CRM tool requests, routing to the appropriate provider method.

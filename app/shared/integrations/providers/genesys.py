@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from utils.genesys_parser import parse_genesys_blocks
 from integrations.base import BaseCrmProvider
 
+
 class GenesysProvider(BaseCrmProvider):
     """
     Unified Genesys Cloud Provider.
@@ -24,8 +25,8 @@ class GenesysProvider(BaseCrmProvider):
         resp = requests.post(
             auth_url,
             data={"grant_type": "client_credentials"},
-            auth=(self.creds['client_id'], self.creds['client_secret']),
-            timeout=10
+            auth=(self.creds["client_id"], self.creds["client_secret"]),
+            timeout=10,
         )
         resp.raise_for_status()
 
@@ -35,21 +36,18 @@ class GenesysProvider(BaseCrmProvider):
         return self._token
 
     def get_api_url(self, path: str) -> str:
-        region = self.config['api_region']
-        if not path.startswith('/'):
-            path = f'/{path}'
+        region = self.config["api_region"]
+        if not path.startswith("/"):
+            path = f"/{path}"
         return f"https://api.{region}{path}"
 
     def get_auth_url(self) -> str:
-        region = self.config['api_region']
+        region = self.config["api_region"]
         return f"https://login.{region}/oauth/token"
 
     def get_standard_headers(self) -> Dict[str, str]:
         token = self._refresh_oauth_token()
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     # --- KB CAPABILITIES ---
 
@@ -67,7 +65,9 @@ class GenesysProvider(BaseCrmProvider):
         external_kb_id = self.creds.get("external_kb_id")
         articles = []
 
-        url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents")
+        url = self.get_api_url(
+            f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents"
+        )
 
         while url:
             resp = requests.get(url, headers=headers, timeout=10)
@@ -75,19 +75,25 @@ class GenesysProvider(BaseCrmProvider):
             data = resp.json()
 
             for doc in data.get("entities", []):
-                var_url = self.get_api_url(f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents/{doc['id']}/variations")
+                var_url = self.get_api_url(
+                    f"/api/v2/knowledge/knowledgebases/{external_kb_id}/documents/{doc['id']}/variations"
+                )
                 var_resp = requests.get(var_url, headers=headers, timeout=10)
                 var_data = var_resp.json()
 
                 if var_data.get("entities"):
-                    raw_text = parse_genesys_blocks(var_data["entities"][0].get("body", {}).get("blocks", []))
-                    articles.append({
-                        "title": doc["title"],
-                        "content": raw_text,
-                        "kb_identifier": self.identifier,
-                        "external_id": doc["id"],
-                        "external_url": f"https://genesys.cloud/kb/{external_kb_id}/article/{doc['id']}"
-                    })
+                    raw_text = parse_genesys_blocks(
+                        var_data["entities"][0].get("body", {}).get("blocks", [])
+                    )
+                    articles.append(
+                        {
+                            "title": doc["title"],
+                            "content": raw_text,
+                            "kb_identifier": self.identifier,
+                            "external_id": doc["id"],
+                            "external_url": f"https://genesys.cloud/kb/{external_kb_id}/article/{doc['id']}",
+                        }
+                    )
 
             next_uri = data.get("nextUri")
             url = self.get_api_url(next_uri) if next_uri else None
@@ -101,7 +107,7 @@ class GenesysProvider(BaseCrmProvider):
         Performs a three-stage check to verify if a human adviser is available in Genesys.
         """
         headers = self.get_standard_headers()
-        q_id = self.creds.get('queue_id')
+        q_id = self.creds.get("queue_id")
 
         if not q_id:
             return "Live chat is currently unavailable (missing configuration)."
@@ -119,13 +125,18 @@ class GenesysProvider(BaseCrmProvider):
         # We strictly only count IDLE (waiting) and INTERACTING (working) statuses.
         query_url = self.get_api_url("/api/v2/analytics/queues/observations/query")
         query_payload = {
-            "filter": {"type": "and", "predicates": [
-                {"dimension": "queueId", "value": q_id},
-                {"dimension": "mediaType", "value": "message"}
-            ]},
-            "metrics": ["oOnQueueUsers"]
+            "filter": {
+                "type": "and",
+                "predicates": [
+                    {"dimension": "queueId", "value": q_id},
+                    {"dimension": "mediaType", "value": "message"},
+                ],
+            },
+            "metrics": ["oOnQueueUsers"],
         }
-        obs_resp = requests.post(query_url, headers=headers, json=query_payload, timeout=5)
+        obs_resp = requests.post(
+            query_url, headers=headers, json=query_payload, timeout=5
+        )
         obs_results = obs_resp.json().get("results", [{}])
         on_queue = 0
 
@@ -133,7 +144,9 @@ class GenesysProvider(BaseCrmProvider):
         # We sum those who are IDLE (waiting), INTERACTING (busy), or COMMUNICATING (in session).
         if obs_results and "data" in obs_results[0]:
             for entry in obs_results[0]["data"]:
-                if entry.get("metric") == "oOnQueueUsers" and entry.get("qualifier") in ["IDLE", "INTERACTING"]:
+                if entry.get("metric") == "oOnQueueUsers" and entry.get(
+                    "qualifier"
+                ) in ["IDLE", "INTERACTING"]:
                     on_queue += entry.get("stats", {}).get("count", 0)
 
         if on_queue == 0:
@@ -154,8 +167,8 @@ class GenesysProvider(BaseCrmProvider):
         Prepares the connection parameters for the Genesys Web Messenger WebSocket.
         Returns a SIGNAL payload consumed by the Svelte frontend.
         """
-        region = self.config['api_region']
-        deploy_id = self.creds.get('deploy_id')
+        region = self.config["api_region"]
+        deploy_id = self.creds.get("deploy_id")
 
         # --- PHASE 1: PREPARE SESSION PARAMETERS ---
         # Web Messaging identifies sessions using a persistent 'token' (UUID).
@@ -179,21 +192,25 @@ class GenesysProvider(BaseCrmProvider):
             "region": region,
             "summary": event.get("summary", "No summary provided."),
             "reason": event.get("reason", "Standard AI Handoff"),
-            "actor_id": actor_id
+            "actor_id": actor_id,
         }
 
         # Validation: Verify we have the absolute minimum required to connect
         if not deploy_id or not region:
             return {
-                "content": [{
-                    "type": "text",
-                    "text": "SERVICE_ERROR: CRM configuration is incomplete."
-                }]
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "SERVICE_ERROR: CRM configuration is incomplete.",
+                    }
+                ]
             }
 
         return {
-            "content": [{
-                "type": "text",
-                "text": f"SIGNAL: initiate_live_handoff {json.dumps(handoff_config)}"
-            }]
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"SIGNAL: initiate_live_handoff {json.dumps(handoff_config)}",
+                }
+            ]
         }

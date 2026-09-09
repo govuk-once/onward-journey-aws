@@ -6,6 +6,7 @@ Assistant. It implements a StateGraph (via LangGraph) to manage multi-turn
 conversations, persists state using Amazon Bedrock AgentCore, and
 coordinates tool execution through a VPC-signed MCP Gateway.
 """
+
 import json
 import os
 import socket
@@ -36,8 +37,12 @@ SECRETS_ENDPOINT_URL = os.environ.get("SECRETS_ENDPOINT_URL")
 AWS_REGION = "eu-west-2"
 
 # Host header alignment for Private VPC Endpoint SigV4 signature validation
-CANONICAL_HOST = GATEWAY_URL.replace("https://", "").replace("http://", "").split("/")[0]
-VPCE_HOST = GATEWAY_ENDPOINT_URL.replace("https://", "").replace("http://", "").split("/")[0]
+CANONICAL_HOST = (
+    GATEWAY_URL.replace("https://", "").replace("http://", "").split("/")[0]
+)
+VPCE_HOST = (
+    GATEWAY_ENDPOINT_URL.replace("https://", "").replace("http://", "").split("/")[0]
+)
 
 SYSTEM_PROMPT = """You are a specialised GOV.UK Contact Assistant.
 Your primary duty is to provide contact details or policy guidance for specific government departments while filtering out irrelevant search results.
@@ -99,6 +104,7 @@ STRICT FORMATTING RULES:
 
 app = BedrockAgentCoreApp()
 
+
 def check_connection(host, port):
     """Utility to verify VPC endpoint connectivity."""
     try:
@@ -110,7 +116,9 @@ def check_connection(host, port):
 
 class State(TypedDict):
     """LangGraph state schema."""
+
     messages: Annotated[list, add_messages]
+
 
 llm = ChatBedrockConverse(
     model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -119,12 +127,14 @@ llm = ChatBedrockConverse(
     endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
 )
 
+
 # --- CUSTOM VPCE TRANSPORT & FACTORY HOOK ---
 class VPCETransport(httpx.AsyncHTTPTransport):
     """
     Custom HTTP transport that routes TCP traffic physically to the VPC Endpoint IP
     while preserving the canonical Host header required by AWS IAM SigV4.
     """
+
     def __init__(self, vpce_host: str, canonical_host: str, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.vpce_host = vpce_host
@@ -137,6 +147,7 @@ class VPCETransport(httpx.AsyncHTTPTransport):
         request.url = request.url.copy_with(host=self.vpce_host)
         return await super().handle_async_request(request)
 
+
 def create_vpce_mcp_client(**kwargs) -> httpx.AsyncClient:
     """Factory function to inject custom transport into the official MCP SDK."""
     transport = VPCETransport(vpce_host=VPCE_HOST, canonical_host=CANONICAL_HOST)
@@ -146,7 +157,10 @@ def create_vpce_mcp_client(**kwargs) -> httpx.AsyncClient:
         kwargs["timeout"] = httpx.Timeout(300.0)
 
     return httpx.AsyncClient(**kwargs)
+
+
 # --------------------------------------------
+
 
 @tool
 async def query_department_database(query: str, config: RunnableConfig):
@@ -160,7 +174,7 @@ async def query_department_database(query: str, config: RunnableConfig):
         endpoint=GATEWAY_URL.rstrip("/"),
         aws_region=AWS_REGION,
         aws_service="bedrock-agentcore",
-        httpx_client_factory=create_vpce_mcp_client
+        httpx_client_factory=create_vpce_mcp_client,
     )
 
     try:
@@ -168,14 +182,21 @@ async def query_department_database(query: str, config: RunnableConfig):
             async with ClientSession(read, write) as session:
                 await session.initialize()
 
-                response = await session.call_tool(tool_name, arguments={"query": query})
+                response = await session.call_tool(
+                    tool_name, arguments={"query": query}
+                )
 
                 if response.isError:
                     return f"ERROR: Gateway returned error for {tool_name}"
 
-                return response.content[0].text if response.content else "ERROR: No matching records found."
+                return (
+                    response.content[0].text
+                    if response.content
+                    else "ERROR: No matching records found."
+                )
     except Exception as e:
         return f"ERROR: Gateway call failed: {str(e)}"
+
 
 @tool
 async def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig):
@@ -188,7 +209,7 @@ async def query_knowledge_base(query: str, kb_identifier: str, config: RunnableC
         endpoint=GATEWAY_URL.rstrip("/"),
         aws_region=AWS_REGION,
         aws_service="bedrock-agentcore",
-        httpx_client_factory=create_vpce_mcp_client
+        httpx_client_factory=create_vpce_mcp_client,
     )
 
     try:
@@ -196,17 +217,31 @@ async def query_knowledge_base(query: str, kb_identifier: str, config: RunnableC
             async with ClientSession(read, write) as session:
                 await session.initialize()
 
-                response = await session.call_tool(tool_name, arguments={"query": query, "kb_identifier": kb_identifier})
+                response = await session.call_tool(
+                    tool_name,
+                    arguments={"query": query, "kb_identifier": kb_identifier},
+                )
 
                 if response.isError:
                     return f"ERROR: Gateway returned error for {tool_name}"
 
-                return response.content[0].text if response.content else "ERROR: No knowledge base articles found."
+                return (
+                    response.content[0].text
+                    if response.content
+                    else "ERROR: No knowledge base articles found."
+                )
     except Exception as e:
         return f"ERROR: Gateway call failed: {str(e)}"
 
+
 @tool
-async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str, config: RunnableConfig):
+async def crm_live_chat_tools(
+    method: str,
+    live_chat_identifier: str,
+    reason: str,
+    summary: str,
+    config: RunnableConfig,
+):
     """
     Handles CRM interactions (availability and handoff).
     CRITICAL: This tool must ONLY be called if the query could not be resolved by the Knowledge Base lookup phase.
@@ -224,7 +259,7 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
 
     target_map = {
         "check_chat_availability": f"{ENV_PREFIX}-crm-availability",
-        "connect_to_live_chat": f"{ENV_PREFIX}-crm-handoff"
+        "connect_to_live_chat": f"{ENV_PREFIX}-crm-handoff",
     }
 
     target_name = target_map.get(method)
@@ -238,7 +273,7 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
         endpoint=GATEWAY_URL.rstrip("/"),
         aws_region=AWS_REGION,
         aws_service="bedrock-agentcore",
-        httpx_client_factory=create_vpce_mcp_client
+        httpx_client_factory=create_vpce_mcp_client,
     )
 
     try:
@@ -254,28 +289,36 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
                         "reason": reason,
                         "summary": summary,
                         "actor_id": actor_id,
-                        "thread_id": thread_id
-                    }
+                        "thread_id": thread_id,
+                    },
                 )
 
                 if response.isError:
                     print(f"GATEWAY ERROR: {response.content}")
                     return f"ERROR: Gateway rejected call."
 
-                result_text = response.content[0].text if response.content else "ERROR: crm service unavailable."
+                result_text = (
+                    response.content[0].text
+                    if response.content
+                    else "ERROR: crm service unavailable."
+                )
 
                 # --- HANDOFF STATUS LOG ---
                 if method == "connect_to_live_chat" and "SIGNAL" in result_text:
-                    print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | Thread: {thread_id} | Actor: {actor_id}")
+                    print(
+                        f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | Thread: {thread_id} | Actor: {actor_id}"
+                    )
 
                 return result_text
     except Exception as e:
         return f"ERROR: Gateway call failed: {str(e)}"
 
+
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
 tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
+
 
 async def chatbot(state: State, config: RunnableConfig):
     """Primary reasoning node for the agent that uses the bound tools."""
@@ -285,6 +328,7 @@ async def chatbot(state: State, config: RunnableConfig):
     response = await llm_with_tools.ainvoke(messages, config)
 
     return {"messages": [response]}
+
 
 # Build the Graph
 workflow = StateGraph(State)
@@ -318,6 +362,7 @@ checkpointer = AgentCoreMemorySaver(
 )
 
 graph_app = workflow.compile(checkpointer=checkpointer)
+
 
 @app.entrypoint
 async def orchestrator_entrypoint(event):
@@ -368,10 +413,7 @@ async def orchestrator_entrypoint(event):
     print("Connecting to Bedrock AgentCore...")
 
     initial_input = {
-        "messages": [
-            SystemMessage(content=SYSTEM_PROMPT),
-            ("user", str(user_input))
-        ]
+        "messages": [SystemMessage(content=SYSTEM_PROMPT), ("user", str(user_input))]
     }
 
     # Execute the graph asynchronously via LangGraph streaming
@@ -385,17 +427,23 @@ async def orchestrator_entrypoint(event):
     async for chunk, metadata in graph_app.astream(
         initial_input, config, stream_mode="messages"
     ):
-        msg_id = getattr(chunk, 'id', None)
-        node = metadata.get('langgraph_node', 'unknown')
+        msg_id = getattr(chunk, "id", None)
+        node = metadata.get("langgraph_node", "unknown")
         msg_type = type(chunk).__name__
 
         # --- GRAPH STEP LOGS ---
         has_content = bool(chunk.content)
-        has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
+        has_tool_chunks = (
+            hasattr(chunk, "tool_call_chunks") and len(chunk.tool_call_chunks) > 0
+        )
         is_tool_result = isinstance(chunk, ToolMessage)
 
         # Only log if we have actual data to show (content, tool args, or result)
-        if msg_id and msg_id not in logged_message_ids and (has_content or has_tool_chunks or is_tool_result):
+        if (
+            msg_id
+            and msg_id not in logged_message_ids
+            and (has_content or has_tool_chunks or is_tool_result)
+        ):
             display_content = ""
 
             if has_tool_chunks:
@@ -407,14 +455,21 @@ async def orchestrator_entrypoint(event):
                 display_content = f"📥 TOOL RESULT: {str(chunk.content)[:100]}"
             else:
                 # Capture the start of the final text response
-                text = chunk.content[0].get('text', '') if isinstance(chunk.content, list) else chunk.content
+                text = (
+                    chunk.content[0].get("text", "")
+                    if isinstance(chunk.content, list)
+                    else chunk.content
+                )
                 if text:
-                    display_content = str(text)[:100].replace('\n', ' ')
+                    display_content = str(text)[:100].replace("\n", " ")
 
             # Log to CloudWatch exactly once per message ID if useful content extracted
             if display_content:
                 print(f"--- GRAPH STEP | Node: {node} ---", flush=True)
-                print(f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...", flush=True)
+                print(
+                    f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...",
+                    flush=True,
+                )
                 logged_message_ids.add(msg_id)
         # -----------------------------------------
 
@@ -430,5 +485,6 @@ async def orchestrator_entrypoint(event):
                 yield chunk.content
 
     print("Execution finished successfully")
+
 
 app.run()

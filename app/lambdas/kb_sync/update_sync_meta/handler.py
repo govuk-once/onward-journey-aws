@@ -8,6 +8,7 @@ the last modified date (if successful), and any error messages.
 
 from utils.db import get_db_connection
 
+
 def lambda_handler(event, context):
     """
     Updates the sync metadata in the database.
@@ -40,29 +41,39 @@ def lambda_handler(event, context):
         conn.run("BEGIN")
 
         if status == "SUCCESS":
-            conn.run("""
+            conn.run(
+                """
                 INSERT INTO sync_kb_metadata (kb_identifier, last_modified, sync_status, last_sync_error)
                 VALUES (:kb_identifier, :date, :status, NULL)
                 ON CONFLICT (kb_identifier) DO UPDATE SET
                     last_modified = EXCLUDED.last_modified,
                     sync_status = EXCLUDED.sync_status,
                     last_sync_error = NULL;
-            """, kb_identifier=kb_identifier, date=remote_date, status=status)
+            """,
+                kb_identifier=kb_identifier,
+                date=remote_date,
+                status=status,
+            )
         else:
-            conn.run("""
+            conn.run(
+                """
                 INSERT INTO sync_kb_metadata (kb_identifier, sync_status, last_sync_error)
                 VALUES (:kb_identifier, :status, :error)
                 ON CONFLICT (kb_identifier) DO UPDATE SET
                     sync_status = EXCLUDED.sync_status,
                     last_sync_error = EXCLUDED.last_sync_error;
-            """, kb_identifier=kb_identifier, status=status, error=error)
+            """,
+                kb_identifier=kb_identifier,
+                status=status,
+                error=error,
+            )
 
         conn.run("COMMIT")
 
         return {
             "status": "success",
             "kb_identifier": kb_identifier,
-            "sync_status": status
+            "sync_status": status,
         }
 
     except Exception as e:

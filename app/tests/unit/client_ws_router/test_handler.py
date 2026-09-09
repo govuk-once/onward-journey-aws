@@ -33,10 +33,13 @@ def valid_payload():
 @pytest.fixture(autouse=True)
 def mock_env_and_client():
     """Patches environment variables and the global boto3 client across all test classes."""
-    with patch(
-        "app.lambdas.client_ws_router.handler.AGENT_RUNTIME_ARN",
-        "arn:aws:bedrock:eu-west-2:123456789012:runtime/agent-123",
-    ), patch("app.lambdas.client_ws_router.handler.AGENTCORE_CLIENT") as mock_client:
+    with (
+        patch(
+            "app.lambdas.client_ws_router.handler.AGENT_RUNTIME_ARN",
+            "arn:aws:bedrock:eu-west-2:123456789012:runtime/agent-123",
+        ),
+        patch("app.lambdas.client_ws_router.handler.AGENTCORE_CLIENT") as mock_client,
+    ):
         yield mock_client
 
 

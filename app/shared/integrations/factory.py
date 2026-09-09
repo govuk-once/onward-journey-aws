@@ -3,10 +3,12 @@ from utils.config import CRM_CONFIG_MAP
 from integrations.base import BaseCrmProvider
 from integrations.providers.genesys import GenesysProvider
 
+
 class Capability(Enum):
     CHAT_AVAILABILITY = auto()
     KB_SYNC_META = auto()
     KB_FETCH = auto()
+
 
 class ProviderFactory:
     @staticmethod
@@ -23,4 +25,6 @@ class ProviderFactory:
         if platform == "genesys":
             return GenesysProvider(identifier, config)
         # Additional platforms added here
-        raise ValueError(f"Unsupported platform '{platform}' for identifier: {identifier}")
+        raise ValueError(
+            f"Unsupported platform '{platform}' for identifier: {identifier}"
+        )

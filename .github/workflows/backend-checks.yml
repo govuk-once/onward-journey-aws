@@ -1,0 +1,21 @@
+name: Backend Checks
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/backend-checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - ".github/workflows/backend-checks.yml"
+
+jobs:
+  lint-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4

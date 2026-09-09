@@ -17,6 +17,7 @@ import json
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
+
 def lambda_handler(event, context):
     """
     Entry point for RDS search tool requests, routing to the appropriate search method.
@@ -38,7 +39,7 @@ def lambda_handler(event, context):
 
     # 1. Extract the Tool Name from the Gateway Context
     custom_context = {}
-    if hasattr(context, 'client_context') and context.client_context:
+    if hasattr(context, "client_context") and context.client_context:
         custom_context = context.client_context.custom or {}
 
     full_method = custom_context.get("bedrockAgentCoreToolName", "")
@@ -59,7 +60,7 @@ def lambda_handler(event, context):
         modelId="amazon.titan-embed-text-v2:0",
         body=embed_body,
         contentType="application/json",
-        accept="application/json"
+        accept="application/json",
     )
     embedding = json.loads(embed_resp["body"].read())["embedding"]
 
@@ -84,8 +85,7 @@ def lambda_handler(event, context):
                 embed=str(embedding),
             )
             formatted_results = [
-                {"title": r[0], "content": r[1], "url": r[2]}
-                for r in results
+                {"title": r[0], "content": r[1], "url": r[2]} for r in results
             ]
         else:
             # Default to Contact Search
@@ -103,7 +103,7 @@ def lambda_handler(event, context):
                     "phone": r[1],
                     "live_chat_identifier": r[2],
                     "knowledge_base_identifier": r[3],
-                    "info": r[4]
+                    "info": r[4],
                 }
                 for r in results
             ]

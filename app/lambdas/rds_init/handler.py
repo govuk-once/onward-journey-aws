@@ -11,6 +11,7 @@ import json
 import os
 from utils.db import get_db_connection
 
+
 def lambda_handler(event, context):
     """
     Orchestrates the RDS setup process.
@@ -39,14 +40,20 @@ def lambda_handler(event, context):
             $$;
         """)
         conn.run("GRANT rds_iam TO rds_readonly_dept_contacts;")
-        conn.run("GRANT CONNECT ON DATABASE gov_dept_contacts TO rds_readonly_dept_contacts;")
+        conn.run(
+            "GRANT CONNECT ON DATABASE gov_dept_contacts TO rds_readonly_dept_contacts;"
+        )
         conn.run("GRANT USAGE ON SCHEMA public TO rds_readonly_dept_contacts;")
-        conn.run("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO rds_readonly_dept_contacts;")
-        conn.run("GRANT SELECT ON ALL TABLES IN SCHEMA public TO rds_readonly_dept_contacts;")
+        conn.run(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO rds_readonly_dept_contacts;"
+        )
+        conn.run(
+            "GRANT SELECT ON ALL TABLES IN SCHEMA public TO rds_readonly_dept_contacts;"
+        )
 
         # --- PHASE 2: EXTENSIONS ---
         print("Ensuring pgvector extension is available...")
-         # This is performed outside the transaction to prevent parallel race conditions
+        # This is performed outside the transaction to prevent parallel race conditions
         # (duplicate key errors) when multiple Lambdas trigger simultaneously.
         conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
 
@@ -59,10 +66,16 @@ def lambda_handler(event, context):
             col_parts = []
 
             # Check if ANY column definition already contains "PRIMARY KEY" (case-insensitive)
-            has_explicit_pk = any("PRIMARY KEY" in str(dtype).upper() for dtype in columns.values())
+            has_explicit_pk = any(
+                "PRIMARY KEY" in str(dtype).upper() for dtype in columns.values()
+            )
 
             # Only auto-inject the default 'id' if there isn't already an explicit primary key
-            if not has_explicit_pk and table_conf.get("primary_key", "id") == "id" and "id" not in columns:
+            if (
+                not has_explicit_pk
+                and table_conf.get("primary_key", "id") == "id"
+                and "id" not in columns
+            ):
                 col_parts.append("id SERIAL PRIMARY KEY")
 
             for name, dtype in columns.items():
@@ -71,19 +84,26 @@ def lambda_handler(event, context):
             col_definitions = ", ".join(col_parts)
 
             print(f"Initialising table (if not exists): {target_table}")
-            conn.run(f'CREATE TABLE IF NOT EXISTS "{target_table}" ({col_definitions});')
+            conn.run(
+                f'CREATE TABLE IF NOT EXISTS "{target_table}" ({col_definitions});'
+            )
 
             # Ensure all columns exist
             for col_name, col_type in columns.items():
                 print(f"Ensuring column exists: {target_table}.{col_name}")
-                conn.run(f'ALTER TABLE "{target_table}" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};')
+                conn.run(
+                    f'ALTER TABLE "{target_table}" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'
+                )
 
             # Explicitly grant select on the newly created table
             conn.run(f'GRANT SELECT ON "{target_table}" TO rds_readonly_dept_contacts;')
 
         conn.run("COMMIT")
         print("RDS initialisation complete.")
-        return {"status": "success", "message": "RDS setup and IAM user provisioning complete."}
+        return {
+            "status": "success",
+            "message": "RDS setup and IAM user provisioning complete.",
+        }
 
     except Exception as e:
         if conn:

@@ -14,22 +14,19 @@ import boto3
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
+
 def get_embedding(bedrock_client, text):
     """
     Invokes the Amazon Titan Text Embeddings v2 model via Bedrock.
     Returns a 1024-dimension numerical vector for the provided text.
     """
-    body = json.dumps({
-        "inputText": text,
-        "dimensions": 1024,
-        "normalize": True
-    })
+    body = json.dumps({"inputText": text, "dimensions": 1024, "normalize": True})
 
     response = bedrock_client.invoke_model(
         body=body,
         modelId="amazon.titan-embed-text-v2:0",
         contentType="application/json",
-        accept="application/json"
+        accept="application/json",
     )
     return json.loads(response.get("body").read())["embedding"]
 
@@ -57,7 +54,9 @@ def lambda_handler(event, context):
     target_table = event.get("table_name")
 
     if not target_table or not target_file:
-        raise Exception("Missing mandatory 'table_name' or 'file_name' in event payload.")
+        raise Exception(
+            "Missing mandatory 'table_name' or 'file_name' in event payload."
+        )
 
     # Load the master configuration provided by Terraform as a JSON string
     db_config_raw = os.environ.get("DB_CONFIG")
@@ -123,7 +122,8 @@ def lambda_handler(event, context):
             # 'embedding' is excluded here as it is calculated via Bedrock below
             params = {
                 name: (row.get(name) if row.get(name) != "" else None)
-                for name in columns.keys() if name != "embedding"
+                for name in columns.keys()
+                if name != "embedding"
             }
 
             # Semantic Embedding Logic
@@ -136,11 +136,13 @@ def lambda_handler(event, context):
                 try:
                     # Invoke Bedrock to generate a 1024-dimension vector
                     vector = get_embedding(bedrock, text_to_embed)
-                     # pgvector explicitly requires square brackets [val1, val2, ...] -
-                     # Do not pass the raw Python list, as standard Postgres arrays use {} and will crash
+                    # pgvector explicitly requires square brackets [val1, val2, ...] -
+                    # Do not pass the raw Python list, as standard Postgres arrays use {} and will crash
                     params["emb"] = "[" + ",".join(map(str, vector)) + "]"
                 except Exception as e:
-                    print(f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}")
+                    print(
+                        f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}"
+                    )
                     continue
 
             # Build Dynamic INSERT statement based on the active parameter map
@@ -158,8 +160,14 @@ def lambda_handler(event, context):
 
         # Commit all successfully processed rows
         conn.run("COMMIT")
-        print(f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}")
-        return {"status": "success", "table": target_table, "rows_processed": rows_processed}
+        print(
+            f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}"
+        )
+        return {
+            "status": "success",
+            "table": target_table,
+            "rows_processed": rows_processed,
+        }
 
     except Exception as e:
         # Roll back the transaction if any row or embedding call fails

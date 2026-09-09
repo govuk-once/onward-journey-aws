@@ -21,5 +21,5 @@ CRM_CONFIG_MAP = {
         "platform": "genesys",
         "secret_path": "crm-creds/dvla-genesys",
         "api_region": "euw2.pure.cloud",
-    }
+    },
 }

@@ -188,9 +188,9 @@ def test_knowledge_base_resolution(mock_gateway, llm_judges):
     logger.info(f"AGENT RESPONSE:\n{actual_response}\n")
 
     # 3. Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 3
-    ), f"Expected 3 calls, got {mock_gateway.call_count}"
+    assert mock_gateway.call_count == 3, (
+        f"Expected 3 calls, got {mock_gateway.call_count}"
+    )
 
     init_call = mock_gateway.call_args_list[0][0][0]
     db_call = mock_gateway.call_args_list[1][0][0]
@@ -203,9 +203,9 @@ def test_knowledge_base_resolution(mock_gateway, llm_judges):
 
     # 4. Assert RULE ADHERENCE
     assert "kb-passports" not in actual_response, "Agent leaked internal ID"
-    assert (
-        "knowledge base" not in actual_response.lower()
-    ), "Agent used banned internal terminology"
+    assert "knowledge base" not in actual_response.lower(), (
+        "Agent used banned internal terminology"
+    )
 
     # 5. Assert OUTPUT QUALITY (DeepEval LLM Judge)
     test_case = LLMTestCase(
@@ -275,9 +275,9 @@ def test_kb_failure_routes_to_crm(mock_gateway, llm_judges):
     # --- Turn 1 Assertions ---
 
     # 1.1 Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 4
-    ), "Expected 4 calls, got {mock_gateway.call_count}"
+    assert mock_gateway.call_count == 4, (
+        "Expected 4 calls, got {mock_gateway.call_count}"
+    )
 
     db_call_payload = mock_gateway.call_args_list[1][0][0]
     kb_call_payload = mock_gateway.call_args_list[2][0][0]
@@ -327,16 +327,16 @@ def test_kb_failure_routes_to_crm(mock_gateway, llm_judges):
     # --- Turn 2 Assertions ---
 
     # 2.1 Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 5
-    ), "Expected 5th call for connect to live chat tool, got got {mock_gateway.call_count} calls"
+    assert mock_gateway.call_count == 5, (
+        "Expected 5th call for connect to live chat tool, got got {mock_gateway.call_count} calls"
+    )
     handoff_call_payload = mock_gateway.call_args_list[4][0][0]
     assert "connect_to_live_chat" in handoff_call_payload["params"]["name"]
 
     # 2.2. Assert ACTION SIGNAL
-    assert (
-        "SIGNAL: initiate_live_handoff" in actual_response_2
-    ), "Agent failed to emit the routing signal"
+    assert "SIGNAL: initiate_live_handoff" in actual_response_2, (
+        "Agent failed to emit the routing signal"
+    )
 
     # 2.3. Assert Turn 2 QUALITY
     test_case_2 = LLMTestCase(
@@ -405,9 +405,9 @@ def test_kb_not_relevant_routes_to_crm_live_chat(mock_gateway, llm_judges):
     # --- Turn 1 Assertions ---
 
     # 1.1 Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 4
-    ), "Expected 4 calls, got {mock_gateway.call_count}"
+    assert mock_gateway.call_count == 4, (
+        "Expected 4 calls, got {mock_gateway.call_count}"
+    )
 
     db_call_payload = mock_gateway.call_args_list[1][0][0]
     kb_call_payload = mock_gateway.call_args_list[2][0][0]
@@ -458,16 +458,16 @@ def test_kb_not_relevant_routes_to_crm_live_chat(mock_gateway, llm_judges):
     # --- Turn 2 Assertions ---
 
     # 2.1 Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 5
-    ), "Expected 5th call for connect to live chat tool, got got {mock_gateway.call_count} calls"
+    assert mock_gateway.call_count == 5, (
+        "Expected 5th call for connect to live chat tool, got got {mock_gateway.call_count} calls"
+    )
     handoff_call_payload = mock_gateway.call_args_list[4][0][0]
     assert "connect_to_live_chat" in handoff_call_payload["params"]["name"]
 
     # 2.2. Assert ACTION SIGNAL
-    assert (
-        "SIGNAL: initiate_live_handoff" in actual_response_2
-    ), "Agent failed to emit the routing signal"
+    assert "SIGNAL: initiate_live_handoff" in actual_response_2, (
+        "Agent failed to emit the routing signal"
+    )
 
     # 2.3. Assert Turn 2 QUALITY
     test_case_2 = LLMTestCase(
@@ -527,9 +527,9 @@ def test_kb_not_relevant_routes_to_crm_no_live_chat(mock_gateway, llm_judges):
     logger.info(f"AGENT RESPONSE:\n{actual_response}\n")
 
     # 3 Assert VISIBILITY (Agent trajectory)
-    assert (
-        mock_gateway.call_count == 4
-    ), "Expected 4 calls, got {mock_gateway.call_count}"
+    assert mock_gateway.call_count == 4, (
+        "Expected 4 calls, got {mock_gateway.call_count}"
+    )
 
     db_call_payload = mock_gateway.call_args_list[1][0][0]
     kb_call_payload = mock_gateway.call_args_list[2][0][0]

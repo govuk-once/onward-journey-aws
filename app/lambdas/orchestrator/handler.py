@@ -126,6 +126,7 @@ custom_config = Config(
     retries={"max_attempts": 0},
 )
 
+
 # Internal helper for signed MCP Gateway calls
 def signed_gateway_post(payload):
     """Helper to sign and send requests to the VPC endpoint."""
@@ -145,6 +146,7 @@ def signed_gateway_post(payload):
         vpc_destination, data=req.data, headers=dict(req.headers), timeout=30
     )
 
+
 @tool
 def query_department_database(query: str, config: RunnableConfig):
     """Queries the gov department database for contact details and to retrieve the 'knowledge_base_identifier'.
@@ -152,10 +154,21 @@ def query_department_database(query: str, config: RunnableConfig):
     CRITICAL: Execute this tool completely silently. Do NOT stream any conversational text before or after calling this.
     """
     # STEP 1: MCP Handshake
-    signed_gateway_post({
-        "jsonrpc": "2.0", "id": "init-1", "method": "initialize",
-        "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "onward-journey-orchestrator", "version": "1.0.0"}},
-    })
+    signed_gateway_post(
+        {
+            "jsonrpc": "2.0",
+            "id": "init-1",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "onward-journey-orchestrator",
+                    "version": "1.0.0",
+                },
+            },
+        }
+    )
 
     # STEP 2: The Call
     # Construct the tool name dynamically using the Environment Prefix
@@ -175,6 +188,7 @@ def query_department_database(query: str, config: RunnableConfig):
     result_data = response.json()
     content = result_data.get("result", {}).get("content", [])
     return content[0]["text"] if content else "ERROR: No matching records found."
+
 
 @tool
 def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig):
@@ -200,8 +214,15 @@ def query_knowledge_base(query: str, kb_identifier: str, config: RunnableConfig)
     content = result_data.get("result", {}).get("content", [])
     return content[0]["text"] if content else "ERROR: No knowledge base articles found."
 
+
 @tool
-def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, summary: str, config: RunnableConfig):
+def crm_live_chat_tools(
+    method: str,
+    live_chat_identifier: str,
+    reason: str,
+    summary: str,
+    config: RunnableConfig,
+):
     """
     Handles CRM interactions (availability and handoff).
     CRITICAL: This tool must ONLY be called if the query could not be resolved by the Knowledge Base lookup phase.
@@ -215,14 +236,13 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
     - 'connect_to_live_chat': Use this ONLY after the user agrees to connect.
     """
 
-
     actor_id = config["configurable"].get("actor_id")
     thread_id = config["configurable"].get("thread_id")
 
     # Map the method to the specific Gateway Target name defined in Terraform
     target_map = {
         "check_chat_availability": f"{ENV_PREFIX}-crm-availability",
-        "connect_to_live_chat": f"{ENV_PREFIX}-crm-handoff"
+        "connect_to_live_chat": f"{ENV_PREFIX}-crm-handoff",
     }
 
     target_name = target_map.get(method)
@@ -242,7 +262,7 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
                 "reason": reason,
                 "summary": summary,
                 "actor_id": actor_id,
-                "thread_id": thread_id
+                "thread_id": thread_id,
             },
         },
     }
@@ -259,7 +279,9 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
 
     # --- HANDOFF STATUS LOG ---
     if method == "connect_to_live_chat" and "SIGNAL" in result_text:
-        print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | ID: {call_payload['id']}")
+        print(
+            f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | ID: {call_payload['id']}"
+        )
 
     return content[0]["text"] if content else "ERROR: crm service unavailable."
 
@@ -269,15 +291,16 @@ def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: str, sum
 tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
 llm_with_tools = llm.bind_tools(tools)
 
+
 def chatbot(state: State, config: RunnableConfig):
     """Primary reasoning node for the agent that uses the bound tools."""
     messages = state["messages"]
-
 
     # Call the model with the full, unfiltered state history.
     response = llm_with_tools.invoke(messages, config)
 
     return {"messages": [response]}
+
 
 # Build the Graph
 workflow = StateGraph(State)
@@ -376,7 +399,7 @@ def lambda_handler(event, context):
         initial_input = {
             "messages": [
                 SystemMessage(content=SYSTEM_PROMPT),
-                ("user", str(user_input))
+                ("user", str(user_input)),
             ]
         }
 
@@ -386,18 +409,24 @@ def lambda_handler(event, context):
         for chunk, metadata in app.stream(
             initial_input, config, stream_mode="messages"
         ):
-            msg_id = getattr(chunk, 'id', None)
-            node = metadata.get('langgraph_node', 'unknown')
+            msg_id = getattr(chunk, "id", None)
+            node = metadata.get("langgraph_node", "unknown")
 
             # --- DEBUG LOGGING LOGIC ---
             # Check if this chunk contains the actual payload we want to log
             has_content = bool(chunk.content)
             # IMPORTANT: For tool calls in streams, 'tool_call_chunks' is often used instead of 'tool_calls'
-            has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
+            has_tool_chunks = (
+                hasattr(chunk, "tool_call_chunks") and len(chunk.tool_call_chunks) > 0
+            )
             is_tool_result = isinstance(chunk, ToolMessage)
 
             # Only log if we have actual data to show (content, tool args, or result)
-            if msg_id and msg_id not in logged_message_ids and (has_content or has_tool_chunks or is_tool_result):
+            if (
+                msg_id
+                and msg_id not in logged_message_ids
+                and (has_content or has_tool_chunks or is_tool_result)
+            ):
                 msg_type = type(chunk).__name__
 
                 if has_tool_chunks:
@@ -408,13 +437,20 @@ def lambda_handler(event, context):
                     display_content = f"📥 TOOL RESULT: {str(chunk.content)[:100]}"
                 else:
                     # Capture the start of the final response
-                    text = chunk.content[0].get('text', '') if isinstance(chunk.content, list) else chunk.content
-                    display_content = str(text)[:100].replace('\n', ' ')
+                    text = (
+                        chunk.content[0].get("text", "")
+                        if isinstance(chunk.content, list)
+                        else chunk.content
+                    )
+                    display_content = str(text)[:100].replace("\n", " ")
 
                 # Only mark as 'logged' if we actually found data, otherwise wait for next chunk of same ID
                 if display_content:
                     print(f"--- GRAPH STEP | Node: {node} ---", flush=True)
-                    print(f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...", flush=True)
+                    print(
+                        f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...",
+                        flush=True,
+                    )
                     logged_message_ids.add(msg_id)
 
             # --- YIELDING LOGIC (For the actual response stream) ---

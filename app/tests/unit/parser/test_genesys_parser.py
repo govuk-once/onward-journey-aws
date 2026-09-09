@@ -5,7 +5,6 @@ from shared.utils.genesys_parser import parse_genesys_blocks
 
 
 class TestGenesysParser(unittest.TestCase):
-
     def test_01_inline_punctuation_spacing(self):
         """Tests that inline text nodes don't get phantom spaces around punctuation."""
         payload = [

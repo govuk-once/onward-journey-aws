@@ -9,6 +9,7 @@ It retrieves all relevant articles from the configured remote KB provider
 import json
 from integrations.factory import ProviderFactory, Capability
 
+
 def lambda_handler(event, context):
     """
     Fetches articles from the remote Knowledge Base provider.
@@ -34,9 +35,7 @@ def lambda_handler(event, context):
         articles = provider.fetch_articles()
 
         print(f"KB {kb_identifier}: Fetched {len(articles)} articles.")
-        return {
-            "articles": articles
-        }
+        return {"articles": articles}
     except Exception as e:
         print(f"❌ [ERROR] KB Article Fetch Failure: {str(e)}")
         raise

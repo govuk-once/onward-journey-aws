@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 
+
 def parse_genesys_blocks(blocks: List[Dict[str, Any]], is_inline: bool = False) -> str:
     """
     Recursively extracts text from Genesys Knowledge Base blocks.
@@ -21,11 +22,13 @@ def parse_genesys_blocks(blocks: List[Dict[str, Any]], is_inline: bool = False) 
 
             # Preserve hyperlinks and shift any accidental spaces outside the Markdown brackets
             if url and content.strip():
-                leading_space = content[:len(content) - len(content.lstrip())]
-                trailing_space = content[len(content.rstrip()):]
+                leading_space = content[: len(content) - len(content.lstrip())]
+                trailing_space = content[len(content.rstrip()) :]
                 clean_text = content.strip()
 
-                text_parts.append(f"{leading_space}[{clean_text}]({url}){trailing_space}")
+                text_parts.append(
+                    f"{leading_space}[{clean_text}]({url}){trailing_space}"
+                )
             else:
                 text_parts.append(content)
 
@@ -33,7 +36,9 @@ def parse_genesys_blocks(blocks: List[Dict[str, Any]], is_inline: bool = False) 
         elif b_type == "Paragraph" and "paragraph" in block:
             container = block["paragraph"]
             if "blocks" in container:
-                text_parts.append(parse_genesys_blocks(container["blocks"], is_inline=True))
+                text_parts.append(
+                    parse_genesys_blocks(container["blocks"], is_inline=True)
+                )
 
         # 3. LISTS (Block)
         elif b_type in ["UnorderedList", "OrderedList"] and "list" in block:
@@ -64,7 +69,9 @@ def parse_genesys_blocks(blocks: List[Dict[str, Any]], is_inline: bool = False) 
             if "properties" in table_data and "caption" in table_data["properties"]:
                 caption_blocks = table_data["properties"]["caption"].get("blocks", [])
                 if caption_blocks:
-                    table_string_parts.append(parse_genesys_blocks(caption_blocks, is_inline=True))
+                    table_string_parts.append(
+                        parse_genesys_blocks(caption_blocks, is_inline=True)
+                    )
 
             # Handle Rows natively so they don't get broken by global double-newlines
             if "rows" in table_data:

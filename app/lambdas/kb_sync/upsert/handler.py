@@ -11,22 +11,20 @@ import json
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
 
+
 def get_embedding(bedrock_client, text):
     """
     Generates a vector embedding for the provided text using Amazon Bedrock.
     """
-    body = json.dumps({
-        "inputText": text,
-        "dimensions": 1024,
-        "normalize": True
-    })
+    body = json.dumps({"inputText": text, "dimensions": 1024, "normalize": True})
     response = bedrock_client.invoke_model(
         body=body,
         modelId="amazon.titan-embed-text-v2:0",
         contentType="application/json",
-        accept="application/json"
+        accept="application/json",
     )
     return json.loads(response.get("body").read())["embedding"]
+
 
 def lambda_handler(event, context):
     """
@@ -64,7 +62,8 @@ def lambda_handler(event, context):
         # --- LOAD: Atomic Upsert ---
         conn.run("BEGIN")
 
-        conn.run("""
+        conn.run(
+            """
             INSERT INTO knowledge_base_articles (external_id, title, content, kb_identifier, external_url, embedding)
             VALUES (:eid, :title, :content, :kb_identifier, :url, :emb::vector)
             ON CONFLICT (external_id) DO UPDATE SET
@@ -73,15 +72,20 @@ def lambda_handler(event, context):
                 embedding = EXCLUDED.embedding,
                 kb_identifier = EXCLUDED.kb_identifier;
         """,
-        eid=art["external_id"], title=art["title"], content=art["content"],
-        kb_identifier=kb_identifier, url=art["external_url"], emb=vector_str)
+            eid=art["external_id"],
+            title=art["title"],
+            content=art["content"],
+            kb_identifier=kb_identifier,
+            url=art["external_url"],
+            emb=vector_str,
+        )
 
         conn.run("COMMIT")
 
         return {
             "status": "success",
             "external_id": art["external_id"],
-            "kb_identifier": kb_identifier
+            "kb_identifier": kb_identifier,
         }
 
     except Exception as e:

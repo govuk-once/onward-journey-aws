@@ -37,6 +37,7 @@ dev = [
     "botocore",
     "pytest-mock>=3.15.1",
     "ruff>=0.16.6",
+    "ty>=0.0.79",
 ]
 
 [tool.pytest.ini_options]

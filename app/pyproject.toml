@@ -52,3 +52,16 @@ log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
 log_cli_date_format = "%H:%M:%S"
 pythonpath = ["..", "."]
+
+[tool.ty.environment]
+root = ["..", ".", "shared", "lambdas", "agentcore"]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+    "pg8000",
+    "pg8000.native",
+    "bedrock_agentcore",
+    "mcp_proxy_for_aws",
+    "mcp_proxy_for_aws.client",
+    "mcp",
+]

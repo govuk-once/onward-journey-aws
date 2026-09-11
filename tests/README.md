@@ -26,7 +26,7 @@ bash tests/test_integration.sh
 
 The script will:
 * Extract your environment name from your Terraform vars.
-* Invoke your specific Orchestrator Lambda (e.g. sw2-orchestrator).
+* Invoke your specific Orchestrator Lambda (e.g. <env>-orchestrator).
 * Save the full AI response to tests/response.json.
 
 ---

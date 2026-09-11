@@ -26,7 +26,7 @@ def valid_payload():
         "action": "sendMessage",
         "message": "Hello AI",
         "actor_id": "user-789",
-        "thread_id": "thread-001",
+        "thread_id": "12345678-1234-1234-1234-123456789012",  # Meets 33+ char minimum
     }
 
 
@@ -109,16 +109,16 @@ class TestAgentCoreRouting:
         mock_env_and_client.invoke_agent_runtime.assert_called_once()
         call_kwargs = mock_env_and_client.invoke_agent_runtime.call_args.kwargs
 
-        assert call_kwargs["runtimeSessionId"] == "conn-12345"
+        assert call_kwargs["runtimeSessionId"] == "12345678-1234-1234-1234-123456789012"
         assert (
             call_kwargs["agentRuntimeArn"]
             == "arn:aws:bedrock:eu-west-2:123456789012:runtime/agent-123"
         )
 
-        sent_payload = json.loads(call_kwargs["inputText"])
+        sent_payload = json.loads(call_kwargs["payload"])
         assert sent_payload["message"] == "Hello AI"
         assert sent_payload["actor_id"] == "user-789"
-        assert sent_payload["thread_id"] == "thread-001"
+        assert sent_payload["thread_id"] == "12345678-1234-1234-1234-123456789012"
         assert sent_payload["connection_id"] == "conn-12345"
 
     def test_dict_body_routes_successfully(

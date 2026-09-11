@@ -283,7 +283,17 @@ data "archive_file" "kb_sync_update_sync_meta_zip" {
   }
 }
 
-# 10. RDS INIT
+# 10. KB SYNC: CLEANUP UNMAPPED
+data "archive_file" "kb_sync_cleanup_unmapped_zip" {
+  type        = "zip"
+  output_path = "${path.module}/../../dist/kb_sync_cleanup_unmapped_payload.zip"
+  source {
+    content  = file("${path.module}/../../app/lambdas/kb_sync/cleanup_unmapped/handler.py")
+    filename = "handler.py"
+  }
+}
+
+# 11. RDS INIT
 data "archive_file" "rds_init_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/rds_init_payload.zip"

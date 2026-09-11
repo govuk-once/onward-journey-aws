@@ -13,9 +13,12 @@ Supported Methods:
       articles within a department's knowledge base.
 """
 
+import os
 import json
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
+
+CONTACTS_TABLE_NAME = os.environ.get("CONTACTS_TABLE_NAME")
 
 def lambda_handler(event, context):
     """
@@ -90,9 +93,9 @@ def lambda_handler(event, context):
         else:
             # Default to Contact Search
             results = conn.run(
-                """
+                f"""
                 SELECT service_name, phone_number, live_chat_identifier, knowledge_base_identifier, description
-                FROM dept_contacts_v3
+                FROM {CONTACTS_TABLE_NAME}
                 ORDER BY embedding <=> :embed::vector LIMIT 3
                 """,
                 embed=str(embedding),

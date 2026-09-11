@@ -34,6 +34,7 @@ resource "aws_secretsmanager_secret" "ho_genesys_credentials" {
 }
 
 # The placeholder structure for manual population in Console via CLI for safety
+# Home Office CRM Secret (HO Genesys sandbox)
 resource "aws_secretsmanager_secret_version" "ho_crm_val" {
   secret_id = aws_secretsmanager_secret.ho_genesys_credentials.id
   secret_string = jsonencode({
@@ -66,32 +67,6 @@ resource "aws_secretsmanager_secret_version" "dvla_storm_val" {
     api_key    = "REPLACE_IN_CONSOLE"
     account_id = "REPLACE_IN_CONSOLE"
     base_url   = "REPLACE_IN_CONSOLE"
-  })
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
-}
-
-# HMP CRM Secret (HO Genesys sandbox)
-resource "aws_secretsmanager_secret" "hmp_genesys_credentials" {
-  name        = "${var.environment}/crm-creds/hmp-genesys"
-  description = "OAuth credentials for the HMP Genesys Cloud instance"
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# The placeholder structure for manual population in Console via CLI for safety
-resource "aws_secretsmanager_secret_version" "hmp_crm_val" {
-  secret_id = aws_secretsmanager_secret.hmp_genesys_credentials.id
-  secret_string = jsonencode({
-    client_id      = "REPLACE_IN_CONSOLE"
-    client_secret  = "REPLACE_IN_CONSOLE"
-    org_id         = "REPLACE_IN_CONSOLE"
-    external_kb_id = "REPLACE_IN_CONSOLE"
-    queue_id       = "REPLACE IN CONSOLE"
-    deploy_id      = "REPLACE IN CONSOLE"
   })
   lifecycle {
     ignore_changes = [secret_string]

@@ -38,7 +38,8 @@ resource "aws_iam_policy" "sfn_kb_sync_policy" {
           aws_lambda_function.kb_sync_check_sync_meta.arn,
           aws_lambda_function.kb_sync_fetch_articles.arn,
           aws_lambda_function.kb_sync_upsert.arn,
-          aws_lambda_function.kb_sync_update_sync_meta.arn
+          aws_lambda_function.kb_sync_update_sync_meta.arn,
+          aws_lambda_function.kb_sync_cleanup_unmapped.arn
         ]
       },
       {
@@ -85,6 +86,7 @@ resource "aws_sfn_state_machine" "kb_sync_machine" {
     fetch_articles_lambda_arn   = aws_lambda_function.kb_sync_fetch_articles.arn
     upsert_lambda_arn           = aws_lambda_function.kb_sync_upsert.arn
     update_sync_meta_lambda_arn = aws_lambda_function.kb_sync_update_sync_meta.arn
+    cleanup_unmapped_lambda_arn = aws_lambda_function.kb_sync_cleanup_unmapped.arn
   })
 
   logging_configuration {

@@ -46,12 +46,12 @@ The Orchestrator requires three key fields to manage state:
 ## Example Scenarios
 
 ### 1. The Initial Discovery (RAG and Availability)
-Use this to test if the AI can find the DVLA or Home Office in the database and check if they are "Online."
+Use this to test if the AI can find the Home Office in the database and check if they are "Online."
 
 **test_event.json**
 ```json
 {
-  "message": "What are the contact details for the Department for renewing my driving licence?",
+  "message": "What are the contact details for the Department for applying for a study visa?",
   "thread_id": "test-session-v89",
   "actor_id": "test-user-089"
 }

@@ -118,14 +118,14 @@ terraform apply -replace='terraform_data.rds_init_trigger'
 
 #### Manual Knowledge Base sync
 
-The Knowledge Bases may require manual syncing after applying terraform - to check if this is the case, go to the `rds-tool` lambda in AWS console and run a test command for each `kb_identifier` (`hmp-track-001`, `dvla-renew-003`, `ho-visa-005`), for example:
+The Knowledge Bases may require manual syncing after applying terraform - to check if this is the case, go to the `rds-tool` lambda in AWS console and run a test command for each `kb_identifier` (currently `ho-visa-005`), for example:
 
 ```
 {
   "method": "query_knowledge_base",
   "arguments": {
     "query": "how do i track my personal travel document application?",
-    "kb_identifier": "hmp-track-001"
+    "kb_identifier": "ho-visa-005"
   }
 }
 ```
@@ -138,15 +138,14 @@ The query should be successful, but check the details - if the result content on
   ```
 
 2: Manually run the sync pipeline
-  Go to step functions in AWS console and select the `kb-sync-machine` prefixed with your initials. Click start execution and run the following:
+  Go to step functions in AWS console and select the `kb-sync-machine` prefixed with your initials. Click start execution and run the following for each `kb_identifier`, i.e.:
   ```
   {
-    "kb_identifier": "hmp-track-001",
+    "kb_identifier": "ho-visa-005",
     "platform": "genesys",
     "sync_type": "scheduled"
   }
   ```
-  You will need to run this an additional two times, replacing the `kb_identifier` with `dvla-renew-003` and `ho-visa-005` respectively.
 
   Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
 

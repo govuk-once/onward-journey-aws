@@ -96,12 +96,17 @@ resource "aws_cloudwatch_metric_alarm" "kb_sync_lambda_errors" {
 
 # ============== Step Function ======================================
 
+resource "aws_cloudwatch_log_group" "step_function" {
+  name              = "/aws/vendedlogs/states/${local.sync_machine}"
+  retention_in_days = 14
+}
+
 resource "aws_cloudwatch_log_metric_filter" "step_function_errors" {
   name    = "${var.environment}-step-function-error-filter"
   pattern = "?ERROR ?Error ?error ?Exception ?exception ?Fail ?fail"
 
-  # Link the filter to the auto-created log groups for each function
-  log_group_name = "/aws/vendedlogs/states/${local.sync_machine}"
+  # Link the filter to the explicitly managed log group resource
+  log_group_name = aws_cloudwatch_log_group.step_function.name
 
   # use the filter to increment a metric
   metric_transformation {

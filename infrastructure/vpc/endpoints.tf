@@ -8,7 +8,7 @@ data "aws_region" "current" {}
 # --- S3 GATEWAY ENDPOINT ---
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.id}.s3"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
   vpc_endpoint_type = "Gateway"
 
   tags = {
@@ -45,10 +45,9 @@ resource "aws_security_group" "shared_endpoints_sg" {
 # CloudWatch Logs Endpoint - required for telemetry and error logging from private compute
 resource "aws_vpc_endpoint" "logs" {
   vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.id}.logs"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.logs"
   vpc_endpoint_type = "Interface"
 
-  # Dynamically fetches the IDs of the two private subnets
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
   private_dns_enabled = true
@@ -56,13 +55,12 @@ resource "aws_vpc_endpoint" "logs" {
   tags = { Name = "shared-logs-endpoint" }
 }
 
-# STS Endpoint - required for boto3 and AgentCore Runtime credential resolution
+# Security Token Service (STS) Endpoint - required for boto3 and AgentCore Runtime credential resolution
 resource "aws_vpc_endpoint" "sts" {
   vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.id}.sts"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.sts"
   vpc_endpoint_type = "Interface"
 
-  # Dynamically fetches the IDs of the two private subnets
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
   private_dns_enabled = true

@@ -18,9 +18,13 @@ module "authorizer_lambda" {
   function_name = "${var.authorizer_name}-authorizer"
   source_dir    = "api_gw_authorizer_signature"
 
+  subnet_ids         = var.subnet_ids
+  security_group_ids = var.security_group_ids
+
   environment_variables = {
-    SECRET_ARN   = aws_secretsmanager_secret.signing_secret.arn
-    PRINCIPAL_ID = var.authorizer_name
+    SECRET_ARN                   = aws_secretsmanager_secret.signing_secret.arn
+    PRINCIPAL_ID                 = var.authorizer_name
+    SECRETS_MANAGER_ENDPOINT_URL = var.secretsmanager_endpoint_url
   }
 
   policy_statements = [

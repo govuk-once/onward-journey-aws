@@ -111,6 +111,18 @@ resource "aws_security_group" "kb_sync_sg" {
   }
 }
 
+# CONTENT GURU AUTHORISER SECURITY GROUP
+# Group for the Content Guru webhook authoriser Lambda.
+resource "aws_security_group" "crm_contentguru_wh_authorizer" {
+  name        = "${var.environment}-crm-contentguru-wh-authorizer-sg"
+  description = "Security group for Content Guru webhook authoriser Lambda"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name = "${var.environment}-crm-contentguru-wh-authorizer-sg"
+  }
+}
+
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
@@ -198,6 +210,15 @@ resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_endpoints" {
   referenced_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
+resource "aws_vpc_security_group_ingress_rule" "allow_crm_authorizer_to_secrets_manager" {
+  description                  = "Allow Content Guru authoriser to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.crm_contentguru_wh_authorizer.id
+}
+
 # ======================= EGRESS RULES (INTERNAL) ===========================================
 
 resource "aws_vpc_security_group_egress_rule" "allow_rds_init_to_rds" {
@@ -279,6 +300,15 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
   description                  = "Allow outbound traffic from KB Sync Lambdas to Bedrock"
   security_group_id            = aws_security_group.kb_sync_sg.id
   referenced_security_group_id = aws_security_group.bedrock.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_crm_authorizer_to_secrets_manager" {
+  description                  = "Allow outbound traffic from Content Guru authoriser to Secrets Manager"
+  security_group_id            = aws_security_group.crm_contentguru_wh_authorizer.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443

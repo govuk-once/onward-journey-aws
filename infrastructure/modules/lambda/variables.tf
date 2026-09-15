@@ -43,3 +43,15 @@ variable "source_dir" {
   type        = string
   default     = ""
 }
+
+variable "subnet_ids" {
+  description = "List of subnet IDs for VPC deployment"
+  type        = list(string)
+  default     = []
+}
+
+variable "security_group_ids" {
+  description = "List of security group IDs for VPC deployment"
+  type        = list(string)
+  default     = []
+}

@@ -483,7 +483,9 @@ async def orchestrator_entrypoint(event):
 
     # Print the final complete response text to CloudWatch
     if final_response_text:
-        print(f"🤖 FINAL AI RESPONSE: {final_response_text.strip()}")
+        # Replace newlines with spaces for the CloudWatch log
+        clean_log_text = final_response_text.strip().replace('\n', ' ')
+        print(f"🤖 FINAL AI RESPONSE: {clean_log_text}")
 
     print("Execution finished successfully")
 

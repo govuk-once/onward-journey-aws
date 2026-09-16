@@ -1,0 +1,32 @@
+name: App Unit Tests
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/app-unit-tests.yml"
+  push:
+    branches:
+      - automate-unit-tests
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        working-directory: app
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: app
+        run: uv sync --frozen
+
+      - name: Run unit tests
+        working-directory: app
+        run: uv run pytest

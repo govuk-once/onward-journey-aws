@@ -2,9 +2,8 @@ name: App Unit Tests
 
 on:
   pull_request:
-    paths:
-      - "app/**"
-      - ".github/workflows/app-unit-tests.yml"
+    branches:
+      - main
   push:
     branches:
       - automate-unit-tests

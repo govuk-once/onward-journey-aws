@@ -100,7 +100,7 @@ describe("OrchestratorClient (WebSocket)", () => {
             return ws;
         });
 
-        // Re-attach the static constants so the client's if-statements still work!
+        // Re-attach the static constants so the client's if-statements still work
         Object.assign(mockWsConstructor, {
             CONNECTING: 0,
             OPEN: 1,

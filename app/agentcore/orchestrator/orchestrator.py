@@ -9,6 +9,7 @@ coordinates tool execution through a VPC-signed MCP Gateway.
 import json
 import os
 import socket
+import asyncio
 from typing import Annotated, TypedDict
 import httpx
 import boto3
@@ -79,7 +80,7 @@ ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
    - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
    - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
    - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
-   - CONFIRMATION: Once the tool returns a 'SIGNAL' string, you MUST confirm the connection to the user (e.g., "I'm connecting you now..."). Do NOT output the 'SIGNAL' string or any JSON in your text response.
+   - CONFIRMATION: Once the tool returns a successful connection, you MUST confirm the connection to the user (e.g., "I'm connecting you now...").
 5. DO NOT source information outside of the tools available to you.
 6. IMPORTANT: when providing contact details to the user, you MUST ALWAYS follow these rules:
     - ALWAYS use the exact, official service name provided in the database.
@@ -261,7 +262,8 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
                 result_text = response.content[0].text if response.content else "ERROR: crm service unavailable."
 
                 # --- HANDOFF STATUS LOG ---
-                if method == "connect_to_live_chat" and "SIGNAL" in result_text:
+                # TODO: refine this when headless handoff work complete
+                if method == "connect_to_live_chat" and not result_text.startswith("ERROR"):
                     print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | Thread: {thread_id} | Actor: {actor_id}")
 
                 return result_text
@@ -290,10 +292,19 @@ def get_graph_app():
         """Primary reasoning node for the agent that uses the bound tools."""
         messages = state["messages"]
 
-        # Call the model asynchronously with the full, unfiltered state history.
-        response = await llm_with_tools.ainvoke(messages, config)
+        # 1. Force Bedrock to use the streaming API by calling astream instead of ainvoke
+        full_response = None
 
-        return {"messages": [response]}
+        # 2. Iterate through the token chunks as they arrive from AWS
+        async for chunk in llm_with_tools.astream(messages, config):
+            if full_response is None:
+                full_response = chunk
+            else:
+                # Accumulate the chunks into a single message for the graph state
+                full_response += chunk
+
+        # 3. Return the fully accumulated message to sync the conversation state
+        return {"messages": [full_response]}
 
     # Build the Graph
     workflow = StateGraph(State)
@@ -375,7 +386,12 @@ async def orchestrator_entrypoint(event):
     if connection_id and domain_name and stage:
         endpoint_url = f"https://{domain_name}/{stage}"
 
-        boto_config = Config(connect_timeout=2, read_timeout=2)
+        # Widen the connection pool to 100 to allow concurrent token threads
+        boto_config = Config(
+            connect_timeout=2,
+            read_timeout=2,
+            max_pool_connections=100
+        )
 
         apigw_client = boto3.client(
             'apigatewaymanagementapi',
@@ -404,73 +420,42 @@ async def orchestrator_entrypoint(event):
 
     graph_app = get_graph_app()
 
-    # Execute the graph asynchronously via LangGraph streaming
     print("Executing LangGraph workflow natively...")
     print("⚡ Starting streaming execution...")
 
-    # Tracker: ensure each fully-formed message only printed once in CloudWatch
-    logged_message_ids = set()
+    background_tasks = set()
+    logged_tool_ids = set()
+    final_response_text = ""
+
+    def fire_and_forget_push(client, conn_id, data):
+        """Synchronous wrapper to execute the boto3 call."""
+        try:
+            client.post_to_connection(ConnectionId=conn_id, Data=data)
+        except Exception as e:
+            print(f"Error pushing to WebSocket: {str(e)}")
 
     # Use astream with stream_mode="messages" to get real-time tokens
     async for chunk, metadata in graph_app.astream(
         initial_input, config, stream_mode="messages"
     ):
-        msg_id = getattr(chunk, 'id', None)
         node = metadata.get('langgraph_node', 'unknown')
-        msg_type = type(chunk).__name__
+        msg_id = getattr(chunk, 'id', None)
 
-        # --- GRAPH STEP LOGS ---
         has_content = bool(chunk.content)
         has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
         is_tool_result = isinstance(chunk, ToolMessage)
 
-        # Only log if we have actual data to show (content, tool args, or result)
-        if msg_id and msg_id not in logged_message_ids and (has_content or has_tool_chunks or is_tool_result):
-            display_content = ""
-
+        # --- LOG TOOL CALLS ---
+        # Log tool calls/results - only print once per ID
+        if msg_id and msg_id not in logged_tool_ids:
             if has_tool_chunks:
-                # Extract info from the tool chunk
-                t_chunk = chunk.tool_call_chunks[0]
-                display_content = f"🛠️ TOOL CALL: {t_chunk.get('name')}"
+                print(f"🛠️ TOOL CALL: {chunk.tool_call_chunks[0].get('name')}", flush=True)
+                logged_tool_ids.add(msg_id)
             elif is_tool_result:
-                # Extract the tool result
-                display_content = f"📥 TOOL RESULT: {str(chunk.content)[:100]}"
-            else:
-                # Capture the start of the final text response
-                text = chunk.content[0].get('text', '') if isinstance(chunk.content, list) else chunk.content
-                if text:
-                    display_content = str(text)[:100].replace('\n', ' ')
+                print(f"📥 TOOL RESULT: {str(chunk.content)[:200]}...", flush=True)
+                logged_tool_ids.add(msg_id)
 
-            # Log to CloudWatch exactly once per message ID if useful content extracted
-            if display_content:
-                print(f"--- GRAPH STEP | Node: {node} ---", flush=True)
-                print(f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...", flush=True)
-                logged_message_ids.add(msg_id)
-        # -----------------------------------------
-
-        # --- WEBSOCKET PUSH LOGIC ---
-
-        # 1. Intercept CRM Handoffs Natively
-        if is_tool_result and getattr(chunk, 'name', '') == "crm_live_chat_tools":
-            tool_text = str(chunk.content)
-            if "SIGNAL" in tool_text:
-                handoff_frame = json.dumps({
-                    "type": "state_change",
-                    "state": "HUMAN_CHAT",
-                    "payload": tool_text
-                })
-                if apigw_client and connection_id:
-                    try:
-                        apigw_client.post_to_connection(
-                            ConnectionId=connection_id,
-                            Data=handoff_frame.encode('utf-8')
-                        )
-                    except Exception as e:
-                        print(f"Error pushing handoff frame to WebSocket: {str(e)}")
-                else:
-                    yield handoff_frame
-
-        # 2. Push AI Text as JSON Chunks
+        # --- WEBSOCKET TEXT PUSH LOGIC & ACCUMULATION ---
         if node == "chatbot" and has_content:
             tokens_to_send = []
             if isinstance(chunk.content, list):
@@ -482,30 +467,34 @@ async def orchestrator_entrypoint(event):
 
             for token in tokens_to_send:
                 if token:
+                    final_response_text += token
                     chunk_frame = json.dumps({"type": "chunk", "text": token})
                     if apigw_client and connection_id:
-                        try:
-                            apigw_client.post_to_connection(
-                                ConnectionId=connection_id,
-                                Data=chunk_frame.encode('utf-8')
-                            )
-                        except Exception as e:
-                            print(f"Error pushing chunk to WebSocket: {str(e)}")
+                        # Queue the network call instantly without blocking the Bedrock stream
+                        task = asyncio.create_task(asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, chunk_frame.encode('utf-8')))
+                        background_tasks.add(task)
+                        task.add_done_callback(background_tasks.discard)
                     else:
                         yield chunk_frame  # Console fallback
 
+    # Wait for all background pushes to clear the queue before closing the connection
+    if background_tasks:
+        await asyncio.gather(*background_tasks)
+
+    # Print the final complete response text to CloudWatch
+    if final_response_text:
+        print(f"🤖 FINAL AI RESPONSE: {final_response_text.strip()}")
+
     print("Execution finished successfully")
 
-    # --- 3. Push Completion Frame ---
+    # --- Push Completion Frame ---
     done_frame = json.dumps({"type": "done"})
     if apigw_client and connection_id:
+        # Await the final frame safely before the Lambda process exits
         try:
-            apigw_client.post_to_connection(
-                ConnectionId=connection_id,
-                Data=done_frame.encode('utf-8')
-            )
+            await asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, done_frame.encode('utf-8'))
         except Exception as e:
-            print(f"Error pushing done frame to WebSocket: {str(e)}")
+            print(f"Error pushing done frame: {str(e)}")
     else:
         yield done_frame
 

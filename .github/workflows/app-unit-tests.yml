@@ -17,9 +17,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup python
         uses: astral-sh/setup-uv@v5
-        working-directory: app
         with:
           python-version: '3.12'
 

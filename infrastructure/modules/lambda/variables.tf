@@ -55,3 +55,9 @@ variable "security_group_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "reserved_concurrent_executions" {
+  description = "Execution concurrency cap. Set a specific value to protect backend systems from runaway scaling, or null to let the function scale freely using shared AWS account capacity."
+  type        = number
+  default     = null
+}

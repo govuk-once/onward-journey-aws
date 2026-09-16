@@ -60,14 +60,15 @@ resource "aws_iam_role_policy_attachment" "attach" {
 }
 
 resource "aws_lambda_function" "function" {
-  filename         = data.archive_file.zip.output_path
-  source_code_hash = data.archive_file.zip.output_base64sha256
-  function_name    = "${var.environment}-${var.function_name}"
-  role             = aws_iam_role.role.arn
-  handler          = var.handler
-  runtime          = "python3.12"
-  architectures    = ["arm64"]
-  timeout          = var.timeout
+  filename                       = data.archive_file.zip.output_path
+  source_code_hash               = data.archive_file.zip.output_base64sha256
+  function_name                  = "${var.environment}-${var.function_name}"
+  role                           = aws_iam_role.role.arn
+  handler                        = var.handler
+  runtime                        = "python3.12"
+  architectures                  = ["arm64"]
+  timeout                        = var.timeout
+  reserved_concurrent_executions = var.reserved_concurrent_executions
 
   dynamic "vpc_config" {
     for_each = length(var.subnet_ids) > 0 ? [1] : []

@@ -102,7 +102,6 @@ describe("GenesysClient", () => {
 
       expect(sessionResponseHandler).toHaveBeenCalledTimes(1);
       expect(sessionResponseHandler).toHaveBeenCalledWith(sessionResponseBody);
-      expect(true).toBe(false); // testing workflow, remove afterwards
     });
 
     it("should call message handler when receiving StructuredMessage", () => {

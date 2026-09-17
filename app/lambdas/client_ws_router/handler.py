@@ -35,8 +35,7 @@ def lambda_handler(event, context):
 
     if route_key == "$connect":
         logger.info(f"Client connected: {connection_id}")
-        # return {"statusCode": 200, "body": "Connected"}
-        return {"statusCode": 200, "body": "banana"}
+        return {"statusCode": 200, "body": "Connected"}
 
     elif route_key == "$disconnect":
         logger.info(f"Client disconnected: {connection_id}")

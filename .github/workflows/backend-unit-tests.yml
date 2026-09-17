@@ -1,4 +1,4 @@
-name: App Unit Tests
+name: Backend Unit Tests
 
 on:
   pull_request:

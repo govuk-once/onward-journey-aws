@@ -11,14 +11,23 @@ Based on the verification result, it generates and returns an IAM policy
 (Allow/Deny) to API Gateway to either permit or reject the incoming request.
 """
 
-import os
-import hmac
-import hashlib
 import base64
+import hashlib
+import hmac
+import logging
+import os
 import boto3
 
-# Initialise client outside handler for connection reuse across warm starts
-SECRETS_MANAGER_CLIENT = boto3.client("secretsmanager")
+# Configure module logger
+logger = logging.getLogger()
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+# Initialise client with VPC Endpoint URL override if private DNS is disabled
+ENDPOINT_URL = os.environ.get("SECRETS_MANAGER_ENDPOINT_URL")
+SECRETS_MANAGER_CLIENT = boto3.client(
+    "secretsmanager",
+    endpoint_url=ENDPOINT_URL if ENDPOINT_URL else None,
+)
 SECRET_CACHE = None
 
 
@@ -67,12 +76,16 @@ def lambda_handler(event, context):
     # Safe debug logs: evaluate presence and length without dumping sensitive content
     has_signature = bool(incoming_signature)
     body_length = len(payload_body)
-    print(
-        f"DEBUG: Executing authorizer for resource={method_arn} | Has X-Storm-Signature={has_signature} | Body length={body_length} | Base64={is_base64_encoded}"
+    logger.info(
+        "Executing authorizer for resource=%s | Has X-Storm-Signature=%s | Body length=%d | Base64=%s",
+        method_arn,
+        has_signature,
+        body_length,
+        is_base64_encoded,
     )
 
     if not incoming_signature:
-        print("DENY: Request rejected due to missing X-Storm-Signature header")
+        logger.warning("DENY: Request rejected due to missing X-Storm-Signature header")
         return generate_iam_policy("unauthorized", "Deny", method_arn)
 
     try:
@@ -94,14 +107,14 @@ def lambda_handler(event, context):
         ).hexdigest()
 
         is_valid = hmac.compare_digest(incoming_signature, expected_signature)
-        print(f"DEBUG: Signature verification match={is_valid}")
+        logger.info("Signature verification match=%s", is_valid)
 
         if is_valid:
             return generate_iam_policy(principal_id, "Allow", method_arn)
         else:
-            print("DENY: Request rejected due to signature mismatch")
+            logger.warning("DENY: Request rejected due to signature mismatch")
             return generate_iam_policy("unauthorized", "Deny", method_arn)
 
     except Exception as e:
-        print(f"ERROR: Authorizer execution failed: {type(e).__name__}")
+        logger.error("Authorizer execution failed: %s", type(e).__name__, exc_info=True)
         return generate_iam_policy("unauthorized", "Deny", method_arn)

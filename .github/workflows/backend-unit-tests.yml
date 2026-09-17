@@ -1,9 +1,13 @@
 name: Backend Unit Tests
 
 on:
-  pull_request:
+  workflow_call:
+  push:
     branches:
       - main
+    paths:
+      - 'app/**'
+      - '.github/workflows/backend-unit-tests.yml'
 
 jobs:
   unit-test:

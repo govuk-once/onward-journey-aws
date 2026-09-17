@@ -10,6 +10,7 @@ import json
 import os
 import socket
 import asyncio
+import logging
 from typing import Annotated, TypedDict
 import httpx
 import boto3
@@ -29,6 +30,10 @@ from botocore.config import Config
 
 from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 from mcp import ClientSession
+
+# Configure logger
+logger = logging.getLogger("bedrock_agentcore.app")
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
@@ -102,13 +107,23 @@ STRICT FORMATTING RULES:
 
 app = BedrockAgentCoreApp()
 
+# Configure logging for AgentCore Runtime
+log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+
+logger = logging.getLogger("bedrock_agentcore.app")
+logger.setLevel(log_level)
+
+for handler in logger.handlers:
+    handler.setLevel(log_level)
+
 def check_connection(host, port):
     """Utility to verify VPC endpoint connectivity."""
     try:
         socket.create_connection((host, port), timeout=2)
-        print(f"✅ Connection to {host} successful")
+        logger.info("✅ Connection to %s successful", host)
     except Exception:
-        print(f"❌ Connection to {host} failed")
+        logger.error("❌ Connection to %s failed", host)
 
 
 class State(TypedDict):
@@ -256,15 +271,21 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
                 )
 
                 if response.isError:
-                    print(f"GATEWAY ERROR: {response.content}")
+                    logger.error("GATEWAY ERROR: %s", response.content)
                     return f"ERROR: Gateway rejected call."
 
                 result_text = response.content[0].text if response.content else "ERROR: crm service unavailable."
 
                 # --- HANDOFF STATUS LOG ---
                 # TODO: refine this when headless handoff work complete
+
                 if method == "connect_to_live_chat" and not result_text.startswith("ERROR"):
-                    print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | Thread: {thread_id} | Actor: {actor_id}")
+                    logger.info(
+                        "METRIC | LiveHandoffInitiated | Target: %s | Thread: %s | Actor: %s",
+                        live_chat_identifier,
+                        thread_id,
+                        actor_id
+                    )
 
                 return result_text
     except Exception as e:
@@ -353,7 +374,9 @@ async def orchestrator_entrypoint(event):
     Args:
         event (dict): Supports standard JSON payloads or API Gateway/Function URL 'body' strings.
     """
-    print(f"Received event: {json.dumps(event)}")
+    has_body = bool(event.get("body"))
+    event_keys = list(event.keys())
+    logger.info("Received event | Has body=%s | Event keys=%s", has_body, event_keys)
 
     # Parse input from frontend
     if isinstance(event.get("body"), str):
@@ -409,7 +432,7 @@ async def orchestrator_entrypoint(event):
     vpce_host = GATEWAY_ENDPOINT_URL.replace("https://", "").split("/")[0]
     check_connection(vpce_host, 443)
 
-    print("Connecting to Bedrock AgentCore...")
+    logger.info("Connecting to Bedrock AgentCore...")
 
     initial_input = {
         "messages": [
@@ -420,8 +443,8 @@ async def orchestrator_entrypoint(event):
 
     graph_app = get_graph_app()
 
-    print("Executing LangGraph workflow natively...")
-    print("⚡ Starting streaming execution...")
+    logger.info("Executing LangGraph workflow natively...")
+    logger.info("⚡ Starting streaming execution...")
 
     background_tasks = set()
     logged_tool_ids = set()
@@ -432,7 +455,7 @@ async def orchestrator_entrypoint(event):
         try:
             client.post_to_connection(ConnectionId=conn_id, Data=data)
         except Exception as e:
-            print(f"Error pushing to WebSocket: {str(e)}")
+            logger.error("Error pushing to WebSocket: %s", str(e), exc_info=True)
 
     # Use astream with stream_mode="messages" to get real-time tokens
     async for chunk, metadata in graph_app.astream(
@@ -449,10 +472,10 @@ async def orchestrator_entrypoint(event):
         # Log tool calls/results - only print once per ID
         if msg_id and msg_id not in logged_tool_ids:
             if has_tool_chunks:
-                print(f"🛠️ TOOL CALL: {chunk.tool_call_chunks[0].get('name')}", flush=True)
+                logger.info("🛠️ TOOL CALL: %s", chunk.tool_call_chunks[0].get('name'))
                 logged_tool_ids.add(msg_id)
             elif is_tool_result:
-                print(f"📥 TOOL RESULT: {str(chunk.content)[:200]}...", flush=True)
+                logger.info("📥 TOOL RESULT: %s...", str(chunk.content)[:200])
                 logged_tool_ids.add(msg_id)
 
         # --- WEBSOCKET TEXT PUSH LOGIC & ACCUMULATION ---
@@ -481,13 +504,13 @@ async def orchestrator_entrypoint(event):
     if background_tasks:
         await asyncio.gather(*background_tasks)
 
-    # Print the final complete response text to CloudWatch
+    # Safely evaluate response AI text without fully dumping it at INFO level
     if final_response_text:
-        # Replace newlines with spaces for the CloudWatch log
         clean_log_text = final_response_text.strip().replace('\n', ' ')
-        print(f"🤖 FINAL AI RESPONSE: {clean_log_text}")
+        logger.info("🤖 FINAL AI RESPONSE length=%d", len(clean_log_text))
+        logger.debug("🤖 FINAL AI RESPONSE text=%s", clean_log_text)
 
-    print("Execution finished successfully")
+    logger.info("Execution finished successfully")
 
     # --- Push Completion Frame ---
     done_frame = json.dumps({"type": "done"})
@@ -496,7 +519,7 @@ async def orchestrator_entrypoint(event):
         try:
             await asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, done_frame.encode('utf-8'))
         except Exception as e:
-            print(f"Error pushing done frame: {str(e)}")
+            logger.error("Error pushing done frame: %s", str(e), exc_info=True)
     else:
         yield done_frame
 

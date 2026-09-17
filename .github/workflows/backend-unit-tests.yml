@@ -5,11 +5,6 @@ on:
     branches:
       - main
 
-  # for testing - remove once confirmed working
-  push:
-    branches:
-      - automate-unit-tests
-
 jobs:
   unit-test:
     runs-on: ubuntu-latest

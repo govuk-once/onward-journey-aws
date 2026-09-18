@@ -3,7 +3,7 @@
 This directory contains the utilities required to test the Onward Journey Orchestrator and its associated tools (RDS Search and CRM Handoff) directly via the CLI, bypassing the Svelte frontend.
 
 ## Purpose
-These tests verify the "Golden Thread" of identity and state persistence. By sending raw JSON payloads to the Orchestrator Lambda, we can validate:
+These tests verify the "Golden Thread" of identity and state persistence. By sending raw JSON payloads to the Orchestrator, we can validate:
 1. RAG Retrieval: Does the AI find the correct department details in RDS?
 2. CRM Integration: Does the AI correctly check for agent availability?
 3. Session Memory: Does Bedrock AgentCore correctly persist context across multiple turns?
@@ -26,7 +26,7 @@ bash tests/test_integration.sh
 
 The script will:
 * Extract your environment name from your Terraform vars.
-* Invoke your specific Orchestrator Lambda (e.g. <env>-orchestrator).
+* Invoke your specific Orchestrator.
 * Save the full AI response to tests/response.json.
 
 ---
@@ -75,5 +75,5 @@ When running Example 2, check the response.json for the SIGNAL string. If you se
 ---
 
 ## Artifacts
-* response.json: The raw output from the Lambda. This file is ignored by Git to prevent environment-specific data leakage.
+* response.json: The raw output from the Orchestrator. This file is ignored by Git to prevent environment-specific data leakage.
 * test_integration.sh: The main execution script. It dynamically pulls the environment name from the infrastructure folder.

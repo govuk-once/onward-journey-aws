@@ -153,16 +153,15 @@ The query should be successful, but check the details - if the result content on
 If a Lambda build is unsuccessful or staging folders are corrupted, use the `taint` command.
 
 ```bash
-# Force a rebuild of the Orchestrator package
-terraform taint null_resource.install_orchestrator_deps
+# Force a rebuild of the RDS tools package
+terraform taint null_resource.install_rds_tool_deps
 ```
 
 Or to rebuild everything at once, you can run:
 
 ```bash
-# Force a rebuild of all packages
+# Force a rebuild of all tool packages
 terraform apply \
-  -replace="null_resource.install_orchestrator_deps" \
   -replace="null_resource.install_seeder_deps" \
   -replace="null_resource.install_rds_tool_deps" \
   -replace="null_resource.install_crm_tool_deps"

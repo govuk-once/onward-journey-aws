@@ -9,8 +9,11 @@ coordinates tool execution through a VPC-signed MCP Gateway.
 import json
 import os
 import socket
+import asyncio
+import logging
 from typing import Annotated, TypedDict
 import httpx
+import boto3
 
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -23,8 +26,14 @@ from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
 from bedrock_agentcore import BedrockAgentCoreApp
 
+from botocore.config import Config
+
 from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 from mcp import ClientSession
+
+# Configure logger
+logger = logging.getLogger("bedrock_agentcore.app")
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
@@ -76,8 +85,7 @@ ONWARD JOURNEY (LIVE CHAT) & CONTACT RULES:
    - SOURCE: Focus primarily on the current session's "Incomplete Task." Use Long-Term Memory (AgentCore) ONLY to identify if this is a repeat attempt or if there is a persistent blocker (e.g., "User has been unable to bypass the 'Submit' error for three sessions").
    - CONTENT: Identify the specific Government Service (e.g., Border Force, HMRC Tax), the specific goal (e.g., reporting a crime, checking a claim), and the immediate blocker that triggered this handoff.
    - EXCLUSION: Omit any historical context that is not directly relevant to the current service request.
-   - ANCHORING THE SIGNAL: Once the tool returns a 'SIGNAL' string, you MUST confirm the connection to the user (e.g., "I'm connecting you now...") and then append the exact 'SIGNAL' string to the very end of your response.
-     The signal is a 'Switchboard Trigger' for the frontend system; you must not modify it or add any text after it.
+   - CONFIRMATION: Once the tool returns a successful connection, you MUST confirm the connection to the user (e.g., "I'm connecting you now...").
 5. DO NOT source information outside of the tools available to you.
 6. IMPORTANT: when providing contact details to the user, you MUST ALWAYS follow these rules:
     - ALWAYS use the exact, official service name provided in the database.
@@ -99,25 +107,29 @@ STRICT FORMATTING RULES:
 
 app = BedrockAgentCoreApp()
 
+# Configure logging for AgentCore Runtime
+log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+
+logger = logging.getLogger("bedrock_agentcore.app")
+logger.setLevel(log_level)
+
+for handler in logger.handlers:
+    handler.setLevel(log_level)
+
 def check_connection(host, port):
     """Utility to verify VPC endpoint connectivity."""
     try:
         socket.create_connection((host, port), timeout=2)
-        print(f"✅ Connection to {host} successful")
+        logger.info("✅ Connection to %s successful", host)
     except Exception:
-        print(f"❌ Connection to {host} failed")
+        logger.error("❌ Connection to %s failed", host)
 
 
 class State(TypedDict):
     """LangGraph state schema."""
     messages: Annotated[list, add_messages]
 
-llm = ChatBedrockConverse(
-    model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    region_name=AWS_REGION,
-    temperature=0,
-    endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
-)
 
 # --- CUSTOM VPCE TRANSPORT & FACTORY HOOK ---
 class VPCETransport(httpx.AsyncHTTPTransport):
@@ -259,14 +271,21 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
                 )
 
                 if response.isError:
-                    print(f"GATEWAY ERROR: {response.content}")
+                    logger.error("GATEWAY ERROR: %s", response.content)
                     return f"ERROR: Gateway rejected call."
 
                 result_text = response.content[0].text if response.content else "ERROR: crm service unavailable."
 
                 # --- HANDOFF STATUS LOG ---
-                if method == "connect_to_live_chat" and "SIGNAL" in result_text:
-                    print(f"METRIC | LiveHandoffInitiated | Target: {live_chat_identifier} | Thread: {thread_id} | Actor: {actor_id}")
+                # TODO: refine this when headless handoff work complete
+
+                if method == "connect_to_live_chat" and not result_text.startswith("ERROR"):
+                    logger.info(
+                        "METRIC | LiveHandoffInitiated | Target: %s | Thread: %s | Actor: %s",
+                        live_chat_identifier,
+                        thread_id,
+                        actor_id
+                    )
 
                 return result_text
     except Exception as e:
@@ -275,49 +294,71 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
 # Bind the tools to the LLM
 # Tools are kept separate to allow the AI agent to choose the specific action.
 tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
-llm_with_tools = llm.bind_tools(tools)
 
-async def chatbot(state: State, config: RunnableConfig):
-    """Primary reasoning node for the agent that uses the bound tools."""
-    messages = state["messages"]
+def get_graph_app():
+    """
+    Factory function to compile the LangGraph application.
+    Instantiating ChatBedrockConverse here, ensures fresh IAM/STS
+    credentials on every invocation, preventing ExpiredTokenException.
+    """
+    llm = ChatBedrockConverse(
+        model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        region_name=AWS_REGION,
+        temperature=0,
+        endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
+    )
+    llm_with_tools = llm.bind_tools(tools)
 
-    # Call the model asynchronously with the full, unfiltered state history.
-    response = await llm_with_tools.ainvoke(messages, config)
+    async def chatbot(state: State, config: RunnableConfig):
+        """Primary reasoning node for the agent that uses the bound tools."""
+        messages = state["messages"]
 
-    return {"messages": [response]}
+        # 1. Force Bedrock to use the streaming API by calling astream instead of ainvoke
+        full_response = None
 
-# Build the Graph
-workflow = StateGraph(State)
+        # 2. Iterate through the token chunks as they arrive from AWS
+        async for chunk in llm_with_tools.astream(messages, config):
+            if full_response is None:
+                full_response = chunk
+            else:
+                # Accumulate the chunks into a single message for the graph state
+                full_response += chunk
 
-# 1. Add Nodes
-workflow.add_node("chatbot", chatbot)
-workflow.add_node("execute_tools", ToolNode(tools))
+        # 3. Return the fully accumulated message to sync the conversation state
+        return {"messages": [full_response]}
 
-# 2. Define Flow
-workflow.add_edge(START, "chatbot")
+    # Build the Graph
+    workflow = StateGraph(State)
 
-# 3. The LLM Decision Point
-workflow.add_conditional_edges(
-    "chatbot",
-    tools_condition,
-    {
-        "tools": "execute_tools",
-        "__end__": END,
-    },
-)
+    # 1. Add Nodes
+    workflow.add_node("chatbot", chatbot)
+    workflow.add_node("execute_tools", ToolNode(tools))
 
-# 4. The Return Loop
-# Every tool result must return to the chatbot to sync conversation state.
-workflow.add_edge("execute_tools", "chatbot")
+    # 2. Define Flow
+    workflow.add_edge(START, "chatbot")
 
-# Initialise AgentCore Memory (The "Checkpointer")
-checkpointer = AgentCoreMemorySaver(
-    memory_id=MEMORY_ID,
-    region_name=AWS_REGION,
-    endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
-)
+    # 3. The LLM Decision Point
+    workflow.add_conditional_edges(
+        "chatbot",
+        tools_condition,
+        {
+            "tools": "execute_tools",
+            "__end__": END,
+        },
+    )
 
-graph_app = workflow.compile(checkpointer=checkpointer)
+    # 4. The Return Loop
+    # Every tool result must return to the chatbot to sync conversation state.
+    workflow.add_edge("execute_tools", "chatbot")
+
+    # Initialise AgentCore Memory (The "Checkpointer")
+    checkpointer = AgentCoreMemorySaver(
+        memory_id=MEMORY_ID,
+        region_name=AWS_REGION,
+        endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
+    )
+
+    return workflow.compile(checkpointer=checkpointer)
 
 @app.entrypoint
 async def orchestrator_entrypoint(event):
@@ -333,7 +374,9 @@ async def orchestrator_entrypoint(event):
     Args:
         event (dict): Supports standard JSON payloads or API Gateway/Function URL 'body' strings.
     """
-    print(f"Received event: {json.dumps(event)}")
+    has_body = bool(event.get("body"))
+    event_keys = list(event.keys())
+    logger.info("Received event | Has body=%s | Event keys=%s", has_body, event_keys)
 
     # Parse input from frontend
     if isinstance(event.get("body"), str):
@@ -356,6 +399,30 @@ async def orchestrator_entrypoint(event):
     # Config for LangGraph state (thread) and AgentCore identity (actor).
     config = {"configurable": {"thread_id": thread_id, "actor_id": actor_id}}
 
+    # Extract WebSocket metadata provided by the Router Lambda
+    connection_id = body.get("connection_id")
+    domain_name = body.get("domain_name")
+    stage = body.get("stage")
+
+   # Initialize the API Gateway Management client for WebSocket pushes
+    apigw_client = None
+    if connection_id and domain_name and stage:
+        endpoint_url = f"https://{domain_name}/{stage}"
+
+        # Widen the connection pool to 100 to allow concurrent token threads
+        boto_config = Config(
+            connect_timeout=2,
+            read_timeout=2,
+            max_pool_connections=100
+        )
+
+        apigw_client = boto3.client(
+            'apigatewaymanagementapi',
+            endpoint_url=endpoint_url,
+            region_name=AWS_REGION,
+            config=boto_config
+        )
+
     # Network Checks
     check_connection(AGENT_RUNTIME_URL, 443)
     check_connection(BEDROCK_RUNTIME_URL, 443)
@@ -365,7 +432,7 @@ async def orchestrator_entrypoint(event):
     vpce_host = GATEWAY_ENDPOINT_URL.replace("https://", "").split("/")[0]
     check_connection(vpce_host, 443)
 
-    print("Connecting to Bedrock AgentCore...")
+    logger.info("Connecting to Bedrock AgentCore...")
 
     initial_input = {
         "messages": [
@@ -374,61 +441,86 @@ async def orchestrator_entrypoint(event):
         ]
     }
 
-    # Execute the graph asynchronously via LangGraph streaming
-    print("Executing LangGraph workflow natively...")
-    print("⚡ Starting streaming execution...")
+    graph_app = get_graph_app()
 
-    # Tracker: ensure each fully-formed message only printed once in CloudWatch
-    logged_message_ids = set()
+    logger.info("Executing LangGraph workflow natively...")
+    logger.info("⚡ Starting streaming execution...")
+
+    background_tasks = set()
+    logged_tool_ids = set()
+    final_response_text = ""
+
+    def fire_and_forget_push(client, conn_id, data):
+        """Synchronous wrapper to execute the boto3 call."""
+        try:
+            client.post_to_connection(ConnectionId=conn_id, Data=data)
+        except Exception as e:
+            logger.error("Error pushing to WebSocket: %s", str(e), exc_info=True)
 
     # Use astream with stream_mode="messages" to get real-time tokens
     async for chunk, metadata in graph_app.astream(
         initial_input, config, stream_mode="messages"
     ):
-        msg_id = getattr(chunk, 'id', None)
         node = metadata.get('langgraph_node', 'unknown')
-        msg_type = type(chunk).__name__
+        msg_id = getattr(chunk, 'id', None)
 
-        # --- GRAPH STEP LOGS ---
         has_content = bool(chunk.content)
         has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
         is_tool_result = isinstance(chunk, ToolMessage)
 
-        # Only log if we have actual data to show (content, tool args, or result)
-        if msg_id and msg_id not in logged_message_ids and (has_content or has_tool_chunks or is_tool_result):
-            display_content = ""
-
+        # --- LOG TOOL CALLS ---
+        # Log tool calls/results - only print once per ID
+        if msg_id and msg_id not in logged_tool_ids:
             if has_tool_chunks:
-                # Extract info from the tool chunk
-                t_chunk = chunk.tool_call_chunks[0]
-                display_content = f"🛠️ TOOL CALL: {t_chunk.get('name')}"
+                logger.info("🛠️ TOOL CALL: %s", chunk.tool_call_chunks[0].get('name'))
+                logged_tool_ids.add(msg_id)
             elif is_tool_result:
-                # Extract the tool result
-                display_content = f"📥 TOOL RESULT: {str(chunk.content)[:100]}"
-            else:
-                # Capture the start of the final text response
-                text = chunk.content[0].get('text', '') if isinstance(chunk.content, list) else chunk.content
-                if text:
-                    display_content = str(text)[:100].replace('\n', ' ')
+                logger.info("📥 TOOL RESULT: %s...", str(chunk.content)[:200])
+                logged_tool_ids.add(msg_id)
 
-            # Log to CloudWatch exactly once per message ID if useful content extracted
-            if display_content:
-                print(f"--- GRAPH STEP | Node: {node} ---", flush=True)
-                print(f"TYPE: {msg_type} | ID: {msg_id} | Content: {display_content}...", flush=True)
-                logged_message_ids.add(msg_id)
-        # -----------------------------------------
-
-        # --- YIELDING LOGIC (For the client stream) ---
-        # Only yield content generated by the 'chatbot' node to the client
+        # --- WEBSOCKET TEXT PUSH LOGIC & ACCUMULATION ---
         if node == "chatbot" and has_content:
+            tokens_to_send = []
             if isinstance(chunk.content, list):
                 for block in chunk.content:
                     if isinstance(block, dict) and block.get("type") == "text":
-                        # Using yield to send chunks in real-time
-                        yield block.get("text", "")
+                        tokens_to_send.append(block.get("text", ""))
             elif isinstance(chunk.content, str):
-                yield chunk.content
+                tokens_to_send.append(chunk.content)
 
-    print("Execution finished successfully")
+            for token in tokens_to_send:
+                if token:
+                    final_response_text += token
+                    chunk_frame = json.dumps({"type": "chunk", "text": token})
+                    if apigw_client and connection_id:
+                        # Queue the network call instantly without blocking the Bedrock stream
+                        task = asyncio.create_task(asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, chunk_frame.encode('utf-8')))
+                        background_tasks.add(task)
+                        task.add_done_callback(background_tasks.discard)
+                    else:
+                        yield chunk_frame  # Console fallback
+
+    # Wait for all background pushes to clear the queue before closing the connection
+    if background_tasks:
+        await asyncio.gather(*background_tasks)
+
+    # Safely evaluate response AI text without fully dumping it at INFO level
+    if final_response_text:
+        clean_log_text = final_response_text.strip().replace('\n', ' ')
+        logger.info("🤖 FINAL AI RESPONSE length=%d", len(clean_log_text))
+        logger.debug("🤖 FINAL AI RESPONSE text=%s", clean_log_text)
+
+    logger.info("Execution finished successfully")
+
+    # --- Push Completion Frame ---
+    done_frame = json.dumps({"type": "done"})
+    if apigw_client and connection_id:
+        # Await the final frame safely before the Lambda process exits
+        try:
+            await asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, done_frame.encode('utf-8'))
+        except Exception as e:
+            logger.error("Error pushing done frame: %s", str(e), exc_info=True)
+    else:
+        yield done_frame
 
 app.run()

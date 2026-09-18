@@ -5,6 +5,13 @@
  * least privilege, restricting traffic to specific security group IDs.
  */
 
+# ============= DATA LOOKUPS =======================================================
+# Fetch the shared endpoints security group (execute-api, logs, sts) created in vpc.tf
+data "aws_security_group" "shared_endpoints" {
+  vpc_id = local.vpc_id
+  name   = "shared-endpoints-sg"
+}
+
 # ============= SECURITY GROUPS ===================================================
 # ORCHESTRATOR SECURITY GROUP
 # Controls traffic for the Lambda-based logic layer.
@@ -275,11 +282,21 @@ resource "aws_vpc_security_group_egress_rule" "allow_rds_tool_to_bedrock" {
   to_port                      = 443
 }
 
-# Allow orchestrator to VPC endpoints
+# Allow orchestrator to VPC endpoints (Bedrock / SecretsManager)
 resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_vpc_endpoints" {
   description                  = "Allow outbound traffic from Orchestrator to VPC endpoints"
   security_group_id            = aws_security_group.orchestrator.id
   referenced_security_group_id = aws_security_group.vpc_endpoints.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+# Allow orchestrator to shared VPC endpoints (execute-api, logs, sts)
+resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_shared_endpoints" {
+  description                  = "Allow outbound traffic from Orchestrator to shared VPC endpoints"
+  security_group_id            = aws_security_group.orchestrator.id
+  referenced_security_group_id = data.aws_security_group.shared_endpoints.id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443

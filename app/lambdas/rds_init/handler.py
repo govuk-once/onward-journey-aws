@@ -10,7 +10,7 @@ This Lambda handles automated setup tasks for the RDS PostgreSQL database:
 import json
 import os
 from utils.db import get_db_connection
-
+# #test-change
 
 def lambda_handler(event, context):
     """

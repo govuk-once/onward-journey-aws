@@ -7,48 +7,56 @@ on:
       - automate-unit-tests
 
 jobs:
-  # Detect what files changed in this PR. output boolean values for each filter.
+  # Detect what files changed in this PR. output boolean values for each filter
   changes:
     runs-on: ubuntu-latest
     outputs:
-      frontend: ${{ steps.frontend-filter.outputs.exists }}
-      infrastructure: ${{ steps.infrastructure-filter.outputs.exists }}
-      backend: ${{ steps.backend-filter.outputs.exists }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      backend: ${{ steps.changes.outputs.backend }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: yumemi-inc/path-filter@v2
-        id: frontend-filter
-        with:
-          patterns: |
-            frontend/**
-            .github/workflows/frontend-checks.yml
-      - uses: yumemi-inc/path-filter@v2
-        id: infrastructure-filter
-        with:
-          patterns: |
-            infrastructure/**
-            .github/workflows/terraform-checks.yml
-      - uses: yumemi-inc/path-filter@v2
-        id: backend-filter
-        with:
-          patterns: |
-            app/**
-            .github/workflows/backend-unit-tests.yml
+      - name: Check for changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.base_ref }}"
+          else
+            BASE_REF="${{ github.event.before }}"
+          fi
 
+          # --- Fallback if BASE_REF is missing or empty (e.g., initial push on a new branch)
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REF="HEAD~1"
+          fi
 
+          git diff --name-only "$BASE_REF" HEAD > changed_files.txt
 
+          FRONTEND_CHANGED=$(grep -E '^(frontend/|\.github/workflows/frontend-checks.yml)' changed_files.txt || true)
+          INFRA_CHANGED=$(grep -E '^(infrastructure/|\.github/workflows/terraform-checks.yml)' changed_files.txt || true)
+          BACKEND_CHANGED=$(grep -E '^(app/|\.github/workflows/backend-unit-tests.yml)' changed_files.txt || true)
 
+          if [ -n "$FRONTEND_CHANGED" ]; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
 
+          if [ -n "$INFRA_CHANGED" ]; then
+            echo "infrastructure=true" >> $GITHUB_OUTPUT
+          else
+            echo "infrastructure=false" >> $GITHUB_OUTPUT
+          fi
 
-            infrastructure:
-              - 'infrastructure/**'
-              - '.github/workflows/terraform-checks.yml'
-            backend:
-              - 'app/**'
-              - '.github/workflows/backend-unit-tests.yml'
+          if [ -n "$BACKEND_CHANGED" ]; then
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend=false" >> $GITHUB_OUTPUT
+          fi
 
-# run the workflows for each of the changed components. If a component has no changes, skip its workflow.
+  # Run the checks only on the changed components
   run-frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
@@ -70,7 +78,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Verify all upstream statuses # update 'run' to include backend when implemented
+      - name: Verify all upstream statuses
         run: |
           FRONTEND_STATUS="${{ needs.run-frontend.result }}"
           INFRA_STATUS="${{ needs.run-infrastructure.result }}"

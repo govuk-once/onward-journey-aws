@@ -11,6 +11,7 @@ import json
 import os
 from utils.db import get_db_connection
 
+
 def lambda_handler(event, context):
     """
     Orchestrates the RDS setup process.

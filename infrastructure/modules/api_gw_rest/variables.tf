@@ -29,13 +29,13 @@ variable "authorizer_lambda_function_name" {
   type        = string
 }
 
-variable "processor_lambda_invoke_arn" {
-  description = "The invoke ARN of the backend Lambda function processing validated webhook payloads"
+variable "crm_wh_router_invoke_arn" {
+  description = "The invocation ARN for the CRM Webhook Router Lambda function."
   type        = string
 }
 
-variable "processor_lambda_function_name" {
-  description = "The function name of the Processor Lambda (needed for invocation permissions)"
+variable "crm_wh_router_function_name" {
+  description = "The function name of the CRM Webhook Router Lambda, required for API Gateway invocation permissions."
   type        = string
 }
 

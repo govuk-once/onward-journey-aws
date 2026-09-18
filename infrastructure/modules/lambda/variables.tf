@@ -61,3 +61,9 @@ variable "reserved_concurrent_executions" {
   type        = number
   default     = null
 }
+
+variable "description" {
+  description = "Description of the Lambda function"
+  type        = string
+  default     = ""
+}

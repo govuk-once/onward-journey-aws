@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# AUTHORISER LAMBDA MODULES
+# LAMBDA: WEBHOOK AUTHORIZER
 # -----------------------------------------------------------------------------
 module "crm_contentguru_wh_authorizer" {
   source          = "../modules/api_gw_authorizer_signature"
@@ -12,7 +12,26 @@ module "crm_contentguru_wh_authorizer" {
 }
 
 # -----------------------------------------------------------------------------
-# API GATEWAY REST MODULES
+# LAMBDA: WEBHOOK ROUTER
+# -----------------------------------------------------------------------------
+module "crm_wh_router" {
+  source = "../modules/lambda"
+
+  environment   = var.environment
+  function_name = "crm-wh-router"
+  description   = "Ingests webhooks from external CRM platforms and routes messages to active WebSocket sessions"
+  source_dir    = "crm_wh_router"
+
+  # Compute Protection: Prevent spikes from exhausting shared account concurrency
+  reserved_concurrent_executions = 20
+
+  environment_variables = {
+    LOG_LEVEL = "INFO"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# REST API GATEWAY
 # -----------------------------------------------------------------------------
 module "crm_contentguru_wh_gateway" {
   source = "../modules/api_gw_rest"
@@ -25,9 +44,8 @@ module "crm_contentguru_wh_gateway" {
   authorizer_lambda_invoke_arn    = module.crm_contentguru_wh_authorizer.invoke_arn
   authorizer_lambda_function_name = module.crm_contentguru_wh_authorizer.function_name
 
-  # TODO(JOUR-346): Replace empty string with the real processor Lambda function name and invoke ARN once downstream compute is provisioned
-  processor_lambda_function_name = ""
-  processor_lambda_invoke_arn    = ""
+  crm_wh_router_invoke_arn    = module.crm_wh_router.invoke_arn
+  crm_wh_router_function_name = module.crm_wh_router.function_name
 
   # WAF rate limits fall back to module defaults (100 req / 300 sec) in variables.tf
   # unless explicitly overridden here.

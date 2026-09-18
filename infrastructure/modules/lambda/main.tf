@@ -73,6 +73,7 @@ resource "aws_lambda_function" "function" {
   filename                       = data.archive_file.zip.output_path
   source_code_hash               = data.archive_file.zip.output_base64sha256
   function_name                  = "${var.environment}-${var.function_name}"
+  description                    = var.description
   role                           = aws_iam_role.role.arn
   handler                        = var.handler
   runtime                        = "python3.12"

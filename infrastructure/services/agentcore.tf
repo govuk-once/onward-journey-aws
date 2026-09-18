@@ -13,7 +13,7 @@ resource "aws_bedrockagentcore_memory" "agent_chat_context" {
     aws_iam_role_policy.agentcore_gateway_invocation
   ]
 }
-# #test-change
+
 ## AGENTCORE GATEWAY
 # Standardised interface for tool connectivity via MCP. Acts as the bridge between the Orchestrator and external data sources.
 resource "aws_bedrockagentcore_gateway" "tool_interface" {

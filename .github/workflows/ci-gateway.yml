@@ -11,18 +11,36 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      infrastructure: ${{ steps.filter.outputs.infrastructure }}
-      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.frontend-filter.outputs.exists }}
+      infrastructure: ${{ steps.infrastructure-filter.outputs.exists }}
+      backend: ${{ steps.backend-filter.outputs.exists }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
+
+      - uses: yumemi-inc/path-filter@v2
+        id: frontend-filter
         with:
-          filters: |
-            frontend:
-              - 'frontend/**'
-              - '.github/workflows/frontend-checks.yml'
+          patterns: |
+            frontend/**
+            .github/workflows/frontend-checks.yml
+      - uses: yumemi-inc/path-filter@v2
+        id: infrastructure-filter
+        with:
+          patterns: |
+            infrastructure/**
+            .github/workflows/terraform-checks.yml
+      - uses: yumemi-inc/path-filter@v2
+        id: backend-filter
+        with:
+          patterns: |
+            app/**
+            .github/workflows/backend-unit-tests.yml
+
+
+
+
+
+
             infrastructure:
               - 'infrastructure/**'
               - '.github/workflows/terraform-checks.yml'

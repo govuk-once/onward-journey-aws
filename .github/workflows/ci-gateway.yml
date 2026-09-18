@@ -1,0 +1,107 @@
+name: CI Gateway
+
+on:
+  pull_request:
+
+jobs:
+  # Detect what files changed in this PR. output boolean values for each filter
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      backend: ${{ steps.changes.outputs.backend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.base_ref }}
+            BASE_REF="origin/${{ github.base_ref }}"
+          else
+            # --- Used when the workflow is enabled for push events
+            BASE_REF="${{ github.event.before }}"
+          fi
+
+          # --- Fallback if BASE_REF is missing or empty (e.g., initial push on a new branch)
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REF="HEAD~1"
+          fi
+
+          git diff --name-only "$BASE_REF" HEAD > changed_files.txt
+
+          FRONTEND_CHANGED=$(grep -E '^(frontend/|\.github/workflows/frontend-checks.yml)' changed_files.txt || true)
+          INFRA_CHANGED=$(grep -E '^(infrastructure/|\.github/workflows/terraform-checks.yml)' changed_files.txt || true)
+          BACKEND_CHANGED=$(grep -E '^(app/|\.github/workflows/backend-unit-tests.yml)' changed_files.txt || true)
+
+          if [ -n "$FRONTEND_CHANGED" ]; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -n "$INFRA_CHANGED" ]; then
+            echo "infrastructure=true" >> $GITHUB_OUTPUT
+          else
+            echo "infrastructure=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -n "$BACKEND_CHANGED" ]; then
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Run the checks only on the changed components
+  run-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    uses: ./.github/workflows/frontend-checks.yml
+
+  run-infrastructure:
+    needs: changes
+    if: needs.changes.outputs.infrastructure == 'true'
+    uses: ./.github/workflows/terraform-checks.yml
+
+  run-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    uses: ./.github/workflows/backend-unit-tests.yml
+
+  all-checks-passed:
+    name: "All CI Checks Passed"
+    needs: [changes, run-frontend, run-infrastructure, run-backend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all upstream statuses
+        run: |
+          FRONTEND_STATUS="${{ needs.run-frontend.result }}"
+          INFRA_STATUS="${{ needs.run-infrastructure.result }}"
+          BACKEND_STATUS="${{ needs.run-backend.result }}"
+
+          echo "Frontend status: $FRONTEND_STATUS"
+          echo "Infrastructure status: $INFRA_STATUS"
+          echo "Backend status: $BACKEND_STATUS"
+
+          if [ "$FRONTEND_STATUS" = "failure" ] || [ "$FRONTEND_STATUS" = "cancelled" ]; then
+            echo "Frontend checks failed!"
+            exit 1
+          fi
+
+          if [ "$INFRA_STATUS" = "failure" ] || [ "$INFRA_STATUS" = "cancelled" ]; then
+            echo "Terraform checks failed!"
+            exit 1
+          fi
+
+          if [ "$BACKEND_STATUS" = "failure" ] || [ "$BACKEND_STATUS" = "cancelled" ]; then
+            echo "Backend checks failed!"
+            exit 1
+          fi
+
+          echo "All required checks passed or were safely skipped!"

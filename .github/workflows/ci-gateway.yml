@@ -2,9 +2,6 @@ name: CI Gateway
 
 on:
   pull_request:
-  push:
-    branches:
-      - automate-unit-tests
 
 jobs:
   # Detect what files changed in this PR. output boolean values for each filter
@@ -27,6 +24,7 @@ jobs:
             git fetch origin ${{ github.base_ref }}
             BASE_REF="origin/${{ github.base_ref }}"
           else
+            # --- Used when the workflow is enabled for push events
             BASE_REF="${{ github.event.before }}"
           fi
 

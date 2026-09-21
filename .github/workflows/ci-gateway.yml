@@ -3,6 +3,10 @@ name: CI Gateway
 on:
   pull_request:
 
+  push:
+    branches:
+      - automate-unit-tests
+
 jobs:
   # Detect what files changed in this PR. output boolean values for each filter
   changes:

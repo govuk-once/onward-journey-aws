@@ -450,7 +450,7 @@ async def orchestrator_entrypoint(event):
     logged_tool_ids = set()
     final_response_text = ""
 
-    def fire_and_forget_push(client, conn_id, data):
+    def _post_to_connection_sync(client, conn_id, data):
         """Synchronous wrapper to execute the boto3 call."""
         try:
             client.post_to_connection(ConnectionId=conn_id, Data=data)
@@ -494,7 +494,7 @@ async def orchestrator_entrypoint(event):
                     chunk_frame = json.dumps({"type": "chunk", "text": token})
                     if apigw_client and connection_id:
                         # Queue the network call instantly without blocking the Bedrock stream
-                        task = asyncio.create_task(asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, chunk_frame.encode('utf-8')))
+                        task = asyncio.create_task(asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, chunk_frame.encode('utf-8')))
                         background_tasks.add(task)
                         task.add_done_callback(background_tasks.discard)
                     else:
@@ -517,7 +517,7 @@ async def orchestrator_entrypoint(event):
     if apigw_client and connection_id:
         # Await the final frame safely before the Lambda process exits
         try:
-            await asyncio.to_thread(fire_and_forget_push, apigw_client, connection_id, done_frame.encode('utf-8'))
+            await asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, done_frame.encode('utf-8'))
         except Exception as e:
             logger.error("Error pushing done frame: %s", str(e), exc_info=True)
     else:

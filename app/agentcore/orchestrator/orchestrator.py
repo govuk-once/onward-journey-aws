@@ -522,5 +522,3 @@ async def orchestrator_entrypoint(event):
             logger.error("Error pushing done frame: %s", str(e), exc_info=True)
     else:
         yield done_frame
-
-app.run()

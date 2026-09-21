@@ -446,7 +446,6 @@ async def orchestrator_entrypoint(event):
     logger.info("Executing LangGraph workflow natively...")
     logger.info("⚡ Starting streaming execution...")
 
-    background_tasks = set()
     logged_tool_ids = set()
     final_response_text = ""
 
@@ -456,6 +455,24 @@ async def orchestrator_entrypoint(event):
             client.post_to_connection(ConnectionId=conn_id, Data=data)
         except Exception as e:
             logger.error("Error pushing to WebSocket: %s", str(e), exc_info=True)
+
+    ws_queue = asyncio.Queue()
+
+    async def ws_consumer():
+        """Single background worker that processes chunks sequentially (FIFO)."""
+        while True:
+            data = await ws_queue.get()
+            if data is None:  # Sentinel value to terminate the loop
+                ws_queue.task_done()
+                break
+
+            # Post sequentially to guarantee order
+            await asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, data)
+            ws_queue.task_done()
+
+    consumer_task = None
+    if apigw_client and connection_id:
+        consumer_task = asyncio.create_task(ws_consumer())
 
     # Use astream with stream_mode="messages" to get real-time tokens
     async for chunk, metadata in graph_app.astream(
@@ -493,16 +510,10 @@ async def orchestrator_entrypoint(event):
                     final_response_text += token
                     chunk_frame = json.dumps({"type": "chunk", "text": token})
                     if apigw_client and connection_id:
-                        # Queue the network call instantly without blocking the Bedrock stream
-                        task = asyncio.create_task(asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, chunk_frame.encode('utf-8')))
-                        background_tasks.add(task)
-                        task.add_done_callback(background_tasks.discard)
+                        # Instantly buffer into the queue (non-blocking)
+                        ws_queue.put_nowait(chunk_frame.encode('utf-8'))
                     else:
                         yield chunk_frame  # Console fallback
-
-    # Wait for all background pushes to clear the queue before closing the connection
-    if background_tasks:
-        await asyncio.gather(*background_tasks)
 
     # Safely evaluate response AI text without fully dumping it at INFO level
     if final_response_text:
@@ -512,13 +523,17 @@ async def orchestrator_entrypoint(event):
 
     logger.info("Execution finished successfully")
 
-    # --- Push Completion Frame ---
-    done_frame = json.dumps({"type": "done"})
+    # --- Push Completion Frame & Drain Queue ---
     if apigw_client and connection_id:
-        # Await the final frame safely before the Lambda process exits
-        try:
-            await asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, done_frame.encode('utf-8'))
-        except Exception as e:
-            logger.error("Error pushing done frame: %s", str(e), exc_info=True)
+        done_frame = json.dumps({"type": "done"})
+        ws_queue.put_nowait(done_frame.encode('utf-8'))
+
+        # Tell the consumer to shut down
+        ws_queue.put_nowait(None)
+
+        # Wait for all chunks in the queue to be successfully sent
+        await ws_queue.join()
+        # Wait for the worker task to cleanly exit
+        await consumer_task
     else:
-        yield done_frame
+        yield json.dumps({"type": "done"})

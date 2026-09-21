@@ -19,39 +19,24 @@ jobs:
 
       - name: Check for changes
         id: changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin ${{ github.base_ref }}
-            BASE_REF="origin/${{ github.base_ref }}"
-          else
-            # --- Used when the workflow is enabled for push events
-            BASE_REF="${{ github.event.before }}"
-          fi
+          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > changed_files.txt
 
-          # --- Fallback if BASE_REF is missing or empty (e.g., initial push on a new branch)
-          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
-            BASE_REF="HEAD~1"
-          fi
-
-          git diff --name-only "$BASE_REF" HEAD > changed_files.txt
-
-          FRONTEND_CHANGED=$(grep -E '^(frontend/|\.github/workflows/frontend-checks.yml)' changed_files.txt || true)
-          INFRA_CHANGED=$(grep -E '^(infrastructure/|\.github/workflows/terraform-checks.yml)' changed_files.txt || true)
-          BACKEND_CHANGED=$(grep -E '^(app/|\.github/workflows/backend-unit-tests.yml)' changed_files.txt || true)
-
-          if [ -n "$FRONTEND_CHANGED" ]; then
+          if grep -qE '^(frontend/|\.github/workflows/frontend-checks.yml)' changed_files.txt; then
             echo "frontend=true" >> $GITHUB_OUTPUT
           else
             echo "frontend=false" >> $GITHUB_OUTPUT
           fi
 
-          if [ -n "$INFRA_CHANGED" ]; then
+          if grep -qE '^(infrastructure/|\.github/workflows/terraform-checks.yml)' changed_files.txt; then
             echo "infrastructure=true" >> $GITHUB_OUTPUT
           else
             echo "infrastructure=false" >> $GITHUB_OUTPUT
           fi
 
-          if [ -n "$BACKEND_CHANGED" ]; then
+          if grep -qE '^(app/|\.github/workflows/backend-unit-tests.yml)' changed_files.txt; then
             echo "backend=true" >> $GITHUB_OUTPUT
           else
             echo "backend=false" >> $GITHUB_OUTPUT

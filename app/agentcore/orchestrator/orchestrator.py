@@ -288,74 +288,53 @@ async def crm_live_chat_tools(method: str, live_chat_identifier: str, reason: st
     except Exception as e:
         return f"ERROR: Gateway call failed: {str(e)}"
 
-# Bind the tools to the LLM
-# Tools are kept separate to allow the AI agent to choose the specific action.
+# --- GRAPH SETUP ---
 tools = [query_department_database, query_knowledge_base, crm_live_chat_tools]
 
-def get_graph_app():
-    """
-    Factory function to compile the LangGraph application.
-    Instantiating ChatBedrockConverse here, ensures fresh IAM/STS
-    credentials on every invocation, preventing ExpiredTokenException.
-    """
-    llm = ChatBedrockConverse(
-        model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        region_name=AWS_REGION,
-        temperature=0,
-        endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
-    )
-    llm_with_tools = llm.bind_tools(tools)
+async def chatbot(state: State, config: RunnableConfig):
+    """Primary reasoning node for the agent that uses the bound tools."""
+    llm_with_tools = config["configurable"]["llm_with_tools"]
 
-    async def chatbot(state: State, config: RunnableConfig):
-        """Primary reasoning node for the agent that uses the bound tools."""
-        messages = state["messages"]
+    messages = state["messages"]
+    full_response = None
 
-        # 1. Force Bedrock to use the streaming API by calling astream instead of ainvoke
-        full_response = None
+    # Iterate through the token chunks as they arrive from AWS
+    async for chunk in llm_with_tools.astream(messages, config):
+        if full_response is None:
+            full_response = chunk
+        else:
+            # Accumulate the chunks into a single message for the graph state
+            full_response += chunk
 
-        # 2. Iterate through the token chunks as they arrive from AWS
-        async for chunk in llm_with_tools.astream(messages, config):
-            if full_response is None:
-                full_response = chunk
-            else:
-                # Accumulate the chunks into a single message for the graph state
-                full_response += chunk
+    # Return the fully accumulated message to sync the conversation state
+    return {"messages": [full_response]}
 
-        # 3. Return the fully accumulated message to sync the conversation state
-        return {"messages": [full_response]}
+# Initialise AgentCore Memory (The "Checkpointer")
+checkpointer = AgentCoreMemorySaver(
+    memory_id=MEMORY_ID,
+    region_name=AWS_REGION,
+    endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
+)
 
-    # Build the Graph
-    workflow = StateGraph(State)
+# Build the Graph
+workflow = StateGraph(State)
 
-    # 1. Add Nodes
-    workflow.add_node("chatbot", chatbot)
-    workflow.add_node("execute_tools", ToolNode(tools))
+# 1. Add Nodes
+workflow.add_node("chatbot", chatbot)
+workflow.add_node("execute_tools", ToolNode(tools))
 
-    # 2. Define Flow
-    workflow.add_edge(START, "chatbot")
+# 2. Define Flow
+workflow.add_edge(START, "chatbot")
 
-    # 3. The LLM Decision Point
-    workflow.add_conditional_edges(
-        "chatbot",
-        tools_condition,
-        {
-            "tools": "execute_tools",
-            "__end__": END,
-        },
-    )
+# 3. The LLM Decision Point
+workflow.add_conditional_edges("chatbot", tools_condition, {"tools": "execute_tools", "__end__": END})
 
-    # 4. The Return Loop
-    # Every tool result must return to the chatbot to sync conversation state.
-    workflow.add_edge("execute_tools", "chatbot")
+# 4. The Return Loop
+# Every tool result must return to the chatbot to sync conversation state.
+workflow.add_edge("execute_tools", "chatbot")
 
-    # Initialise AgentCore Memory (The "Checkpointer")
-    checkpointer = AgentCoreMemorySaver(
-        memory_id=MEMORY_ID,
-        region_name=AWS_REGION,
-        endpoint_url=f"https://{AGENT_RUNTIME_URL}" if AGENT_RUNTIME_URL else None,
-    )
-
-    return workflow.compile(checkpointer=checkpointer)
+graph_app = workflow.compile(checkpointer=checkpointer)
+# --------------------------
 
 @app.entrypoint
 async def orchestrator_entrypoint(event):
@@ -388,13 +367,25 @@ async def orchestrator_entrypoint(event):
 
     # For LangGraph state persistence.
     thread_id = body.get("thread_id")
-
-    # For state ownership.
-    # Maps to Bedrock AgentCore identity requirements for memory isolation.
     actor_id = body.get("actor_id")
 
-    # Config for LangGraph state (thread) and AgentCore identity (actor).
-    config = {"configurable": {"thread_id": thread_id, "actor_id": actor_id}}
+    # Instantiate LLM once per request to guarantee fresh IAM/STS credentials
+    llm = ChatBedrockConverse(
+        model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        region_name=AWS_REGION,
+        temperature=0,
+        endpoint_url=f"https://{BEDROCK_RUNTIME_URL}" if BEDROCK_RUNTIME_URL else None,
+    )
+    llm_with_tools = llm.bind_tools(tools)
+
+    # Config for LangGraph state (thread), AgentCore identity (actor), and LLM injection
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+            "actor_id": actor_id,
+            "llm_with_tools": llm_with_tools
+        }
+    }
 
     # Extract WebSocket metadata provided by the Router Lambda
     connection_id = body.get("connection_id")
@@ -437,8 +428,6 @@ async def orchestrator_entrypoint(event):
             ("user", str(user_input))
         ]
     }
-
-    graph_app = get_graph_app()
 
     logger.info("Executing LangGraph workflow natively...")
     logger.info("⚡ Starting streaming execution...")

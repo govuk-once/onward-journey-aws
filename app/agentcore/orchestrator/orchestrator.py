@@ -31,10 +31,6 @@ from botocore.config import Config
 from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 from mcp import ClientSession
 
-# Configure logger
-logger = logging.getLogger("bedrock_agentcore.app")
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
-
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
 GATEWAY_URL = os.environ.get("GATEWAY_URL")
 GATEWAY_ENDPOINT_URL = os.environ.get("GATEWAY_ENDPOINT_URL")
@@ -114,6 +110,7 @@ log_level = getattr(logging, log_level_name, logging.INFO)
 logger = logging.getLogger("bedrock_agentcore.app")
 logger.setLevel(log_level)
 
+# Only set logger level *after* instantiating app
 for handler in logger.handlers:
     handler.setLevel(log_level)
 

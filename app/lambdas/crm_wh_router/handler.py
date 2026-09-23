@@ -6,8 +6,9 @@ logger = logging.getLogger()
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 
-def lambda_handler(event: dict, context: object) -> dict:
-    request_id = getattr(context, "aws_request_id", "unknown")
+def lambda_handler(event: dict, lambda_context: object) -> dict:
+    # Fail fast if lambda_context does not satisfy the AWS Lambda runtime contract
+    request_id = lambda_context.aws_request_id
 
     # Auditability: Tie the execution context to the log stream
     logger.info("Ingesting CRM webhook payload", extra={"request_id": request_id})

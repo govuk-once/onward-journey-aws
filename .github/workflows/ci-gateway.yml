@@ -12,11 +12,6 @@ jobs:
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
       backend: ${{ steps.changes.outputs.backend }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Check for changes
         id: changes
         env:

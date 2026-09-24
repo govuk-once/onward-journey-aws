@@ -14,6 +14,7 @@ import logging
 from typing import Annotated, TypedDict
 import httpx
 import boto3
+from botocore.exceptions import ClientError
 
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -434,27 +435,47 @@ async def orchestrator_entrypoint(event):
 
     logged_tool_ids = set()
     final_response_text = ""
+    client_disconnected = asyncio.Event()
 
     def _post_to_connection_sync(client, conn_id, data):
         """Synchronous wrapper to execute the boto3 call."""
         try:
             client.post_to_connection(ConnectionId=conn_id, Data=data)
+            return True
+        except ClientError as e:
+            if e.response.get('Error', {}).get('Code') == 'GoneException':
+                logger.warning("Client %s disconnected (GoneException).", conn_id)
+                return False
+            logger.error("Boto3 ClientError pushing to WebSocket: %s", str(e), exc_info=True)
+            return True
         except Exception as e:
             logger.error("Error pushing to WebSocket: %s", str(e), exc_info=True)
+            return True
 
     ws_queue = asyncio.Queue()
 
     async def ws_consumer():
         """Single background worker that processes chunks sequentially (FIFO)."""
+        is_dead = False
         while True:
             data = await ws_queue.get()
             if data is None:  # Sentinel value to terminate the loop
                 ws_queue.task_done()
                 break
 
+            # If connection is dead, rapidly drain the queue without hitting network
+            if is_dead:
+                ws_queue.task_done()
+                continue
+
             # Post sequentially to guarantee order
-            await asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, data)
+            success = await asyncio.to_thread(_post_to_connection_sync, apigw_client, connection_id, data)
             ws_queue.task_done()
+
+            # If GoneException, flag as dead and signal the main Bedrock loop
+            if not success:
+                is_dead = True
+                client_disconnected.set()
 
     consumer_task = None
     if apigw_client and connection_id:
@@ -464,6 +485,11 @@ async def orchestrator_entrypoint(event):
     async for chunk, metadata in graph_app.astream(
         initial_input, config, stream_mode="messages"
     ):
+        #  Abort Bedrock generation if client dropped
+        if client_disconnected.is_set():
+            logger.info("Aborting Bedrock stream early due to closed WebSocket.")
+            break
+
         node = metadata.get('langgraph_node', 'unknown')
         msg_id = getattr(chunk, 'id', None)
 

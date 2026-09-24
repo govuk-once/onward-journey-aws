@@ -12,13 +12,11 @@ jobs:
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
       backend: ${{ steps.changes.outputs.backend }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Check for changes
         id: changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > changed_files.txt
 

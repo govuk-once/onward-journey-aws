@@ -24,25 +24,25 @@ jobs:
         run: |
           gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > changed_files.txt
 
-          if grep -qE '^(frontend/|\.github/workflows/frontend-checks.yml)' changed_files.txt; then
+          if grep -qE '^(frontend/|\.github/workflows)' changed_files.txt; then
             echo "frontend=true" >> $GITHUB_OUTPUT
           else
             echo "frontend=false" >> $GITHUB_OUTPUT
           fi
 
-          if grep -qE '^(infrastructure/|\.github/workflows/terraform-checks.yml)' changed_files.txt; then
+          if grep -qE '^(infrastructure/|\.github/workflows)' changed_files.txt; then
             echo "infrastructure=true" >> $GITHUB_OUTPUT
           else
             echo "infrastructure=false" >> $GITHUB_OUTPUT
           fi
 
-          if grep -qE '^(app/|\.github/workflows/backend-unit-tests.yml)' changed_files.txt; then
+          if grep -qE '^(app/|\.github/workflows)' changed_files.txt; then
             echo "backend=true" >> $GITHUB_OUTPUT
           else
             echo "backend=false" >> $GITHUB_OUTPUT
           fi
 
-  # Run the checks only on the changed components
+  # Run the checks only on the changed components (if any workflow files changed, run all checks)
   run-frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'

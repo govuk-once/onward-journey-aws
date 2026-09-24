@@ -66,13 +66,20 @@ jobs:
     steps:
       - name: Verify all upstream statuses
         run: |
+          CHANGES_STATUS="${{ needs.changes.result }}"
           FRONTEND_STATUS="${{ needs.run-frontend.result }}"
           INFRA_STATUS="${{ needs.run-infrastructure.result }}"
           BACKEND_STATUS="${{ needs.run-backend.result }}"
 
+          echo "Changes detection job status: $CHANGES_STATUS"
           echo "Frontend status: $FRONTEND_STATUS"
           echo "Infrastructure status: $INFRA_STATUS"
           echo "Backend status: $BACKEND_STATUS"
+
+          if [ "$CHANGES_STATUS" != "success" ]; then
+            echo "Changes detection failed or was cancelled!"
+            exit 1
+          fi
 
           if [ "$FRONTEND_STATUS" = "failure" ] || [ "$FRONTEND_STATUS" = "cancelled" ]; then
             echo "Frontend checks failed!"

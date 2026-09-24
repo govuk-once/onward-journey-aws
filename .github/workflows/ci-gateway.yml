@@ -12,6 +12,9 @@ jobs:
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
       backend: ${{ steps.changes.outputs.backend }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check for changes
         id: changes
         env:

@@ -11,7 +11,8 @@ locals {
     aws_cloudwatch_log_group.crm_tool.name,
     aws_cloudwatch_log_group.rds_init.name,
     aws_cloudwatch_log_group.rds_tool.name,
-    aws_cloudwatch_log_group.orchestrator.name
+    aws_cloudwatch_log_group.orchestrator.name,
+    module.crm_wh_router.log_group_name
   ]
 
   kb_sync_functions = [

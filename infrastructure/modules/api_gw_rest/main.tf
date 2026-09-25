@@ -39,52 +39,21 @@ resource "aws_api_gateway_method" "post_method" {
 }
 
 # -----------------------------------------------------------------------------
-# BACKEND PROCESSOR LAMBDA INTEGRATION (AWS_PROXY)
+# CRM WEBSOCKET ROUTER LAMBDA INTEGRATION (AWS_PROXY)
 # -----------------------------------------------------------------------------
-# TODO(JOUR-346): Revert type to "AWS_PROXY", restore uri = var.processor_lambda_invoke_arn, and remove request_templates once processor Lambda exists
 resource "aws_api_gateway_integration" "post_integration" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = local.target_resource_id
   http_method             = aws_api_gateway_method.post_method.http_method
   integration_http_method = "POST"
-  type                    = var.processor_lambda_invoke_arn != "" ? "AWS_PROXY" : "MOCK"
-  uri                     = var.processor_lambda_invoke_arn != "" ? var.processor_lambda_invoke_arn : null
-
-  request_templates = var.processor_lambda_invoke_arn == "" ? {
-    "application/json" = "{\"statusCode\": 200}"
-  } : null
+  type                    = "AWS_PROXY"
+  uri                     = var.crm_wh_router_invoke_arn
 }
 
-# TODO(JOUR-346): Delete mock method response once processor Lambda is integrated via AWS_PROXY
-resource "aws_api_gateway_method_response" "response_200" {
-  count       = var.processor_lambda_invoke_arn == "" ? 1 : 0
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = local.target_resource_id
-  http_method = aws_api_gateway_method.post_method.http_method
-  status_code = "200"
-}
-
-# TODO(JOUR-346): Delete mock integration response once processor Lambda is integrated via AWS_PROXY
-resource "aws_api_gateway_integration_response" "integration_response_200" {
-  count       = var.processor_lambda_invoke_arn == "" ? 1 : 0
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = local.target_resource_id
-  http_method = aws_api_gateway_method.post_method.http_method
-  status_code = aws_api_gateway_method_response.response_200[0].status_code
-
-  response_templates = {
-    "application/json" = "{\"message\": \"Authorizer verification successful (Mock Backend)\"}"
-  }
-
-  depends_on = [aws_api_gateway_integration.post_integration]
-}
-
-# TODO(JOUR-346): Remove count guard once downstream processor Lambda function is provisioned
-resource "aws_lambda_permission" "processor_invoke" {
-  count         = var.processor_lambda_function_name != "" ? 1 : 0
-  statement_id  = "AllowAPIGatewayInvokeProcessor-${var.api_name}"
+resource "aws_lambda_permission" "crm_wh_router_invoke" {
+  statement_id  = "AllowAPIGatewayInvokeRouter-${var.api_name}"
   action        = "lambda:InvokeFunction"
-  function_name = var.processor_lambda_function_name
+  function_name = var.crm_wh_router_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
@@ -138,13 +107,7 @@ resource "aws_api_gateway_deployment" "deployment" {
       aws_api_gateway_authorizer.authorizer.id,
       aws_api_gateway_authorizer.authorizer.authorizer_uri,
       aws_api_gateway_authorizer.authorizer.authorizer_result_ttl_in_seconds,
-      aws_api_gateway_authorizer.authorizer.identity_source,
-
-      # Responses
-      length(aws_api_gateway_method_response.response_200) > 0 ? aws_api_gateway_method_response.response_200[0].id : "",
-      length(aws_api_gateway_method_response.response_200) > 0 ? aws_api_gateway_method_response.response_200[0].status_code : "",
-      length(aws_api_gateway_integration_response.integration_response_200) > 0 ? aws_api_gateway_integration_response.integration_response_200[0].id : "",
-      length(aws_api_gateway_integration_response.integration_response_200) > 0 ? aws_api_gateway_integration_response.integration_response_200[0].status_code : ""
+      aws_api_gateway_authorizer.authorizer.identity_source
     ]))
   }
 
@@ -152,10 +115,8 @@ resource "aws_api_gateway_deployment" "deployment" {
     create_before_destroy = true
   }
 
-  # TODO(JOUR-346): Remove aws_api_gateway_integration_response.integration_response_200 from depends_on once mock integration is removed
   depends_on = [
-    aws_api_gateway_integration.post_integration,
-    aws_api_gateway_integration_response.integration_response_200
+    aws_api_gateway_integration.post_integration
   ]
 }
 

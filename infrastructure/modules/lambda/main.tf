@@ -59,10 +59,21 @@ resource "aws_iam_role_policy_attachment" "attach" {
   policy_arn = aws_iam_policy.policy[0].arn
 }
 
+# Wait 10 seconds for IAM policy propagation before Lambda attempts VPC ENI creation
+resource "time_sleep" "wait_for_iam_propagation" {
+  count           = length(var.subnet_ids) > 0 ? 1 : 0
+  create_duration = "10s"
+
+  depends_on = [
+    aws_iam_role_policy_attachment.vpc_execution
+  ]
+}
+
 resource "aws_lambda_function" "function" {
   filename                       = data.archive_file.zip.output_path
   source_code_hash               = data.archive_file.zip.output_base64sha256
   function_name                  = "${var.environment}-${var.function_name}"
+  description                    = var.description
   role                           = aws_iam_role.role.arn
   handler                        = var.handler
   runtime                        = "python3.12"
@@ -80,7 +91,8 @@ resource "aws_lambda_function" "function" {
 
   depends_on = [
     aws_cloudwatch_log_group.logs,
-    aws_iam_role_policy_attachment.vpc_execution
+    aws_iam_role_policy_attachment.vpc_execution,
+    time_sleep.wait_for_iam_propagation
   ]
 
   environment {

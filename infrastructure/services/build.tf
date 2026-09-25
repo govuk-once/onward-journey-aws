@@ -28,6 +28,7 @@ locals {
     source_file  = filemd5("${local.app_dir}/agentcore/orchestrator/orchestrator.py")
     main_file    = filemd5("${local.app_dir}/agentcore/orchestrator/main.py")
     prompts_file = filemd5("${local.app_dir}/agentcore/orchestrator/prompts.py")
+    tools_file   = filemd5("${local.app_dir}/agentcore/orchestrator/tools.py")
   }
 
   # Generate unique IDs for each layer
@@ -154,6 +155,7 @@ locals {
     cp "$APP_DIR/agentcore/orchestrator/orchestrator.py" "$STAGING_DIR/"
     cp "$APP_DIR/agentcore/orchestrator/main.py" "$STAGING_DIR/"
     cp "$APP_DIR/agentcore/orchestrator/prompts.py" "$STAGING_DIR/"
+    cp "$APP_DIR/agentcore/orchestrator/tools.py" "$STAGING_DIR/"
 
     echo "Zipping AgentCore deployment package..."
     cd "$STAGING_DIR"

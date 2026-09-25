@@ -26,7 +26,7 @@ from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
 from bedrock_agentcore import BedrockAgentCoreApp
 
-# Import our extracted prompt and tools
+# Import extracted prompt and tools
 from prompts import SYSTEM_PROMPT
 from tools import AGENT_TOOLS
 
@@ -302,7 +302,7 @@ async def orchestrator_entrypoint(event):
                     else:
                         yield chunk_frame  # Console fallback
 
-    # Safely evaluate response AI text without fully dumping it at INFO level
+    # Log response text without fully dumping it at INFO level
     if final_response_text:
         clean_log_text = final_response_text.strip().replace('\n', ' ')
         logger.info("🤖 FINAL AI RESPONSE length=%d", len(clean_log_text))

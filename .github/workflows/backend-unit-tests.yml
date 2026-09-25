@@ -1,0 +1,32 @@
+name: Backend Unit Tests
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - '.github/workflows/backend-unit-tests.yml'
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: Install dependencies
+        working-directory: app
+        run: uv sync --frozen
+
+      - name: Run unit tests
+        working-directory: app
+        run: uv run pytest

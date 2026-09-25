@@ -35,42 +35,60 @@
     if (connectionType !== 'AI' || !orchestrator) return;
 
     // Add user message to UI
-    messages.push({
+    messages = [...messages, {
       message: await markdownToHtml(userInput),
       isSelf: true,
       id: uuid()
-    });
+    }];
 
     responderName = "GOV.UK AI";
-    showTypingIndicator = true;
+
+    // Create the placeholder.
+    const aiMessageId = uuid();
+    let currentAiText = "";
+
+    messages = [...messages, {
+      message: "",
+      user: "GOV.UK AI",
+      isSelf: false,
+      id: aiMessageId
+    }];
 
     await orchestrator.sendMessage(userInput, threadId, {
-      onResponse: async (response) => {
-        console.log("AI response:", response);
-        // Only show AI responses if we haven't switched to HUMAN mode
+
+      onChunk: async (chunk) => {
         if (connectionType === 'AI') {
-          showTypingIndicator = false;
-          messages.push({
-            message: await markdownToHtml(response),
-            user: "GOV.UK AI",
-            isSelf: false,
-            id: uuid()
-          });
+          currentAiText += chunk;
+          const renderedHtml = await markdownToHtml(currentAiText);
+
+          messages = messages.map(m =>
+            m.id === aiMessageId ? { ...m, message: renderedHtml } : m
+          );
         }
       },
+
+      onResponse: async (response) => {
+        console.log("AI response finished.");
+        if (connectionType === 'AI') {
+          const finalHtml = await markdownToHtml(response);
+          messages = messages.map(m =>
+            m.id === aiMessageId ? { ...m, message: finalHtml } : m
+          );
+        }
+      },
+
       onSignal: async (signal, payload) => {
-        if (signal === "initiate_live_handoff") {
+        if (signal === "initiate_live_handoff" || signal === "HUMAN_CHAT") {
           await switchToHuman(payload);
         }
       },
+
       onComplete: () => {
-        if (connectionType === 'AI') {
-          showTypingIndicator = false;
-        }
+        // No action needed for AI
       },
+
       onError: (err) => {
         console.error("Orchestrator error:", err);
-        showTypingIndicator = false;
       }
     });
   };

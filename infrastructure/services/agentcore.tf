@@ -206,7 +206,7 @@ resource "aws_bedrockagentcore_agent_runtime" "orchestrator_runtime" {
   agent_runtime_artifact {
     code_configuration {
       runtime     = "PYTHON_3_12"
-      entry_point = ["orchestrator.py"]
+      entry_point = ["main.py"]
 
       code {
         s3 {

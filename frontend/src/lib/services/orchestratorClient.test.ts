@@ -4,6 +4,9 @@ import { OrchestratorClient, type OrchestratorCallbacks } from "./orchestratorCl
 // ---------------------------------------------------------------------------
 // Mock WebSocket Implementation
 // ---------------------------------------------------------------------------
+
+type MockCallback = (event: MessageEvent & Event) => void | Promise<void>;
+
 class MockWebSocket {
     static instances: MockWebSocket[] = [];
 
@@ -17,32 +20,59 @@ class MockWebSocket {
     send = jest.fn();
     close = jest.fn();
 
-    onopen: (() => void) | null = null;
-    onmessage: ((event: { data: string }) => void | Promise<void>) | null = null;
-    onerror: ((error: unknown) => void) | null = null;
-    onclose: (() => void) | null = null;
+    private listeners: Record<string, Array<{ callback: MockCallback; once: boolean }>> = {
+        open: [],
+        message: [],
+        error: [],
+        close: []
+    };
 
     constructor(url: string) {
         this.url = url;
         MockWebSocket.instances.push(this);
     }
 
+    addEventListener(event: string, callback: MockCallback, options?: { once?: boolean }) {
+        if (!this.listeners[event]) this.listeners[event] = [];
+        this.listeners[event].push({ callback, once: options?.once || false });
+    }
+
+    removeEventListener(event: string, callback: MockCallback) {
+        if (!this.listeners[event]) return;
+        this.listeners[event] = this.listeners[event].filter((l) => l.callback !== callback);
+    }
+
+    // Helper to fire events to attached listeners
+    private dispatchEvent(event: string, payload?: unknown) {
+        if (!this.listeners[event]) return;
+
+        const currentListeners = [...this.listeners[event]];
+        for (const listener of currentListeners) {
+            listener.callback(payload as MessageEvent & Event);
+            if (listener.once) {
+                this.removeEventListener(event, listener.callback);
+            }
+        }
+    }
+
     // Helper for tests: simulate incoming server message
     emitMessage(data: object | string) {
-        if (this.onmessage) {
-            const dataStr = typeof data === "string" ? data : JSON.stringify(data);
-            this.onmessage({ data: dataStr });
-        }
+        const dataStr = typeof data === "string" ? data : JSON.stringify(data);
+        // Dispatch an object matching the shape of a MessageEvent
+        this.dispatchEvent("message", { data: dataStr });
     }
 
     // Helper for tests: simulate WebSocket error
     emitError(error: unknown) {
-        if (this.onerror) {
-            this.onerror(error);
-        }
+        this.dispatchEvent("error", error);
+    }
+
+    // Helper for tests: simulate successful connection
+    emitOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.dispatchEvent("open");
     }
 }
-
 // ---------------------------------------------------------------------------
 
 describe("OrchestratorClient (WebSocket)", () => {
@@ -117,7 +147,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(ws.send).not.toHaveBeenCalled();
 
         // Simulate socket connection opening
-        if (ws.onopen) ws.onopen();
+        ws.emitOpen();
 
         expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
             message: "hello",
@@ -127,6 +157,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         global.WebSocket = originalConstructor;
     });
+
     it("should process streaming chunk frames and finalize upon receiving 'done' frame", async () => {
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
         const ws = MockWebSocket.instances[0];
@@ -221,5 +252,71 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(callbacks.onResponse).not.toHaveBeenCalled();
 
         consoleSpy.mockRestore();
+    });
+
+    it("should NOT double-fire onComplete if a 'done' frame is received (prevents timer race condition)", async () => {
+        await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
+        const ws = MockWebSocket.instances[0];
+
+        // Fire the done frame
+        ws.emitMessage({ type: "done" });
+        await Promise.resolve();
+
+        // Verify it was called exactly once
+        expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
+
+        // Fast-forward past the 2.5s debounce timeout window
+        jest.advanceTimersByTime(3000);
+        await Promise.resolve();
+
+        // Verify it wasn't called a second time by the fallback timer
+        expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it("should re-initialize the WebSocket if the current socket is in a CLOSING state", async () => {
+        // 1st message creates the first socket
+        await client.sendMessage("hello", "thread-1234567890", callbacks);
+        expect(MockWebSocket.instances.length).toBe(1);
+
+        const firstWs = MockWebSocket.instances[0];
+        // Manually put the first socket into a CLOSING state
+        firstWs.readyState = MockWebSocket.CLOSING;
+
+        // 2nd message should detect CLOSING and create a new socket
+        await client.sendMessage("hello again", "thread-1234567890", callbacks);
+
+        expect(MockWebSocket.instances.length).toBe(2);
+        const secondWs = MockWebSocket.instances[1];
+
+        // Ensure the payload was sent down the NEW socket, not the old one
+        expect(secondWs.send).toHaveBeenCalled();
+    });
+
+    it("should safely clean up event listeners to prevent cross-contamination on reused sockets", async () => {
+        // Send first message
+        await client.sendMessage("message 1", "thread-1", callbacks);
+        const ws = MockWebSocket.instances[0];
+
+        // Finish first message
+        ws.emitMessage({ type: "chunk", text: "Response 1" });
+        ws.emitMessage({ type: "done" });
+        await Promise.resolve();
+
+        // Send second message on same socket
+        await client.sendMessage("message 2", "thread-1", callbacks);
+
+        // Ensure new socket wasn't created unnecessarily
+        expect(MockWebSocket.instances.length).toBe(1);
+
+        // Finish second message
+        ws.emitMessage({ type: "chunk", text: "Response 2" });
+        ws.emitMessage({ type: "done" });
+        await Promise.resolve();
+
+        // If listeners not cleaned up, Response 2 would have triggered FIRST callback twice.
+        // Checking exactly what was passed to onResponse proves they stayed isolated.
+        expect(callbacks.onResponse).toHaveBeenCalledTimes(2);
+        expect(callbacks.onResponse).toHaveBeenNthCalledWith(1, "Response 1");
+        expect(callbacks.onResponse).toHaveBeenNthCalledWith(2, "Response 2");
     });
 });

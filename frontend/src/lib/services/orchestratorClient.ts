@@ -29,8 +29,8 @@ export class OrchestratorClient {
 
     async sendMessage(message: string, threadId: string, callbacks: OrchestratorCallbacks) {
         try {
-            // 1. Initialize or reuse WebSocket connection
-            if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+            // 1. Initialize or reuse WebSocket connection (Handle both CLOSED and CLOSING states)
+            if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
                 this.ws = new WebSocket(this.url);
             }
 
@@ -44,10 +44,16 @@ export class OrchestratorClient {
                 }
                 await callbacks.onComplete();
                 fullText = ""; // Reset buffer for the next message
+
+                // --- CLEANUP: Remove event listeners to prevent memory leaks on reused sockets ---
+                if (this.ws) {
+                    this.ws.removeEventListener("message", messageHandler);
+                    this.ws.removeEventListener("error", errorHandler);
+                }
             };
 
             // 2. Handle incoming JSON frames
-            this.ws.onmessage = async (event) => {
+            const messageHandler = async (event: MessageEvent) => {
                 try {
                     const frame = JSON.parse(event.data);
 
@@ -73,7 +79,7 @@ export class OrchestratorClient {
                             // AI has finished generating this turn
                             clearTimeout(streamTimeout);
                             await finalizeMessage();
-                            break;
+                            return; // Stop execution here so no new debounce timer is set
 
                         default:
                             console.warn("[WebSocket] Unknown frame type received:", frame.type);
@@ -89,25 +95,32 @@ export class OrchestratorClient {
                 }, 2500);
             };
 
+            this.ws.addEventListener("message", messageHandler);
+
             // 3. Handle connection errors
-            this.ws.onerror = (error) => {
+            const errorHandler = (error: Event) => {
                 console.error("[WebSocket Error]", error);
                 callbacks.onError(error);
+                clearTimeout(streamTimeout);
+                finalizeMessage(); // Clean up listeners and resolve on error
             };
+
+            this.ws.addEventListener("error", errorHandler);
 
             // 4. Send the user message payload
             const payload = JSON.stringify({
                 message,
                 thread_id: threadId,
-                actor_id: 'test'
+                actor_id: 'test' // TODO: Update with real actor ID
             });
 
             // If the socket is still opening, queue the send. Otherwise, send immediately.
             if (this.ws.readyState === WebSocket.CONNECTING) {
-                this.ws.onopen = () => {
+                // Use { once: true } so this listener automatically deletes itself after firing
+                this.ws.addEventListener("open", () => {
                     console.log("[WebSocket] Connected successfully.");
                     this.ws!.send(payload);
-                };
+                }, { once: true });
             } else if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(payload);
             } else {

@@ -24,8 +24,11 @@ locals {
     build_script = sha1(local.integrations_build_command)
   }
   agentcore_triggers = {
-    lock_file   = filemd5("${local.app_dir}/uv.lock")
-    source_file = filemd5("${local.app_dir}/agentcore/orchestrator/orchestrator.py")
+    lock_file    = filemd5("${local.app_dir}/uv.lock")
+    source_file  = filemd5("${local.app_dir}/agentcore/orchestrator/orchestrator.py")
+    main_file    = filemd5("${local.app_dir}/agentcore/orchestrator/main.py")
+    prompts_file = filemd5("${local.app_dir}/agentcore/orchestrator/prompts.py")
+    tools_file   = filemd5("${local.app_dir}/agentcore/orchestrator/tools.py")
   }
 
   # Generate unique IDs for each layer
@@ -148,8 +151,11 @@ locals {
     echo "Cleaning up __pycache__..."
     find "$STAGING_DIR" -name "__pycache__" -type d -exec rm -rf {} +
 
-    # Copy the new AgentCore entrypoint into the root of the staging folder
+    # Copy the AgentCore code into the root of the staging folder
     cp "$APP_DIR/agentcore/orchestrator/orchestrator.py" "$STAGING_DIR/"
+    cp "$APP_DIR/agentcore/orchestrator/main.py" "$STAGING_DIR/"
+    cp "$APP_DIR/agentcore/orchestrator/prompts.py" "$STAGING_DIR/"
+    cp "$APP_DIR/agentcore/orchestrator/tools.py" "$STAGING_DIR/"
 
     echo "Zipping AgentCore deployment package..."
     cd "$STAGING_DIR"

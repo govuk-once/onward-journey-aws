@@ -30,8 +30,8 @@ resource "null_resource" "build_and_deploy_frontend" {
   triggers = {
     # Re-run deployment if the frontend source code changes
     frontend_hash = sha1(join("", [for f in fileset(abspath("${path.module}/../../frontend"), "{src,static}/**/*") : filemd5("${abspath("${path.module}/../../frontend")}/${f}")]))
-    # Re-run if the backend URL changes
-    backend_url = aws_lambda_function_url.orchestrator_url.function_url
+    # Re-run if the WebSocket URL changes
+    backend_url = module.client_ws_gateway.wss_url
     # Re-run if the Cognito pool changes
     cognito_pool_id = aws_cognito_identity_pool.frontend_anon.id
   }
@@ -47,7 +47,7 @@ resource "null_resource" "build_and_deploy_frontend" {
       npm install
 
       # Build the app with the Orchestrator URL and Cognito pool injected
-      export PUBLIC_ORCHESTRATOR_URL="${aws_lambda_function_url.orchestrator_url.function_url}"
+      export PUBLIC_ORCHESTRATOR_URL="${module.client_ws_gateway.wss_url}"
       export PUBLIC_COGNITO_IDENTITY_POOL_ID="${aws_cognito_identity_pool.frontend_anon.id}"
       export PUBLIC_AWS_REGION="${var.aws_region}"
       npm run build

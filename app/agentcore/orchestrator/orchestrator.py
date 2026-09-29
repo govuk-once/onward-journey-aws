@@ -256,71 +256,74 @@ async def orchestrator_entrypoint(event):
     if apigw_client and connection_id:
         consumer_task = asyncio.create_task(ws_consumer())
 
-    # Use astream with stream_mode="messages" to get real-time tokens
-    async for chunk, metadata in graph_app.astream(
-        initial_input, config, stream_mode="messages"
-    ):
-        #  Abort Bedrock generation if client dropped
-        if client_disconnected.is_set():
-            logger.info("Aborting Bedrock stream early due to closed WebSocket.")
-            break
+    try:
+        # Use astream with stream_mode="messages" to get real-time tokens
+        async for chunk, metadata in graph_app.astream(
+            initial_input, config, stream_mode="messages"
+        ):
+            #  Abort Bedrock generation if client dropped
+            if client_disconnected.is_set():
+                logger.info("Aborting Bedrock stream early due to closed WebSocket.")
+                break
 
-        node = metadata.get('langgraph_node', 'unknown')
-        msg_id = getattr(chunk, 'id', None)
+            node = metadata.get('langgraph_node', 'unknown')
+            msg_id = getattr(chunk, 'id', None)
 
-        has_content = bool(chunk.content)
-        has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
-        is_tool_result = isinstance(chunk, ToolMessage)
+            has_content = bool(chunk.content)
+            has_tool_chunks = hasattr(chunk, 'tool_call_chunks') and len(chunk.tool_call_chunks) > 0
+            is_tool_result = isinstance(chunk, ToolMessage)
 
-        # --- LOG TOOL CALLS ---
-        # Log tool calls/results - only print once per ID
-        if msg_id and msg_id not in logged_tool_ids:
-            if has_tool_chunks:
-                logger.info("🛠️ TOOL CALL: %s", chunk.tool_call_chunks[0].get('name'))
-                logged_tool_ids.add(msg_id)
-            elif is_tool_result:
-                logger.info("📥 TOOL RESULT: %s...", str(chunk.content)[:200])
-                logged_tool_ids.add(msg_id)
+            # --- LOG TOOL CALLS ---
+            # Log tool calls/results - only print once per ID
+            if msg_id and msg_id not in logged_tool_ids:
+                if has_tool_chunks:
+                    logger.info("🛠️ TOOL CALL: %s", chunk.tool_call_chunks[0].get('name'))
+                    logged_tool_ids.add(msg_id)
+                elif is_tool_result:
+                    logger.info("📥 TOOL RESULT: %s...", str(chunk.content)[:200])
+                    logged_tool_ids.add(msg_id)
 
-        # --- WEBSOCKET TEXT PUSH LOGIC & ACCUMULATION ---
-        if node == "chatbot" and has_content:
-            tokens_to_send = []
-            if isinstance(chunk.content, list):
-                for block in chunk.content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        tokens_to_send.append(block.get("text", ""))
-            elif isinstance(chunk.content, str):
-                tokens_to_send.append(chunk.content)
+            # --- WEBSOCKET TEXT PUSH LOGIC & ACCUMULATION ---
+            if node == "chatbot" and has_content:
+                tokens_to_send = []
+                if isinstance(chunk.content, list):
+                    for block in chunk.content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            tokens_to_send.append(block.get("text", ""))
+                elif isinstance(chunk.content, str):
+                    tokens_to_send.append(chunk.content)
 
-            for token in tokens_to_send:
-                if token:
-                    final_response_text += token
-                    chunk_frame = json.dumps({"type": "chunk", "text": token})
-                    if apigw_client and connection_id:
-                        # Instantly buffer into the queue (non-blocking)
-                        ws_queue.put_nowait(chunk_frame.encode('utf-8'))
-                    else:
-                        yield chunk_frame  # Console fallback
+                for token in tokens_to_send:
+                    if token:
+                        final_response_text += token
+                        chunk_frame = json.dumps({"type": "chunk", "text": token})
+                        if apigw_client and connection_id:
+                            # Instantly buffer into the queue (non-blocking)
+                            ws_queue.put_nowait(chunk_frame.encode('utf-8'))
+                        else:
+                            yield chunk_frame  # Console fallback
 
-    # Log response text without fully dumping it at INFO level
-    if final_response_text:
-        clean_log_text = final_response_text.strip().replace('\n', ' ')
-        logger.info("🤖 FINAL AI RESPONSE length=%d", len(clean_log_text))
-        logger.debug("🤖 FINAL AI RESPONSE text=%s", clean_log_text)
+        # Log response text without fully dumping it at INFO level
+        if final_response_text:
+            clean_log_text = final_response_text.strip().replace('\n', ' ')
+            logger.info("🤖 FINAL AI RESPONSE length=%d", len(clean_log_text))
+            logger.debug("🤖 FINAL AI RESPONSE text=%s", clean_log_text)
 
-    logger.info("Execution finished successfully")
+        logger.info("Execution finished successfully")
 
-    # --- Push Completion Frame & Drain Queue ---
-    if apigw_client and connection_id:
-        done_frame = json.dumps({"type": "done"})
-        ws_queue.put_nowait(done_frame.encode('utf-8'))
+    finally:
+        # --- Cleanly Teardown Worker Queue Even On Exception ---
+        if apigw_client and connection_id and consumer_task:
+            if not client_disconnected.is_set():
+                done_frame = json.dumps({"type": "done"})
+                ws_queue.put_nowait(done_frame.encode('utf-8'))
 
-        # Tell the consumer to shut down
-        ws_queue.put_nowait(None)
+            # Tell the consumer to shut down
+            ws_queue.put_nowait(None)
 
-        # Wait for all chunks in the queue to be successfully sent
-        await ws_queue.join()
-        # Wait for the worker task to cleanly exit
-        await consumer_task
-    else:
-        yield json.dumps({"type": "done"})
+            # Wait for all chunks in the queue to be successfully sent
+            await ws_queue.join()
+            # Wait for the worker task to cleanly exit
+            await consumer_task
+        else:
+            yield json.dumps({"type": "done"})

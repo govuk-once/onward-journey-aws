@@ -1,10 +1,7 @@
 name: Frontend Checks
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend-checks.yml"
+  workflow_call:
   push:
     branches:
       - main
@@ -13,7 +10,7 @@ on:
       - ".github/workflows/frontend-checks.yml"
 
 jobs:
-  lint-and-check:
+  frontend-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -42,24 +39,6 @@ jobs:
           PUBLIC_ORCHESTRATOR_URL: "https://dummy-url.com"
           PUBLIC_COGNITO_IDENTITY_POOL_ID: "dummy-pool-id"
           PUBLIC_AWS_REGION: "eu-west-2"
-
-  unit-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "25.2.1"
-          cache: "npm"
-          cache-dependency-path: "frontend/package-lock.json"
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
 
       - name: Prepare assets
         working-directory: frontend

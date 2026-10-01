@@ -5,14 +5,17 @@
 
 data "aws_region" "current" {}
 
-# --- S3 GATEWAY ENDPOINT ---
+# ==============================================================================
+# 1. S3 GATEWAY ENDPOINT
+# ==============================================================================
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
   vpc_endpoint_type = "Gateway"
 
   tags = {
-    Name = "shared-s3-gateway"
+    Name      = "shared-s3-gateway"
+    Component = "vpc-endpoints"
   }
 }
 
@@ -27,8 +30,9 @@ resource "aws_vpc_endpoint_route_table_association" "s3_private" {
   route_table_id  = aws_route_table.private.id
 }
 
-# --- SHARED INTERFACE ENDPOINTS ---
-
+# ==============================================================================
+# 2. SHARED INTERFACE ENDPOINTS
+# ==============================================================================
 resource "aws_security_group" "shared_endpoints_sg" {
   name        = "shared-endpoints-sg"
   description = "Allow HTTPS traffic from within the VPC to shared endpoints"
@@ -40,30 +44,42 @@ resource "aws_security_group" "shared_endpoints_sg" {
     protocol    = "tcp"
     cidr_blocks = [aws_vpc.main.cidr_block]
   }
+
+  tags = {
+    Name      = "shared-endpoints-sg"
+    Component = "vpc-endpoints"
+  }
 }
 
-# CloudWatch Logs Endpoint - required for telemetry and error logging from private compute
-resource "aws_vpc_endpoint" "logs" {
+locals {
+  shared_interface_endpoints = {
+    # CloudWatch Logs Endpoint - required for telemetry and error logging from private compute
+    logs = {
+      service_suffix = "logs"
+      name           = "shared-logs-endpoint"
+    }
+
+    # Security Token Service (STS) Endpoint - required for boto3 and AgentCore Runtime credential resolution
+    sts = {
+      service_suffix = "sts"
+      name           = "shared-sts-endpoint"
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "shared_interface" {
+  for_each = local.shared_interface_endpoints
+
   vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.region}.logs"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.${each.value.service_suffix}"
   vpc_endpoint_type = "Interface"
 
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
   private_dns_enabled = true
 
-  tags = { Name = "shared-logs-endpoint" }
-}
-
-# Security Token Service (STS) Endpoint - required for boto3 and AgentCore Runtime credential resolution
-resource "aws_vpc_endpoint" "sts" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.region}.sts"
-  vpc_endpoint_type = "Interface"
-
-  subnet_ids          = aws_subnet.private[*].id
-  security_group_ids  = [aws_security_group.shared_endpoints_sg.id]
-  private_dns_enabled = true
-
-  tags = { Name = "shared-sts-endpoint" }
+  tags = {
+    Name      = each.value.name
+    Component = "vpc-endpoints"
+  }
 }

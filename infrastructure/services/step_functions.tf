@@ -33,14 +33,8 @@ resource "aws_iam_policy" "sfn_kb_sync_policy" {
         Action = [
           "lambda:InvokeFunction"
         ]
-        Resource = [
-          aws_lambda_function.kb_sync_check_kb_meta.arn,
-          aws_lambda_function.kb_sync_check_sync_meta.arn,
-          aws_lambda_function.kb_sync_fetch_articles.arn,
-          aws_lambda_function.kb_sync_upsert.arn,
-          aws_lambda_function.kb_sync_update_sync_meta.arn,
-          aws_lambda_function.kb_sync_cleanup_unmapped.arn
-        ]
+        # Automatically includes all Lambdas defined in the kb_sync map
+        Resource = [for lambda in aws_lambda_function.kb_sync : lambda.arn]
       },
       {
         Effect = "Allow"
@@ -71,6 +65,10 @@ resource "aws_iam_role_policy_attachment" "sfn_kb_sync_attach" {
 resource "aws_cloudwatch_log_group" "sfn_kb_sync_logs" {
   name              = "/aws/vendedlogs/states/${var.environment}-kb-sync-machine"
   retention_in_days = 14
+
+  tags = {
+    Component = "kb-sync"
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -81,12 +79,12 @@ resource "aws_sfn_state_machine" "kb_sync_machine" {
   role_arn = aws_iam_role.sfn_kb_sync_role.arn
 
   definition = templatefile("${path.module}/kb_sync_workflow.asl.json", {
-    check_kb_meta_lambda_arn    = aws_lambda_function.kb_sync_check_kb_meta.arn
-    check_sync_meta_lambda_arn  = aws_lambda_function.kb_sync_check_sync_meta.arn
-    fetch_articles_lambda_arn   = aws_lambda_function.kb_sync_fetch_articles.arn
-    upsert_lambda_arn           = aws_lambda_function.kb_sync_upsert.arn
-    update_sync_meta_lambda_arn = aws_lambda_function.kb_sync_update_sync_meta.arn
-    cleanup_unmapped_lambda_arn = aws_lambda_function.kb_sync_cleanup_unmapped.arn
+    check_kb_meta_lambda_arn    = aws_lambda_function.kb_sync["check_kb_meta"].arn
+    check_sync_meta_lambda_arn  = aws_lambda_function.kb_sync["check_sync_meta"].arn
+    fetch_articles_lambda_arn   = aws_lambda_function.kb_sync["fetch_articles"].arn
+    upsert_lambda_arn           = aws_lambda_function.kb_sync["upsert"].arn
+    update_sync_meta_lambda_arn = aws_lambda_function.kb_sync["update_sync_meta"].arn
+    cleanup_unmapped_lambda_arn = aws_lambda_function.kb_sync["cleanup_unmapped"].arn
   })
 
   logging_configuration {
@@ -98,4 +96,8 @@ resource "aws_sfn_state_machine" "kb_sync_machine" {
   depends_on = [
     aws_iam_role_policy_attachment.sfn_kb_sync_attach
   ]
+
+  tags = {
+    Component = "kb-sync"
+  }
 }

@@ -5,6 +5,11 @@ resource "aws_s3_bucket" "dataset_storage" {
   # Allow terraform to delete files when destroying for easy environment teardown
   # Dataset files get uploaded when creating a new environment
   force_destroy = true
+
+  tags = {
+    Name      = "${var.environment}-dataset-storage"
+    Component = "dataset-storage"
+  }
 }
 
 resource "aws_s3_bucket_versioning" "dataset_storage" {
@@ -42,8 +47,8 @@ resource "aws_s3_bucket" "infrastructure" {
   force_destroy = true
 
   tags = {
-    Name = "${var.environment}-infrastructure-storage"
-    Tier = "infrastructure"
+    Name      = "${var.environment}-infrastructure-storage"
+    Component = "infrastructure-storage"
   }
 }
 

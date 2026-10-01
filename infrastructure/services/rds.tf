@@ -34,7 +34,8 @@ resource "aws_db_instance" "dept_contacts_metadata" {
   storage_encrypted   = true
 
   tags = {
-    Name = "${var.environment}-dept-contacts-metadata"
+    Name      = "${var.environment}-dept-contacts-metadata"
+    Component = "dept-contacts-db"
   }
 }
 
@@ -43,6 +44,7 @@ resource "aws_db_subnet_group" "dept_contacts_subnets" {
   subnet_ids = data.aws_subnets.private.ids
 
   tags = {
-    Name = "${var.environment}-dept-contacts-subnets"
+    Name      = "${var.environment}-dept-contacts-subnets"
+    Component = "dept-contacts-db"
   }
 }

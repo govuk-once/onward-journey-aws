@@ -7,18 +7,14 @@
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 
-  tags = {
-    Name = "shared-igw"
-  }
+  tags = { Name = "shared-igw" }
 }
 
 # Dedicated EIP for the shared NAT Gateway
 resource "aws_eip" "nat" {
   domain = "vpc"
 
-  tags = {
-    Name = "shared-nat-eip"
-  }
+  tags = { Name = "shared-nat-eip" }
 }
 
 # NAT Gateway placed in public DMZ subnet for private subnet outbound connectivity
@@ -26,9 +22,7 @@ resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public.id
 
-  tags = {
-    Name = "shared-nat-gateway"
-  }
+  tags = { Name = "shared-nat-gateway" }
 
   depends_on = [aws_internet_gateway.igw]
 }
@@ -42,9 +36,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.igw.id
   }
 
-  tags = {
-    Name = "shared-public-rt"
-  }
+  tags = { Name = "shared-public-rt" }
 }
 
 resource "aws_route_table_association" "public" {
@@ -61,9 +53,7 @@ resource "aws_route_table" "private" {
     nat_gateway_id = aws_nat_gateway.nat.id
   }
 
-  tags = {
-    Name = "shared-private-rt"
-  }
+  tags = { Name = "shared-private-rt" }
 }
 
 resource "aws_route_table_association" "private" {
@@ -81,78 +71,64 @@ data "aws_sns_topic" "slack_alerts" {
 # NAT Gateway Security & Performance CloudWatch Alarms
 # -----------------------------------------------------------------------------
 
-# Outbound Egress Alarm (Data Exfiltration / Large Payload Safeguard)
-resource "aws_cloudwatch_metric_alarm" "nat_outbound_bytes_high" {
-  alarm_name          = "shared-nat-outbound-bytes-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "BytesOutToDestination"
-  namespace           = "AWS/NATGateway"
-  period              = 300 # 5-minute evaluation window for fast feedback in dev
-  statistic           = "Sum"
-  threshold           = 104857600 # 100 MB per 5 mins
+locals {
+  nat_alarms = {
+    # Outbound Egress Alarm (Data Exfiltration / Large Payload Safeguard)
+    outbound_bytes_high = {
+      alarm_name        = "shared-nat-outbound-bytes-high"
+      metric_name       = "BytesOutToDestination"
+      period            = 300       # 5-minute evaluation window for fast feedback
+      threshold         = 104857600 # 100 MB per 5 mins
+      alarm_description = "Alerts on excessive outbound internet transfer from private subnets (e.g. data exfiltration or runaway API request payloads)."
+    }
 
-  dimensions = {
-    NatGatewayId = aws_nat_gateway.nat.id
+    # Inbound Response Alarm (Runaway Download Loops / Large Payload Safeguard)
+    inbound_bytes_high = {
+      alarm_name        = "shared-nat-inbound-bytes-high"
+      metric_name       = "BytesInFromDestination"
+      period            = 300
+      threshold         = 104857600 # 100 MB per 5 mins
+      alarm_description = "Alerts on high inbound internet traffic returned to private subnets (e.g. runaway response loops or heavy payloads)."
+    }
+
+    # Connection Attempt Spike Alarm (Rogue AI Loops & Infinite Retries)
+    connection_attempts_high = {
+      alarm_name        = "shared-nat-connection-attempts-high"
+      metric_name       = "ConnectionAttemptCount"
+      period            = 300
+      threshold         = 1000 # Max 1,000 connection attempts per 5 mins
+      alarm_description = "Alerts on rapid connection spikes, flagging unthrottled API retry storms or recursive LangGraph loops."
+    }
+
+    # Port Allocation Failure Alarm (Network Exhaustion / Socket Leak Safeguard)
+    port_allocation_errors = {
+      alarm_name        = "shared-nat-port-allocation-errors"
+      metric_name       = "ErrorPortAllocation"
+      period            = 60 # 1-minute window for immediate availability alerts
+      threshold         = 0
+      alarm_description = "Alerts immediately if the NAT Gateway cannot allocate a source port due to connection limit exhaustion."
+    }
   }
-
-  alarm_description = "Alerts on excessive outbound internet transfer from private subnets (e.g. data exfiltration or runaway API request payloads)."
-  alarm_actions     = [data.aws_sns_topic.slack_alerts.arn]
 }
 
-# Inbound Response Alarm (Runaway Download Loops / Large Payload Safeguard)
-resource "aws_cloudwatch_metric_alarm" "nat_inbound_bytes_high" {
-  alarm_name          = "shared-nat-inbound-bytes-high"
+resource "aws_cloudwatch_metric_alarm" "nat_alarms" {
+  for_each = local.nat_alarms
+
+  alarm_name          = each.value.alarm_name
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = "BytesInFromDestination"
+  metric_name         = each.value.metric_name
   namespace           = "AWS/NATGateway"
-  period              = 300
+  period              = each.value.period
   statistic           = "Sum"
-  threshold           = 104857600 # 100 MB per 5 mins
+  threshold           = each.value.threshold
 
   dimensions = {
     NatGatewayId = aws_nat_gateway.nat.id
   }
 
-  alarm_description = "Alerts on high inbound internet traffic returned to private subnets (e.g. runaway response loops or heavy payloads)."
+  alarm_description = each.value.alarm_description
   alarm_actions     = [data.aws_sns_topic.slack_alerts.arn]
-}
 
-# Connection Attempt Spike Alarm (Rogue AI Loops & Infinite Retries)
-resource "aws_cloudwatch_metric_alarm" "nat_connection_attempts_high" {
-  alarm_name          = "shared-nat-connection-attempts-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ConnectionAttemptCount"
-  namespace           = "AWS/NATGateway"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 1000 # Max 1,000 connection attempts per 5 mins
-
-  dimensions = {
-    NatGatewayId = aws_nat_gateway.nat.id
-  }
-
-  alarm_description = "Alerts on rapid connection spikes, flagging unthrottled API retry storms or recursive LangGraph loops."
-  alarm_actions     = [data.aws_sns_topic.slack_alerts.arn]
-}
-
-# Port Allocation Failure Alarm (Network Exhaustion / Socket Leak Safeguard)
-resource "aws_cloudwatch_metric_alarm" "nat_port_allocation_errors" {
-  alarm_name          = "shared-nat-port-allocation-errors"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ErrorPortAllocation"
-  namespace           = "AWS/NATGateway"
-  period              = 60 # 1-minute window for immediate availability alerts
-  statistic           = "Sum"
-  threshold           = 0
-
-  dimensions = {
-    NatGatewayId = aws_nat_gateway.nat.id
-  }
-
-  alarm_description = "Alerts immediately if the NAT Gateway cannot allocate a source port due to connection limit exhaustion."
-  alarm_actions     = [data.aws_sns_topic.slack_alerts.arn]
+  tags = { Name = each.value.alarm_name }
 }

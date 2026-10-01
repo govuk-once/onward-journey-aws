@@ -1,199 +1,225 @@
-## KB SYNC: CHECK KB METADATA
-resource "aws_cloudwatch_log_group" "kb_sync_check_kb_meta" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-check-kb-meta"
-  retention_in_days = 14
+/**
+ * PURPOSE: Knowledge Base Synchronisation Pipeline Lambdas.
+ * Handles metadata checks, article fetching, embedding generation, database upserts,
+ * and cleanup tasks for the KB sync workflow.
+ */
+
+locals {
+  kb_sync_lambdas = {
+    # 1. Check KB Metadata (Public CRM Access)
+    check_kb_meta = {
+      function_name = "${var.environment}-kb-sync-check-kb-meta"
+      archive_path  = data.archive_file.kb_sync_check_kb_meta_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_check_kb_meta_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_crm_role.arn
+      memory_size   = 512
+      timeout       = 30
+      in_vpc        = false
+      env_vars = {
+        ENV_PREFIX = var.environment
+      }
+    }
+
+    # 2. Check Sync Metadata (VPC DB Access)
+    check_sync_meta = {
+      function_name = "${var.environment}-kb-sync-check-sync-meta"
+      archive_path  = data.archive_file.kb_sync_check_sync_meta_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_check_sync_meta_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_role.arn
+      memory_size   = 512
+      timeout       = 30
+      in_vpc        = true
+      env_vars = {
+        CONTACTS_TABLE_NAME  = local.active_contacts_table
+        DB_HOST              = aws_db_instance.dept_contacts_metadata.address
+        DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
+        DB_USER              = "rds_readonly_dept_contacts"
+        SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+        ENV_PREFIX           = var.environment
+      }
+    }
+
+    # 3. Fetch Articles (Public CRM Access)
+    fetch_articles = {
+      function_name = "${var.environment}-kb-sync-fetch-articles"
+      archive_path  = data.archive_file.kb_sync_fetch_articles_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_fetch_articles_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_crm_role.arn
+      memory_size   = 512
+      timeout       = 60
+      in_vpc        = false
+      env_vars = {
+        ENV_PREFIX = var.environment
+      }
+    }
+
+    # 4. Upsert Knowledge Data (VPC Bedrock + DB Access)
+    upsert = {
+      function_name = "${var.environment}-kb-sync-upsert"
+      archive_path  = data.archive_file.kb_sync_upsert_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_upsert_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_role.arn
+      memory_size   = 1024
+      timeout       = 30
+      in_vpc        = true
+      env_vars = {
+        DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
+        DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
+        DB_USER                  = aws_db_instance.dept_contacts_metadata.username
+        DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+        BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
+      }
+    }
+
+    # 5. Update Sync Metadata (VPC DB Access)
+    update_sync_meta = {
+      function_name = "${var.environment}-kb-sync-update-sync-meta"
+      archive_path  = data.archive_file.kb_sync_update_sync_meta_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_update_sync_meta_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_role.arn
+      memory_size   = 512
+      timeout       = 30
+      in_vpc        = true
+      env_vars = {
+        DB_HOST              = aws_db_instance.dept_contacts_metadata.address
+        DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
+        DB_USER              = aws_db_instance.dept_contacts_metadata.username
+        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+      }
+    }
+
+    # 6. Cleanup Unmapped Records (VPC DB Access)
+    cleanup_unmapped = {
+      function_name = "${var.environment}-kb-sync-cleanup-unmapped"
+      archive_path  = data.archive_file.kb_sync_cleanup_unmapped_zip.output_path
+      archive_hash  = data.archive_file.kb_sync_cleanup_unmapped_zip.output_base64sha256
+      role_arn      = aws_iam_role.kb_sync_cleanup_role.arn
+      memory_size   = 512
+      timeout       = 30
+      in_vpc        = true
+      env_vars = {
+        DB_HOST              = aws_db_instance.dept_contacts_metadata.address
+        DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
+        DB_USER              = aws_db_instance.dept_contacts_metadata.username
+        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+      }
+    }
+  }
 }
 
-resource "aws_lambda_function" "kb_sync_check_kb_meta" {
-  filename         = data.archive_file.kb_sync_check_kb_meta_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_check_kb_meta_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-check-kb-meta"
-  role             = aws_iam_role.kb_sync_crm_role.arn
+# ==============================================================================
+# LOG GROUPS
+# ==============================================================================
+resource "aws_cloudwatch_log_group" "kb_sync" {
+  for_each = local.kb_sync_lambdas
+
+  name              = "/aws/lambda/${each.value.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Component = "kb-sync"
+  }
+}
+
+# ==============================================================================
+# LAMBDA FUNCTIONS
+# ==============================================================================
+resource "aws_lambda_function" "kb_sync" {
+  for_each = local.kb_sync_lambdas
+
+  filename         = each.value.archive_path
+  source_code_hash = each.value.archive_hash
+  function_name    = each.value.function_name
+  role             = each.value.role_arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 30
+  memory_size      = each.value.memory_size
+  timeout          = each.value.timeout
   architectures    = ["arm64"]
 
-  environment {
-    variables = {
-      ENV_PREFIX = var.environment
+  dynamic "vpc_config" {
+    for_each = each.value.in_vpc ? [1] : []
+    content {
+      subnet_ids         = local.private_subnet_ids
+      security_group_ids = [aws_security_group.kb_sync_sg.id]
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.kb_sync_check_kb_meta]
-}
-
-## KB SYNC: CHECK SYNC METADATA
-resource "aws_cloudwatch_log_group" "kb_sync_check_sync_meta" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-check-sync-meta"
-  retention_in_days = 14
-}
-
-resource "aws_lambda_function" "kb_sync_check_sync_meta" {
-  filename         = data.archive_file.kb_sync_check_sync_meta_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_check_sync_meta_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-check-sync-meta"
-  role             = aws_iam_role.kb_sync_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 30
-  architectures    = ["arm64"]
-
-  vpc_config {
-    subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.kb_sync_sg.id]
-  }
-
   environment {
-    variables = {
-      CONTACTS_TABLE_NAME  = local.active_contacts_table
-      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER              = "rds_readonly_dept_contacts"
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-      ENV_PREFIX           = var.environment
-    }
+    variables = each.value.env_vars
   }
 
-  depends_on = [aws_cloudwatch_log_group.kb_sync_check_sync_meta]
-}
+  depends_on = [aws_cloudwatch_log_group.kb_sync]
 
-## KB SYNC: FETCH ARTICLES
-resource "aws_cloudwatch_log_group" "kb_sync_fetch_articles" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-fetch-articles"
-  retention_in_days = 14
-}
-
-resource "aws_lambda_function" "kb_sync_fetch_articles" {
-  filename         = data.archive_file.kb_sync_fetch_articles_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_fetch_articles_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-fetch-articles"
-  role             = aws_iam_role.kb_sync_crm_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 60
-  architectures    = ["arm64"]
-
-  environment {
-    variables = {
-      ENV_PREFIX = var.environment
-    }
+  tags = {
+    Component = "kb-sync"
   }
-
-  depends_on = [aws_cloudwatch_log_group.kb_sync_fetch_articles]
 }
 
-## KB SYNC: UPSERT
-resource "aws_cloudwatch_log_group" "kb_sync_upsert" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-upsert"
-  retention_in_days = 14
+# ==============================================================================
+# STATE MIGRATION GUARDS
+# TODO: Safe to remove once this refactor has been applied across active developer workspaces.
+# ==============================================================================
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_check_kb_meta
+  to   = aws_cloudwatch_log_group.kb_sync["check_kb_meta"]
 }
 
-resource "aws_lambda_function" "kb_sync_upsert" {
-  filename         = data.archive_file.kb_sync_upsert_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_upsert_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-upsert"
-  role             = aws_iam_role.kb_sync_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 1024
-  timeout          = 30
-  architectures    = ["arm64"]
-
-  vpc_config {
-    subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.kb_sync_sg.id]
-  }
-
-  environment {
-    variables = {
-      DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER                  = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.kb_sync_upsert]
+moved {
+  from = aws_lambda_function.kb_sync_check_kb_meta
+  to   = aws_lambda_function.kb_sync["check_kb_meta"]
 }
 
-## KB SYNC: UPDATE SYNC META
-resource "aws_cloudwatch_log_group" "kb_sync_update_sync_meta" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-update-sync-meta"
-  retention_in_days = 14
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_check_sync_meta
+  to   = aws_cloudwatch_log_group.kb_sync["check_sync_meta"]
 }
 
-resource "aws_lambda_function" "kb_sync_update_sync_meta" {
-  filename         = data.archive_file.kb_sync_update_sync_meta_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_update_sync_meta_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-update-sync-meta"
-  role             = aws_iam_role.kb_sync_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 30
-  architectures    = ["arm64"]
-
-  vpc_config {
-    subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.kb_sync_sg.id]
-  }
-
-  environment {
-    variables = {
-      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER              = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.kb_sync_update_sync_meta]
+moved {
+  from = aws_lambda_function.kb_sync_check_sync_meta
+  to   = aws_lambda_function.kb_sync["check_sync_meta"]
 }
 
-## KB SYNC: CLEANUP UNMAPPED LAMBDA
-resource "aws_cloudwatch_log_group" "kb_sync_cleanup_unmapped" {
-  name              = "/aws/lambda/${var.environment}-kb-sync-cleanup-unmapped"
-  retention_in_days = 14
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_fetch_articles
+  to   = aws_cloudwatch_log_group.kb_sync["fetch_articles"]
 }
 
-resource "aws_lambda_function" "kb_sync_cleanup_unmapped" {
-  filename         = data.archive_file.kb_sync_cleanup_unmapped_zip.output_path
-  source_code_hash = data.archive_file.kb_sync_cleanup_unmapped_zip.output_base64sha256
-  function_name    = "${var.environment}-kb-sync-cleanup-unmapped"
-  role             = aws_iam_role.kb_sync_cleanup_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 30
-  architectures    = ["arm64"]
+moved {
+  from = aws_lambda_function.kb_sync_fetch_articles
+  to   = aws_lambda_function.kb_sync["fetch_articles"]
+}
 
-  vpc_config {
-    subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.kb_sync_sg.id]
-  }
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_upsert
+  to   = aws_cloudwatch_log_group.kb_sync["upsert"]
+}
 
-  environment {
-    variables = {
-      DB_HOST              = aws_db_instance.dept_contacts_metadata.address
-      DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
-      DB_USER              = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-    }
-  }
+moved {
+  from = aws_lambda_function.kb_sync_upsert
+  to   = aws_lambda_function.kb_sync["upsert"]
+}
 
-  depends_on = [aws_cloudwatch_log_group.kb_sync_cleanup_unmapped]
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_update_sync_meta
+  to   = aws_cloudwatch_log_group.kb_sync["update_sync_meta"]
+}
+
+moved {
+  from = aws_lambda_function.kb_sync_update_sync_meta
+  to   = aws_lambda_function.kb_sync["update_sync_meta"]
+}
+
+moved {
+  from = aws_cloudwatch_log_group.kb_sync_cleanup_unmapped
+  to   = aws_cloudwatch_log_group.kb_sync["cleanup_unmapped"]
+}
+
+moved {
+  from = aws_lambda_function.kb_sync_cleanup_unmapped
+  to   = aws_lambda_function.kb_sync["cleanup_unmapped"]
 }

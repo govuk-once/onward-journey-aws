@@ -21,7 +21,8 @@ resource "aws_security_group" "orchestrator" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-orchestrator-sg"
+    Name      = "${var.environment}-orchestrator-sg"
+    Component = "orchestrator"
   }
 }
 
@@ -33,7 +34,8 @@ resource "aws_security_group" "vpc_endpoints" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-vpc-endpoints-sg"
+    Name      = "${var.environment}-vpc-endpoints-sg"
+    Component = "vpc-endpoints"
   }
 }
 
@@ -45,7 +47,8 @@ resource "aws_security_group" "secrets_manager" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-secrets-manager-sg"
+    Name      = "${var.environment}-secrets-manager-sg"
+    Component = "vpc-endpoints"
   }
 }
 
@@ -57,7 +60,8 @@ resource "aws_security_group" "bedrock" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-bedrock-sg"
+    Name      = "${var.environment}-bedrock-sg"
+    Component = "vpc-endpoints"
   }
 }
 
@@ -69,7 +73,8 @@ resource "aws_security_group" "rds_metadata" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-rds-metadata-sg-v2"
+    Name      = "${var.environment}-rds-metadata-sg-v2"
+    Component = "dept-contacts-db"
   }
 }
 
@@ -79,8 +84,10 @@ resource "aws_security_group" "rds_seeder_sg" {
   name        = "${var.environment}-rds-seeder-sg"
   description = "Allows Data Services to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
+
   tags = {
-    Name = "${var.environment}-rds-seeder-sg"
+    Name      = "${var.environment}-rds-seeder-sg"
+    Component = "dept-contacts-db"
   }
 }
 
@@ -90,8 +97,10 @@ resource "aws_security_group" "rds_tool_sg" {
   name        = "${var.environment}-rds-tool-sg"
   description = "Allows RDS Tool to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
+
   tags = {
-    Name = "${var.environment}-rds-tool-sg"
+    Name      = "${var.environment}-rds-tool-sg"
+    Component = "dept-contacts-db"
   }
 }
 
@@ -101,8 +110,10 @@ resource "aws_security_group" "rds_init_sg" {
   name        = "${var.environment}-rds-init-sg"
   description = "Allows RDS Init to reach RDS and AWS Services"
   vpc_id      = local.vpc_id
+
   tags = {
-    Name = "${var.environment}-rds-init-sg"
+    Name      = "${var.environment}-rds-init-sg"
+    Component = "dept-contacts-db"
   }
 }
 
@@ -114,7 +125,8 @@ resource "aws_security_group" "kb_sync_sg" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-kb-sync-sg"
+    Name      = "${var.environment}-kb-sync-sg"
+    Component = "kb-sync"
   }
 }
 
@@ -126,7 +138,8 @@ resource "aws_security_group" "crm_contentguru_wh_authorizer" {
   vpc_id      = local.vpc_id
 
   tags = {
-    Name = "${var.environment}-crm-contentguru-wh-authorizer-sg"
+    Name      = "${var.environment}-crm-contentguru-wh-authorizer-sg"
+    Component = "crm-integration"
   }
 }
 

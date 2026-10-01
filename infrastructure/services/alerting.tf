@@ -15,16 +15,11 @@ locals {
     module.crm_wh_router.log_group_name
   ]
 
-  kb_sync_functions = [
-    aws_cloudwatch_log_group.kb_sync_fetch_articles.name,
-    aws_cloudwatch_log_group.kb_sync_upsert.name,
-    aws_cloudwatch_log_group.kb_sync_check_sync_meta.name,
-    aws_cloudwatch_log_group.kb_sync_update_sync_meta.name,
-    aws_cloudwatch_log_group.kb_sync_check_kb_meta.name
-  ]
-  sync_machine = "${var.environment}-kb-sync-machine"
-
+  # Dynamic comprehension collecting all KB Sync Log Groups from the for_each map
+  kb_sync_functions = [for lg in aws_cloudwatch_log_group.kb_sync : lg.name]
+  sync_machine      = "${var.environment}-kb-sync-machine"
 }
+
 # ============== Main Log Groups ======================================
 resource "aws_cloudwatch_log_metric_filter" "logged_errors" {
   for_each = toset(local.main_log_groups)
@@ -80,7 +75,6 @@ resource "aws_cloudwatch_log_metric_filter" "kb_sync_lambda_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "kb_sync_lambda_errors" {
-
   alarm_name                = "${var.environment}-kb-sync-lambdas-logged-error"
   comparison_operator       = "GreaterThanOrEqualToThreshold"
   evaluation_periods        = 1
@@ -119,7 +113,6 @@ resource "aws_cloudwatch_log_metric_filter" "step_function_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "step_function_errors" {
-
   alarm_name                = "${var.environment}-step-function-error"
   comparison_operator       = "GreaterThanOrEqualToThreshold"
   evaluation_periods        = 1

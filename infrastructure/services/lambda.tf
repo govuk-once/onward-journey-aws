@@ -66,9 +66,9 @@ resource "aws_lambda_function" "rds_seeder" {
       DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER                  = aws_db_instance.dept_contacts_metadata.username
       DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
-      LAMBDA_ENDPOINT_URL      = aws_vpc_endpoint.lambda.dns_entry[0]["dns_name"]
+      SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
+      LAMBDA_ENDPOINT_URL      = aws_vpc_endpoint.endpoints["lambda"].dns_entry[0]["dns_name"]
       BUCKET_NAME              = aws_s3_bucket.dataset_storage.id
       CRM_TOOL_LAMBDA_ARN      = aws_lambda_function.crm_tool.arn
     }
@@ -76,7 +76,6 @@ resource "aws_lambda_function" "rds_seeder" {
 
   depends_on = [aws_cloudwatch_log_group.rds_seeder]
 }
-
 
 ## ORCHESTRATION LAYER
 # This function manages the LangGraph state machine and coordinates tool calls.
@@ -106,13 +105,13 @@ resource "aws_lambda_function" "orchestrator" {
     variables = {
       ENV_PREFIX = var.environment
       # URL for AgentCore
-      AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.bedrock_agentcore.dns_entry[0]["dns_name"]
+      AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.endpoints["bedrock_agentcore"].dns_entry[0]["dns_name"]
       # URL for Claude (Inference)
-      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
+      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
       # URL for Secrets Manager
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
       # Specific DNS for the Gateway Endpoint
-      GATEWAY_ENDPOINT_URL = aws_vpc_endpoint.bedrock_gateway.dns_entry[0]["dns_name"]
+      GATEWAY_ENDPOINT_URL = aws_vpc_endpoint.endpoints["bedrock_gateway"].dns_entry[0]["dns_name"]
       GATEWAY_URL          = "https://${aws_bedrockagentcore_gateway.tool_interface.gateway_id}.gateway.bedrock-agentcore.${var.aws_region}.amazonaws.com/mcp"
       MEMORY_ID            = aws_bedrockagentcore_memory.agent_chat_context.id
     }
@@ -120,7 +119,6 @@ resource "aws_lambda_function" "orchestrator" {
 
   depends_on = [aws_cloudwatch_log_group.orchestrator]
 }
-
 
 ## TOOL LAYER: RDS SEARCH TOOL (MCP SERVER)
 # Standardised interface for the Orchestrator to query the registry via Gateway.
@@ -152,8 +150,8 @@ resource "aws_lambda_function" "rds_tool" {
       DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
       DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER                  = "rds_readonly_dept_contacts"
-      SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
+      SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
     }
   }
 
@@ -244,7 +242,7 @@ resource "aws_lambda_function" "rds_init" {
       DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER              = aws_db_instance.dept_contacts_metadata.username
       DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
+      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
     }
   }
 

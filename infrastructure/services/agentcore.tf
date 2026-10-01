@@ -230,10 +230,10 @@ resource "aws_bedrockagentcore_agent_runtime" "orchestrator_runtime" {
 
   environment_variables = {
     ENV_PREFIX                 = var.environment
-    AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.bedrock_agentcore.dns_entry[0]["dns_name"]
-    BEDROCK_RUNTIME_ENDPOINT   = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
-    SECRETS_ENDPOINT_URL       = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-    GATEWAY_ENDPOINT_URL       = aws_vpc_endpoint.bedrock_gateway.dns_entry[0]["dns_name"]
+    AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.endpoints["bedrock_agentcore"].dns_entry[0]["dns_name"]
+    BEDROCK_RUNTIME_ENDPOINT   = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
+    SECRETS_ENDPOINT_URL       = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
+    GATEWAY_ENDPOINT_URL       = aws_vpc_endpoint.endpoints["bedrock_gateway"].dns_entry[0]["dns_name"]
     GATEWAY_URL                = "https://${aws_bedrockagentcore_gateway.tool_interface.gateway_id}.gateway.bedrock-agentcore.${var.aws_region}.amazonaws.com/mcp"
     MEMORY_ID                  = aws_bedrockagentcore_memory.agent_chat_context.id
 

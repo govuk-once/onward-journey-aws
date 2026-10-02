@@ -35,7 +35,7 @@ from langgraph.checkpoint.memory import MemorySaver
 def mock_network_and_memory():
     """
     Intercept network calls and replace Bedrock Agent memory with a local
-    LangGraph MemorySaver for blazingly fast, isolated multi-turn tests.
+    LangGraph MemorySaver for isolated multi-turn tests.
     """
     with patch("socket.create_connection"):
         # Dynamically recompile the graph with in-memory persistence

@@ -38,7 +38,7 @@ The Orchestrator requires three key fields to manage state:
 | Field | Description | Strategy |
 | :--- | :--- | :--- |
 | message | The user's natural language query. | Change this to test different departments. |
-| thread_id | Unique ID for the current chat session. | Keep the same to test follow-up questions. Change to start a fresh chat. |
+| thread_id | Unique ID for the current chat session. | Keep the same to test follow-up questions. Change to start a fresh chat. Must be a UUID. |
 | actor_id | The unique ID of the citizen/user. | Keep the same for a single dev environment to test identity-based memory isolation. |
 
 ---
@@ -52,7 +52,7 @@ Use this to test if the AI can find the Home Office in the database and check if
 ```json
 {
   "message": "What are the contact details for the Department for applying for a study visa?",
-  "thread_id": "test-session-v89",
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
   "actor_id": "test-user-089"
 }
 ```
@@ -64,13 +64,10 @@ Use the same thread_id as the previous test. This verifies that Claude remembers
 ```json
 {
   "message": "Yes, please connect me to a live person.",
-  "thread_id": "test-session-v89",
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
   "actor_id": "test-user-089"
 }
 ```
-
-#### Tip for the Handoff test:
-When running Example 2, check the response.json for the SIGNAL string. If you see a block starting with `SIGNAL: initiate_live_handoff`, it confirms the backend has successfully prepared the connection parameters for the CRM, verifying the "Switchboard" logic is fully functional.
 
 ---
 

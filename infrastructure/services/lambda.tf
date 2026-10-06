@@ -77,53 +77,8 @@ resource "aws_lambda_function" "rds_seeder" {
   depends_on = [aws_cloudwatch_log_group.rds_seeder]
 }
 
-
-## ORCHESTRATION LAYER
-# This function manages the LangGraph state machine and coordinates tool calls.
-resource "aws_cloudwatch_log_group" "orchestrator" {
-  name              = "/aws/lambda/${var.environment}-orchestrator"
-  retention_in_days = 14
-}
-
-resource "aws_lambda_function" "orchestrator" {
-  filename         = data.archive_file.orchestrator_zip.output_path
-  source_code_hash = data.archive_file.orchestrator_zip.output_base64sha256
-  function_name    = "${var.environment}-orchestrator"
-  role             = aws_iam_role.inference.arn
-  handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
-  memory_size      = 1024
-  timeout          = 120
-  architectures    = ["arm64"]
-
-  vpc_config {
-    subnet_ids         = local.private_subnet_ids
-    security_group_ids = [aws_security_group.orchestrator.id]
-  }
-
-  environment {
-    variables = {
-      ENV_PREFIX = var.environment
-      # URL for AgentCore
-      AGENT_RUNTIME_ENDPOINT_URL = aws_vpc_endpoint.bedrock_agentcore.dns_entry[0]["dns_name"]
-      # URL for Claude (Inference)
-      BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.bedrock.dns_entry[0]["dns_name"]
-      # URL for Secrets Manager
-      SECRETS_ENDPOINT_URL = aws_vpc_endpoint.secrets.dns_entry[0]["dns_name"]
-      # Specific DNS for the Gateway Endpoint
-      GATEWAY_ENDPOINT_URL = aws_vpc_endpoint.bedrock_gateway.dns_entry[0]["dns_name"]
-      GATEWAY_URL          = "https://${aws_bedrockagentcore_gateway.tool_interface.gateway_id}.gateway.bedrock-agentcore.${var.aws_region}.amazonaws.com/mcp"
-      MEMORY_ID            = aws_bedrockagentcore_memory.agent_chat_context.id
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.orchestrator]
-}
-
-
 ## TOOL LAYER: RDS SEARCH TOOL (MCP SERVER)
-# Standardised interface for the Orchestrator to query the registry via Gateway.
+# Standardised interface for the Orchestrator to query the registry via Gateway. ??
 resource "aws_cloudwatch_log_group" "rds_tool" {
   name              = "/aws/lambda/${var.environment}-rds-tool"
   retention_in_days = 14
@@ -161,7 +116,7 @@ resource "aws_lambda_function" "rds_tool" {
 }
 
 ## TOOL LAYER: CRM CONTACT TOOL (MCP SERVER)
-# Configured as a "Public" Lambda (outside VPC) to allow external API access for testing.
+# Configured as a "Public" Lambda (outside VPC) to allow external API access for testing. ??
 resource "aws_cloudwatch_log_group" "crm_tool" {
   name              = "/aws/lambda/${var.environment}-crm-tool"
   retention_in_days = 14
@@ -186,32 +141,6 @@ resource "aws_lambda_function" "crm_tool" {
   }
 
   depends_on = [aws_cloudwatch_log_group.crm_tool]
-}
-
-## ORCHESTRATOR STREAMING ENDPOINT
-# Enables the RESPONSE_STREAM mode for real-time interaction with the Svelte frontend.
-resource "aws_lambda_function_url" "orchestrator_url" {
-  function_name      = aws_lambda_function.orchestrator.function_name
-  authorization_type = "AWS_IAM"
-  invoke_mode        = "RESPONSE_STREAM"
-
-  cors {
-    allow_credentials = true
-    # TODO: Restrict to your specific frontend domain in production
-    allow_origins = [
-      "http://localhost:5173",
-      "https://main.${aws_amplify_app.frontend.id}.amplifyapp.com",
-    ]
-    allow_methods = ["POST"]
-    # SigV4 signing headers required in addition to content-type
-    allow_headers = ["content-type", "x-amz-date", "x-amz-security-token", "authorization", "x-amz-content-sha256"]
-    max_age       = 86400 # Cache permission for 24 hours (86400 seconds) to prevent lag
-  }
-}
-
-output "orchestrator_url" {
-  description = "The streaming HTTP endpoint for the Orchestrator"
-  value       = aws_lambda_function_url.orchestrator_url.function_url
 }
 
 ## RDS INIT

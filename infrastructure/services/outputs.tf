@@ -18,6 +18,12 @@ output "agentcore_runtime_id" {
   value       = aws_bedrockagentcore_agent_runtime.orchestrator_runtime.agent_runtime_id
 }
 
+## WEBSOCKET GATEWAY URL
+output "client_websocket_url" {
+  description = "The WSS URL for client browser connections"
+  value       = module.client_ws_gateway.wss_url
+}
+
 ## RESOURCE ARNs
 # Required for IAM policies and cross-account references.
 

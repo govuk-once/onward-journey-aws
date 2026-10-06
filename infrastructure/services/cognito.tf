@@ -1,6 +1,6 @@
 ## COGNITO IDENTITY POOL
 # Provides temporary, scoped AWS credentials to anonymous frontend users
-# so they can invoke the Orchestrator Lambda URL (which uses AWS_IAM auth).
+# reserved for (potential) future websocket API Gateway authorisation
 
 resource "aws_cognito_identity_pool" "frontend_anon" {
   identity_pool_name               = "${var.environment}-onward-journey-anon"

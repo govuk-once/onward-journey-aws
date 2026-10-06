@@ -199,17 +199,7 @@ resource "null_resource" "build_agentcore_payload" {
 
 ## INDIVIDUAL LAMBDA PACKAGING
 
-# 1. ORCHESTRATOR
-data "archive_file" "orchestrator_zip" {
-  type        = "zip"
-  output_path = "${path.module}/../../dist/orchestrator_payload.zip"
-  source {
-    content  = file("${path.module}/../../app/lambdas/orchestrator/handler.py")
-    filename = "handler.py"
-  }
-}
-
-# 2. RDS SEEDER
+# RDS SEEDER
 data "archive_file" "rds_seeder_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/rds_seeder_payload.zip"
@@ -219,7 +209,7 @@ data "archive_file" "rds_seeder_zip" {
   }
 }
 
-# 3. RDS TOOL
+# RDS TOOL
 data "archive_file" "rds_tool_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/rds_tool_payload.zip"
@@ -229,7 +219,7 @@ data "archive_file" "rds_tool_zip" {
   }
 }
 
-# 4. CRM TOOL
+# CRM TOOL
 data "archive_file" "crm_tool_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/crm_tool_payload.zip"
@@ -239,7 +229,7 @@ data "archive_file" "crm_tool_zip" {
   }
 }
 
-# 5. KB SYNC: CHECK KB METADATA
+# KB SYNC: CHECK KB METADATA
 data "archive_file" "kb_sync_check_kb_meta_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_check_kb_meta_payload.zip"
@@ -249,7 +239,7 @@ data "archive_file" "kb_sync_check_kb_meta_zip" {
   }
 }
 
-# 6. KB SYNC: CHECK SYNC METADATA
+# KB SYNC: CHECK SYNC METADATA
 data "archive_file" "kb_sync_check_sync_meta_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_check_sync_meta_payload.zip"
@@ -259,7 +249,7 @@ data "archive_file" "kb_sync_check_sync_meta_zip" {
   }
 }
 
-# 7. KB SYNC: FETCH ARTICLES
+# KB SYNC: FETCH ARTICLES
 data "archive_file" "kb_sync_fetch_articles_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_fetch_articles_payload.zip"
@@ -269,7 +259,7 @@ data "archive_file" "kb_sync_fetch_articles_zip" {
   }
 }
 
-# 8. KB SYNC: UPSERT
+# KB SYNC: UPSERT
 data "archive_file" "kb_sync_upsert_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_upsert_payload.zip"
@@ -279,7 +269,7 @@ data "archive_file" "kb_sync_upsert_zip" {
   }
 }
 
-# 9. KB SYNC: UPDATE SYNC META
+# KB SYNC: UPDATE SYNC META
 data "archive_file" "kb_sync_update_sync_meta_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_update_sync_meta_payload.zip"
@@ -289,7 +279,7 @@ data "archive_file" "kb_sync_update_sync_meta_zip" {
   }
 }
 
-# 10. KB SYNC: CLEANUP UNMAPPED
+# KB SYNC: CLEANUP UNMAPPED
 data "archive_file" "kb_sync_cleanup_unmapped_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/kb_sync_cleanup_unmapped_payload.zip"
@@ -299,7 +289,7 @@ data "archive_file" "kb_sync_cleanup_unmapped_zip" {
   }
 }
 
-# 11. RDS INIT
+# RDS INIT
 data "archive_file" "rds_init_zip" {
   type        = "zip"
   output_path = "${path.module}/../../dist/rds_init_payload.zip"

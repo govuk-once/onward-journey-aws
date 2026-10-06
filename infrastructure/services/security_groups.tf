@@ -14,7 +14,7 @@ data "aws_security_group" "shared_endpoints" {
 
 # ============= SECURITY GROUPS ===================================================
 # ORCHESTRATOR SECURITY GROUP
-# Controls traffic for the Lambda-based logic layer.
+# Controls traffic for the Orchestration layer.
 resource "aws_security_group" "orchestrator" {
   name        = "${var.environment}-orchestrator-sg"
   description = "Security group for the Orchestration Layer for environment: ${var.environment}"

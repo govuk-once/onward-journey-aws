@@ -6,7 +6,7 @@ Currently, this connects to an Orchestrator service which provides AI responses 
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm ci` (or `npm install`), create an `.env` file using the `.env.example` as your template. The `PUBLIC_ORCHESTRATOR_URL` and `PUBLIC_COGNITO_IDENTITY_POOL_ID` should be populated after running a successful `terraform apply` (the values are found in the terraform outputs).
+Once you've created a project and installed dependencies with `npm ci` (or `npm install`), create an `.env` file using the `.env.example` as your template. The `PUBLIC_ORCHESTRATOR_URL` and `PUBLIC_COGNITO_IDENTITY_POOL_ID` should be populated after running a successful `terraform apply` (the values are found in the terraform outputs - the `PUBLIC_ORCHESTRATOR_URL` is `client_websocket_url`).
 
 The `PUBLIC_ORCHESTRATOR_URL` connects the frontend to the backend orchestration layer. The `PUBLIC_COGNITO_IDENTITY_POOL_ID` is required to authenticate the connection to the orchestrator.
 

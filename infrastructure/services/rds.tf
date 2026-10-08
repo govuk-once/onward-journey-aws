@@ -9,9 +9,11 @@ resource "aws_db_instance" "dept_contacts_metadata" {
   # Identifier for the AWS Console
   identifier        = "${var.environment}-dept-contacts-metadata"
   allocated_storage = 20
+  storage_type      = "gp3"
+  apply_immediately = true
   engine            = "postgres"
   engine_version    = "17.9"
-  instance_class    = "db.t4g.micro"
+  instance_class    = "db.t3.micro"
   db_name           = "gov_dept_contacts"
   username          = "onward_admin"
 

@@ -22,7 +22,6 @@ locals {
     aws_cloudwatch_log_group.kb_sync_update_sync_meta.name,
     aws_cloudwatch_log_group.kb_sync_check_kb_meta.name
   ]
-  sync_machine = "${var.environment}-kb-sync-machine"
 
 }
 # ============== Main Log Groups ======================================
@@ -96,18 +95,12 @@ resource "aws_cloudwatch_metric_alarm" "kb_sync_lambda_errors" {
 }
 
 # ============== Step Function ======================================
-
-resource "aws_cloudwatch_log_group" "step_function" {
-  name              = "/aws/vendedlogs/states/${local.sync_machine}"
-  retention_in_days = 14
-}
-
 resource "aws_cloudwatch_log_metric_filter" "step_function_errors" {
   name    = "${var.environment}-step-function-error-filter"
   pattern = "?ERROR ?Error ?error ?Exception ?exception ?Fail ?fail"
 
-  # Link the filter to the explicitly managed log group resource
-  log_group_name = aws_cloudwatch_log_group.step_function.name
+  # Reference log group managed in step_functions.tf
+  log_group_name = aws_cloudwatch_log_group.sfn_kb_sync_logs.name
 
   # use the filter to increment a metric
   metric_transformation {
@@ -117,7 +110,6 @@ resource "aws_cloudwatch_log_metric_filter" "step_function_errors" {
     default_value = "0"
   }
 }
-
 resource "aws_cloudwatch_metric_alarm" "step_function_errors" {
 
   alarm_name                = "${var.environment}-step-function-error"

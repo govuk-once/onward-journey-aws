@@ -346,3 +346,32 @@ resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
   to_port           = 443
   prefix_list_id    = data.aws_prefix_list.s3.id
 }
+
+# Allow Orchestrator to reach S3 to download code payload zip
+resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_s3" {
+  description       = "Allow Orchestrator to fetch deployment artifact from S3"
+  security_group_id = aws_security_group.orchestrator.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.s3.id
+}
+
+# resource "aws_vpc_security_group_ingress_rule" "allow_shared_endpoints_ingress_from_orchestrator" {
+#   description                  = "Allow incoming HTTPS from Orchestrator"
+#   security_group_id            = data.aws_security_group.shared_endpoints.id
+#   referenced_security_group_id = aws_security_group.orchestrator.id
+#   ip_protocol                  = "tcp"
+#   from_port                    = 443
+#   to_port                      = 443
+# }
+
+# Allow Orchestrator to reach public HTTPS endpoints (API Gateway) via NAT Gateway
+resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_internet_https" {
+  description       = "Allow outbound HTTPS traffic to public internet via NAT Gateway"
+  security_group_id = aws_security_group.orchestrator.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_ipv4         = "0.0.0.0/0"
+}

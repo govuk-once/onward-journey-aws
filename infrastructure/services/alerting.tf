@@ -15,8 +15,8 @@ locals {
     module.crm_wh_router.log_group_name
   ]
 
-# Dynamically collects log groups for all KB sync Lambdas defined in the for_each map
-# so adding new sync functions automatically includes them in error alerting
+  # Dynamically collects log groups for all KB sync Lambdas defined in the for_each map
+  # so adding new sync functions automatically includes them in error alerting
   kb_sync_functions = [for lg in aws_cloudwatch_log_group.kb_sync : lg.name]
 }
 

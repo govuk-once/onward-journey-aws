@@ -1,6 +1,12 @@
 import sys
 import os
 
+os.environ.setdefault("ENV_PREFIX", "localtest")
+os.environ.setdefault("GATEWAY_URL", "https://mock.gateway.com")
+os.environ.setdefault("GATEWAY_ENDPOINT_URL", "https://vpce-mock.aws.com")
+os.environ.setdefault("MEMORY_ID", "mock-memory-id")
+os.environ.setdefault("LOG_LEVEL", "INFO")
+
 # =====================================================================
 # DEEPEVAL PATH RESOLUTION
 # Isolated to integration tests.

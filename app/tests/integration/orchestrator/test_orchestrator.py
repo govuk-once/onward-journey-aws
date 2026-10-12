@@ -11,24 +11,14 @@ from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 from deepeval.models import AmazonBedrockModel
 
-# =====================================================================
-# 1. ENVIRONMENT SETUP
-# =====================================================================
-os.environ["ENV_PREFIX"] = "localtest"
-os.environ["GATEWAY_URL"] = "https://mock.gateway.com"
-os.environ["GATEWAY_ENDPOINT_URL"] = "https://vpce-mock.aws.com"
-os.environ["MEMORY_ID"] = "mock-memory-id"
-os.environ["LOG_LEVEL"] = "INFO"
-
-logger = logging.getLogger(__name__)
-
-# Safely import the orchestrator and components after patching the environment
 from app.agentcore.orchestrator.orchestrator import orchestrator_entrypoint, workflow
 import app.agentcore.orchestrator.orchestrator as orchestrator_module
 from langgraph.checkpoint.memory import MemorySaver
 
+logger = logging.getLogger(__name__)
+
 # =====================================================================
-# 2. FIXTURES & MOCKS
+# FIXTURES & MOCKS
 # =====================================================================
 
 @pytest.fixture(autouse=True)
@@ -137,7 +127,7 @@ def invoke_agent_sync(event):
         loop.close()
 
 # =====================================================================
-# 3. TEST CASES
+# TEST CASES
 # =====================================================================
 
 def test_knowledge_base_resolution(mock_mcp_session, llm_judges):

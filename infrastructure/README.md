@@ -149,6 +149,20 @@ The query should be successful, but check the details - if the result content on
 
   Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
 
+#### Rotating Frontend Basic Auth Credentials
+
+The `aws_amplify_branch` resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to suppress a perpetual diff caused by the AWS Amplify API not returning credentials after they are written (a known provider limitation).
+
+This means **updating `frontend_basic_auth_username` or `frontend_basic_auth_password` in your `local.auto.tfvars` will not automatically push the new credentials to AWS.** To rotate them, force a replacement of the branch resource:
+
+```bash
+terraform apply -replace='aws_amplify_branch.main'
+```
+
+This will destroy and recreate the branch (no downtime — the Amplify app itself is unaffected), picking up the new credentials from your tfvars.
+
+---
+
 #### Manual Build/Rebuild (Lambda Packaging)
 If a Lambda build is unsuccessful or staging folders are corrupted, use the `taint` command.
 

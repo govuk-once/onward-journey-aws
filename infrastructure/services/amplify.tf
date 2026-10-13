@@ -23,13 +23,46 @@ resource "aws_amplify_branch" "main" {
 
   enable_basic_auth      = true
   basic_auth_credentials = base64encode("${var.frontend_basic_auth_username}:${var.frontend_basic_auth_password}")
+
+  lifecycle {
+    ignore_changes = [basic_auth_credentials]
+  }
 }
 
 # 3. Build and Deploy Script
+locals {
+  frontend_dir = abspath("${path.module}/../../frontend")
+
+  # Hash only hand-authored source files.
+  frontend_src_hash = sha1(join("", [
+    for f in fileset(local.frontend_dir, "src/**/*") :
+    filemd5("${local.frontend_dir}/${f}")
+  ]))
+
+  # Hash hand-authored static files (robots.txt etc.) but not the auto-generated assets/ subdir
+  frontend_static_hash = sha1(join("", [
+    for f in fileset(local.frontend_dir, "static/*") :
+    filemd5("${local.frontend_dir}/${f}")
+  ]))
+
+  # Separately hash dependency manifests and build-affecting config files
+  # so that dependency or tooling changes also trigger a redeploy.
+  frontend_config_hash = sha1(join("", [
+    filemd5("${local.frontend_dir}/package.json"),
+    filemd5("${local.frontend_dir}/package-lock.json"),
+    filemd5("${local.frontend_dir}/svelte.config.js"),
+    filemd5("${local.frontend_dir}/vite.config.ts"),
+  ]))
+}
+
 resource "null_resource" "build_and_deploy_frontend" {
   triggers = {
-    # Re-run deployment if the frontend source code changes
-    frontend_hash = sha1(join("", [for f in fileset(abspath("${path.module}/../../frontend"), "{src,static}/**/*") : filemd5("${abspath("${path.module}/../../frontend")}/${f}")]))
+    # Re-run if frontend source files (src/) change
+    frontend_src_hash = local.frontend_src_hash
+    # Re-run if hand-authored static files change (excludes auto-copied static/assets/)
+    frontend_static_hash = local.frontend_static_hash
+    # Re-run if dependencies or build tooling config change
+    frontend_config_hash = local.frontend_config_hash
     # Re-run if the WebSocket URL changes
     backend_url = module.client_ws_gateway.wss_url
     # Re-run if the Cognito pool changes
@@ -40,11 +73,11 @@ resource "null_resource" "build_and_deploy_frontend" {
     command = <<-EOT
       set -e
       echo "Building frontend..."
-      FRONTEND_DIR="${abspath("${path.module}/../../frontend")}"
+      FRONTEND_DIR="${local.frontend_dir}"
       cd "$FRONTEND_DIR"
 
-      # Install dependencies (using npm install instead of ci to update the lockfile with adapter-static)
-      npm install
+      # Use 'npm ci' to install from the lockfile without modifying it
+      npm ci
 
       # Build the app with the Orchestrator URL and Cognito pool injected
       export PUBLIC_ORCHESTRATOR_URL="${module.client_ws_gateway.wss_url}"

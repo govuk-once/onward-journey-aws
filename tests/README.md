@@ -14,6 +14,8 @@ These tests verify the "Golden Thread" of identity and state persistence. By sen
 * AWS CLI configured with active credentials.
 * local.auto.tfvars: The script automatically detects your environment prefix from infrastructure/local.auto.tfvars.
 * Duplicate the `template_test_event.json` and call the new file `test_event.json`. This is the file you will edit to communicate with the agent during testing.
+* Install [WebSocket cat](https://github.com/websockets/wscat): `npm install -g wscat`
+
 
 ---
 

@@ -25,10 +25,6 @@ resource "aws_amplify_branch" "main" {
   basic_auth_credentials = base64encode("${var.frontend_basic_auth_username}:${var.frontend_basic_auth_password}")
 
   lifecycle {
-    # The AWS Amplify API does not return basic_auth_credentials after write,
-    # causing Terraform to detect a spurious diff on every plan.
-    # Credentials are still set correctly on creation; changes to the variables
-    # require a manual taint or destroy/recreate of this resource.
     ignore_changes = [basic_auth_credentials]
   }
 }
@@ -38,10 +34,6 @@ locals {
   frontend_dir = abspath("${path.module}/../../frontend")
 
   # Hash only hand-authored source files.
-  # Excludes build artifacts (build/, .svelte-kit/, node_modules/, frontend_payload.zip)
-  # AND static/assets/ which is auto-populated from node_modules by the `prepare` script
-  # (make prepare copies govuk-frontend assets there on every npm install).
-  # govuk-frontend version changes are captured via package-lock.json in frontend_config_hash.
   frontend_src_hash = sha1(join("", [
     for f in fileset(local.frontend_dir, "src/**/*") :
     filemd5("${local.frontend_dir}/${f}")

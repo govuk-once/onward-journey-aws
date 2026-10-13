@@ -1,3 +1,7 @@
+locals {
+  stack_name = "shared-vpc"
+}
+
 terraform {
   required_version = "1.13.5"
 
@@ -21,9 +25,13 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project = "GOV.UK Agents Onward Journey"
-      # Hardcoded! The network belongs to everyone, not a specific developer.
-      Environment = "shared"
+      Product           = "ai-govuk"
+      Service           = "onward-journey"
+      Component         = "networking"
+      Environment       = "shared"
+      Owner             = "onward-journey-team"
+      Source            = "onward-journey-aws"
+      PipelineStackName = local.stack_name
     }
   }
 }

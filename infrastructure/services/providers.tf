@@ -1,3 +1,16 @@
+locals {
+  # Known non-developer environments
+  known_environments = {
+    "production" = "production"
+    "staging"    = "staging"
+  }
+
+  # Maps dev initials to canonical "development" for Environment tag as set out by:
+  # https://gdsgovukagents.atlassian.net/wiki/spaces/TAG/pages/177995889/RFC+AWS+Resource+Tagging+Standards
+  # Also see: https://gdsgovukagents.atlassian.net/wiki/spaces/TAG/pages/205291567/013+-+AWS+Resource+Tagging+Standards
+  canonical_environment = lookup(local.known_environments, var.environment, "development")
+}
+
 terraform {
   required_version = "1.13.5"
 
@@ -49,8 +62,13 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "GOV.UK Agents Onward Journey"
-      Environment = var.environment
+      Product           = "ai-govuk"
+      Service           = "onward-journey"
+      Component         = "backend-services"
+      Environment       = local.canonical_environment
+      Owner             = "onward-journey-team"
+      Source            = "onward-journey-aws"
+      PipelineStackName = var.environment # Preserves specific developer workspace (dev initials)
     }
   }
 }

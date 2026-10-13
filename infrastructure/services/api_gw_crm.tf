@@ -8,7 +8,7 @@ module "crm_contentguru_wh_authorizer" {
 
   subnet_ids                  = local.private_subnet_ids
   security_group_ids          = [aws_security_group.crm_contentguru_wh_authorizer.id]
-  secretsmanager_endpoint_url = "https://${aws_vpc_endpoint.secrets.dns_entry[0].dns_name}"
+  secretsmanager_endpoint_url = "https://${aws_vpc_endpoint.endpoints["secrets"].dns_entry[0].dns_name}"
 }
 
 # -----------------------------------------------------------------------------

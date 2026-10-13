@@ -42,7 +42,10 @@ dev = [
 [tool.pytest.ini_options]
 filterwarnings = [
     # Silences the LangChain/Pydantic V1 compatibility warning on Python 3.14+
-    "ignore:Core Pydantic V1 functionality isn't compatible with Python:UserWarning"
+    "ignore:Core Pydantic V1 functionality isn't compatible with Python:UserWarning",
+    # Silences Bedrock Agentcore deprecation warnings
+    "ignore::DeprecationWarning:bedrock_agentcore.*",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20:bedrock_agentcore.*"
 ]
 addopts = "--tb=short --import-mode=importlib"
 testpaths = ["tests/unit"]
@@ -50,4 +53,10 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
 log_cli_date_format = "%H:%M:%S"
-pythonpath = ["..", "."]
+pythonpath = [
+    ".",
+    "..",
+    "app",
+    "app/agentcore/orchestrator",
+    "agentcore/orchestrator"
+]

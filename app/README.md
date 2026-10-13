@@ -47,6 +47,8 @@ To maintain consistency and reduce duplication, all common operations should be 
 
 The test suite is split into fast, offline **Unit Tests** and AWS-dependent **Integration / LLM Judge Tests**.
 
+**Important:** Run unit and integration tests separately. Because they require different environment variables, running them together in a single `pytest` command will cause module-caching conflicts.
+
 ### Unit Tests
 Unit tests run entirely offline and execute quickly without requiring AWS credentials.
 
@@ -79,7 +81,7 @@ uv run pytest tests/integration
 uv run pytest tests/integration/orchestrator
 
 # Run a single test function
-uv run pytest tests/integration/orchestrator/test_orchestrator_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+uv run pytest tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
 ```
 
 #### DeepEval
@@ -93,7 +95,7 @@ uv run deepeval test run tests/integration
 uv run deepeval test run tests/integration/orchestrator
 
 # Run a single test function
-uv run deepeval test run tests/integration/orchestrator/test_orchestrator_handler.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+uv run deepeval test run tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
 ```
 
 ---

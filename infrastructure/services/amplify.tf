@@ -23,6 +23,14 @@ resource "aws_amplify_branch" "main" {
 
   enable_basic_auth      = true
   basic_auth_credentials = base64encode("${var.frontend_basic_auth_username}:${var.frontend_basic_auth_password}")
+
+  lifecycle {
+    # The AWS Amplify API does not return basic_auth_credentials after write,
+    # causing Terraform to detect a spurious diff on every plan.
+    # Credentials are still set correctly on creation; changes to the variables
+    # require a manual taint or destroy/recreate of this resource.
+    ignore_changes = [basic_auth_credentials]
+  }
 }
 
 # 3. Build and Deploy Script

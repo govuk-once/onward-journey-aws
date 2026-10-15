@@ -81,6 +81,10 @@ resource "aws_lambda_function" "function" {
   timeout                        = var.timeout
   reserved_concurrent_executions = var.reserved_concurrent_executions
 
+  logging_config {
+    log_format = "JSON"
+  }
+  
   dynamic "vpc_config" {
     for_each = length(var.subnet_ids) > 0 ? [1] : []
     content {

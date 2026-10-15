@@ -134,6 +134,10 @@ resource "aws_lambda_function" "crm_tool" {
   timeout          = 30
   architectures    = ["arm64"]
 
+  logging_config {
+    log_format = "JSON"
+  }
+  
   environment {
     variables = {
       ENV_PREFIX = var.environment

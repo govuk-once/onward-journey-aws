@@ -149,6 +149,10 @@ resource "aws_lambda_function" "kb_sync" {
     }
   }
 
+  logging_config {
+    log_format = "JSON"
+  }
+
   environment {
     variables = each.value.env_vars
   }

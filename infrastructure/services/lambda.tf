@@ -65,7 +65,7 @@ resource "aws_lambda_function" "rds_seeder" {
       DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
       DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER                  = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
       SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
       LAMBDA_ENDPOINT_URL      = aws_vpc_endpoint.endpoints["lambda"].dns_entry[0]["dns_name"]
@@ -172,7 +172,7 @@ resource "aws_lambda_function" "rds_init" {
       DB_HOST              = aws_db_instance.dept_contacts_metadata.address
       DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
       DB_USER              = aws_db_instance.dept_contacts_metadata.username
-      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+      DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
       SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
     }
   }

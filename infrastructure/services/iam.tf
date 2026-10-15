@@ -237,7 +237,7 @@ resource "aws_iam_policy" "rds_seeder_permissions" {
         Sid      = "SecretsManagerAccess"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        Resource = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
       },
       {
         Sid      = "CrmToolInvocation"
@@ -304,7 +304,7 @@ resource "aws_iam_policy" "rds_init_permissions" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue"]
         Resource = [
-          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         ]
       }
     ]
@@ -365,7 +365,7 @@ resource "aws_iam_policy" "kb_sync_permissions" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue"]
         Resource = [
-          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         ]
       }
     ]
@@ -455,7 +455,7 @@ resource "aws_iam_policy" "kb_sync_cleanup_secrets_policy" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+          data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         ]
       }
     ]

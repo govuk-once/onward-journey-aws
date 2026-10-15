@@ -14,8 +14,13 @@ Supported Methods:
 """
 
 import json
+import logging
+import os
 from integrations.factory import ProviderFactory, Capability
 from integrations.tooling import log_metric
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -53,9 +58,11 @@ def lambda_handler(event, context):
             return result
 
         else:
-            print(f"❌ [ERROR] Unknown method: {method}")
+            # print(f"❌ [ERROR] Unknown method: {method}")
+            logger.error(f"Unknown method: {method}", extra={"trace_id": trace_id})
             return {"error": f"METHOD_ERROR: {method} not supported."}
 
     except Exception as e:
-        print(f"❌ [ERROR] CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
+        # print(f"❌ [ERROR] CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
+        logger.error(f"CRM TOOL TOP-LEVEL FAILURE: {str(e)}", extra={"trace_id": trace_id})
         return {"error": "SERVICE_ERROR: Internal Tool Error."}

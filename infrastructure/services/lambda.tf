@@ -59,6 +59,10 @@ resource "aws_lambda_function" "rds_seeder" {
     security_group_ids = [aws_security_group.rds_seeder_sg.id]
   }
 
+  logging_config {
+    log_format = "JSON"
+  }
+
   environment {
     variables = {
       DB_CONFIG                = jsonencode(local.seed_config)
@@ -99,6 +103,10 @@ resource "aws_lambda_function" "rds_tool" {
   vpc_config {
     subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.rds_tool_sg.id]
+  }
+
+  logging_config {
+    log_format = "JSON"
   }
 
   environment {
@@ -168,6 +176,10 @@ resource "aws_lambda_function" "rds_init" {
   vpc_config {
     subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.rds_init_sg.id]
+  }
+
+  logging_config {
+    log_format = "JSON"
   }
 
   environment {

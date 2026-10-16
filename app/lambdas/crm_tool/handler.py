@@ -40,7 +40,7 @@ def lambda_handler(event, context):
     """
     # Log the ID for tracing with AgentCore Memory. We check both 'session_id' and 'thread_id' for consistency.
     trace_id = event.get("thread_id") or event.get("session_id") or "UNKNOWN_SESSION"
-    print(f"CRM TOOL CALL | Trace: {trace_id} | Event: {json.dumps(event)}")
+    logger.info(f"CRM TOOL CALL | Trace: {trace_id} | Event: {json.dumps(event)}")
 
     chat_id = event.get("live_chat_identifier")
     method = event.get("method")
@@ -58,11 +58,9 @@ def lambda_handler(event, context):
             return result
 
         else:
-            # print(f"❌ [ERROR] Unknown method: {method}")
-            logger.error(f"Unknown method: {method}", extra={"trace_id": trace_id})
+            logger.error(f"Unknown method: {method}")
             return {"error": f"METHOD_ERROR: {method} not supported."}
 
     except Exception as e:
-        # print(f"❌ [ERROR] CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
-        logger.error(f"CRM TOOL TOP-LEVEL FAILURE: {str(e)}", extra={"trace_id": trace_id})
+        logger.error(f"CRM TOOL TOP-LEVEL FAILURE: {str(e)}")
         return {"error": "SERVICE_ERROR: Internal Tool Error."}

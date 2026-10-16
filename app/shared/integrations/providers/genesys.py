@@ -2,9 +2,13 @@ import time
 import uuid
 import requests
 import json
+import logging
 from typing import Dict, Any, List, Optional
 from utils.genesys_parser import parse_genesys_blocks
 from integrations.base import BaseCrmProvider
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 class GenesysProvider(BaseCrmProvider):
     """
@@ -19,7 +23,7 @@ class GenesysProvider(BaseCrmProvider):
         if self._token and time.time() < (self._token_expiry - 60):
             return self._token
 
-        print(f"🔐 Refreshing Genesys OAuth Token for {self.identifier}...")
+        logger.info(f"🔐 Refreshing Genesys OAuth Token for {self.identifier}...")
         auth_url = self.get_auth_url()
         resp = requests.post(
             auth_url,

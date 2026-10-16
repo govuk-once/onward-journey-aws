@@ -1,11 +1,12 @@
 #!/bin/bash
 
 functions=(
-  "jr1-client-ws-router"
-  "jr1-crm-wh-router"
-  "jr1-crm-contentguru-wh-authorizer"
+  # "jr1-client-ws-router"
+  # "jr1-crm-wh-router"
+  # "jr1-crm-contentguru-wh-authorizer"
   "jr1-crm-tool"
   "jr1-kb-sync-check-kb-meta"
+  "jr1-kb-sync-check-sync-meta"
 )
 
 for function in "${functions[@]}"; do

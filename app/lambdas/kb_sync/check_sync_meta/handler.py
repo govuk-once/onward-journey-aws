@@ -41,7 +41,7 @@ def lambda_handler(event, context):
     Raises:
         Exception: If there is an issue connecting to or querying the database.
     """
-    print(f"Received event: {json.dumps(event)}")
+    logger.info(f"Received event: {json.dumps(event)}")
     kb_identifier = event.get("kb_identifier")
     remote_date = event.get("remote_modified_date")
 

@@ -84,7 +84,7 @@ resource "aws_lambda_function" "function" {
   logging_config {
     log_format = "JSON"
   }
-  
+
   dynamic "vpc_config" {
     for_each = length(var.subnet_ids) > 0 ? [1] : []
     content {

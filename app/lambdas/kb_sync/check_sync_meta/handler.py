@@ -10,7 +10,11 @@ to determine if an update is necessary.
 
 import os
 import json
+import logging
 from utils.db import get_db_connection
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 CONTACTS_TABLE_NAME = os.environ.get("CONTACTS_TABLE_NAME")
 
@@ -53,7 +57,7 @@ def lambda_handler(event, context):
         is_mapped = bool(mapped_result)
 
         if not is_mapped:
-            print(f"KB {kb_identifier} is unmapped. Flagging for downstream cleanup.")
+            logger.warning(f"KB {kb_identifier} is unmapped. Flagging for downstream cleanup.")
             return {
                 "sync_required": False,
                 "is_mapped": False,
@@ -78,7 +82,7 @@ def lambda_handler(event, context):
     # Sync if dates differ, OR if there's remote data but no local history (first-time sync).
     sync_required = (remote_date != local_date) or (remote_date is None and local_date is not None)
 
-    print(f"KB {kb_identifier}: Remote({remote_date}) vs Local({local_date}) -> Sync Required: {sync_required}")
+    logger.info(f"KB {kb_identifier}: Remote({remote_date}) vs Local({local_date}) -> Sync Required: {sync_required}")
 
     return {
         "sync_required": sync_required,

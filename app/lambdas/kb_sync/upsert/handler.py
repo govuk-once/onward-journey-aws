@@ -8,8 +8,13 @@ the local RDS database.
 """
 
 import json
+import logging
+import os
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def get_embedding(bedrock_client, text):
     """
@@ -86,7 +91,7 @@ def lambda_handler(event, context):
 
     except Exception as e:
         conn.run("ROLLBACK")
-        print(f"UPSERT ERROR [{art.get('external_id')}]: {str(e)}")
+        logger.error(f"UPSERT ERROR [{art.get('external_id')}]: {str(e)}")
         raise e
     finally:
         conn.close()

@@ -2,7 +2,11 @@ import os
 import json
 import boto3
 import pg8000.native
+import logging
 from .aws import get_secrets_client
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def get_db_password(secret_arn: str = None) -> str:
     """Retrieves the DB password, handling both JSON and raw string formats."""
@@ -31,11 +35,11 @@ def get_db_connection():
     database = os.environ["DB_NAME"]
     secret_arn = os.environ.get("DB_SECRET_ARN")
 
-    print(f"Connecting to {host} as user {user}...")
+    logger.info(f"Connecting to {host} as user {user}...")
 
     # If no secret ARN is provided, dynamically generate a short-lived IAM Auth Token
     if not secret_arn:
-        print("Using AWS IAM Database Authentication token.")
+        logger.info("Using AWS IAM Database Authentication token.")
         rds_client = boto3.client("rds", region_name=os.environ.get("AWS_REGION", "eu-west-2"))
         db_password = rds_client.generate_db_auth_token(
             DBHostname=host,
@@ -43,7 +47,7 @@ def get_db_connection():
             DBUsername=user
         )
     else:
-        print("Using Secrets Manager static password entry.")
+        logger.info("Using Secrets Manager static password entry.")
         db_password = get_db_password(secret_arn)
 
     return pg8000.native.Connection(

@@ -15,8 +15,12 @@ Supported Methods:
 
 import os
 import json
+import logging
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 CONTACTS_TABLE_NAME = os.environ.get("CONTACTS_TABLE_NAME")
 
@@ -37,7 +41,7 @@ def lambda_handler(event, context):
             AgentCore Gateway will handle the JSON-RPC serialization.
     """
 
-    print(f"📥 GATEWAY EVENT: {json.dumps(event)}")
+    logger.info(f"📥 GATEWAY EVENT: {json.dumps(event)}")
 
     # 1. Extract the Tool Name from the Gateway Context
     custom_context = {}
@@ -48,7 +52,7 @@ def lambda_handler(event, context):
 
     # Clean the prefix
     method = full_method.split("___")[-1] if "___" in full_method else full_method
-    print(f"🔍 RESOLVED METHOD: {method}")
+    logger.info(f"🔍 RESOLVED METHOD: {method}")
 
     # 2. Extract arguments
     query = event.get("query", "No query provided")
@@ -73,7 +77,7 @@ def lambda_handler(event, context):
         if "query_knowledge_base" in method:
             # KB Search: Filter by the specific department KB identifier
             if not kb_identifier:
-                print(f"❌ [ERROR] kb_identifier is required for {method}")
+                logger.error(f"❌ [ERROR] kb_identifier is required for {method}")
                 return {"error": "kb_identifier is required"}
 
             results = conn.run(

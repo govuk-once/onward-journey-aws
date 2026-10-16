@@ -8,9 +8,12 @@ This Lambda handles automated setup tasks for the RDS PostgreSQL database:
 """
 
 import json
+import logging
 import os
 from utils.db import get_db_connection
 
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -28,7 +31,7 @@ def lambda_handler(event, context):
 
     try:
         # --- PHASE 1: USER PROVISIONING (IAM AUTH) ---
-        print("Provisioning 'rds_readonly_dept_contacts' for IAM Auth...")
+        logger.info("Provisioning 'rds_readonly_dept_contacts' for IAM Auth...")
         # Create the user without a password, link it to IAM, and restrict to SELECT
         conn.run("""
             DO $$
@@ -52,7 +55,7 @@ def lambda_handler(event, context):
         )
 
         # --- PHASE 2: EXTENSIONS ---
-        print("Ensuring pgvector extension is available...")
+        logger.info("Ensuring pgvector extension is available...")
         try:
             conn.run("CREATE EXTENSION IF NOT EXISTS vector;")
         except Exception as e:
@@ -62,7 +65,7 @@ def lambda_handler(event, context):
                 and isinstance(e.args[0], dict)
                 and e.args[0].get("C") == "23505"
             ):
-                print(
+                logger.info(
                     "Extension 'vector' already exists (handled 23505 constraint error). Continuing..."
                 )
             else:
@@ -94,14 +97,14 @@ def lambda_handler(event, context):
 
             col_definitions = ", ".join(col_parts)
 
-            print(f"Initialising table (if not exists): {target_table}")
+            logger.info(f"Initialising table (if not exists): {target_table}")
             conn.run(
                 f'CREATE TABLE IF NOT EXISTS "{target_table}" ({col_definitions});'
             )
 
             # Ensure all columns exist
             for col_name, col_type in columns.items():
-                print(f"Ensuring column exists: {target_table}.{col_name}")
+                logger.info(f"Ensuring column exists: {target_table}.{col_name}")
                 conn.run(
                     f'ALTER TABLE "{target_table}" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'
                 )
@@ -110,7 +113,7 @@ def lambda_handler(event, context):
             conn.run(f'GRANT SELECT ON "{target_table}" TO rds_readonly_dept_contacts;')
 
         conn.run("COMMIT")
-        print("RDS initialisation complete.")
+        logger.info("RDS initialisation complete.")
         return {
             "status": "success",
             "message": "RDS setup and IAM user provisioning complete.",
@@ -119,7 +122,7 @@ def lambda_handler(event, context):
     except Exception as e:
         if conn:
             conn.run("ROLLBACK")
-        print(f"DATABASE ERROR: {str(e)}")
+        logger.error(f"DATABASE ERROR: {str(e)}")
         raise e
     finally:
         if conn:

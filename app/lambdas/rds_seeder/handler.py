@@ -8,11 +8,15 @@ and generates vector embeddings via Amazon Bedrock Titan v2 for RAG capabilities
 
 import csv
 import json
+import logging
 import os
 import boto3
 
 from utils.db import get_db_connection
 from utils.aws import get_bedrock_client
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def get_embedding(bedrock_client, text):
     """
@@ -98,13 +102,13 @@ def lambda_handler(event, context):
 
         col_definitions = ", ".join(col_parts)
 
-        print(f"Initialising/recreating table: {target_table}")
+        logger.info(f"Initialising/recreating table: {target_table}")
         conn.run(f"DROP TABLE IF EXISTS {target_table} CASCADE;")
         conn.run(f"CREATE TABLE {target_table} ({col_definitions});")
 
         # 2. FETCH SOURCE DATA
         rows_processed = 0
-        print(f"Fetching source data from S3: mock/{target_file}")
+        logger.info(f"Fetching source data from S3: mock/{target_file}")
         s3 = boto3.client("s3")
         s3_res = s3.get_object(
             Bucket=os.environ["BUCKET_NAME"], Key=f"mock/{target_file}"
@@ -117,7 +121,7 @@ def lambda_handler(event, context):
         # 3. DYNAMIC INGESTION & EMBEDDING
         embed_cols = table_conf.get("embedding_source_cols", [])
 
-        print(f"Starting ingestion for {target_table}...")
+        logger.info(f"Starting ingestion for {target_table}...")
         for i, row in enumerate(reader):
             # Map CSV row data to the columns defined in the YAML - force blank strings to None for SQL NULL conversion
             # 'embedding' is excluded here as it is calculated via Bedrock below
@@ -140,7 +144,7 @@ def lambda_handler(event, context):
                      # Do not pass the raw Python list, as standard Postgres arrays use {} and will crash
                     params["emb"] = "[" + ",".join(map(str, vector)) + "]"
                 except Exception as e:
-                    print(f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}")
+                    logger.error(f"ERROR: Failed to generate embedding for row {i} in {target_table}: {e}")
                     continue
 
             # Build Dynamic INSERT statement based on the active parameter map
@@ -154,17 +158,17 @@ def lambda_handler(event, context):
             rows_processed += 1
 
             if rows_processed % 10 == 0:
-                print(f"Processed {rows_processed} rows for {target_table}...")
+                logger.info(f"Processed {rows_processed} rows for {target_table}...")
 
         # Commit all successfully processed rows
         conn.run("COMMIT")
-        print(f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}")
+        logger.info(f"Ingestion complete for {target_table}. Total rows processed: {rows_processed}")
         return {"status": "success", "table": target_table, "rows_processed": rows_processed}
 
     except Exception as e:
         # Roll back the transaction if any row or embedding call fails
         conn.run("ROLLBACK")
-        print(f"DATABASE ERROR: {str(e)}")
+        logger.error(f"DATABASE ERROR: {str(e)}")
         raise e
     finally:
         conn.close()

@@ -5,8 +5,12 @@ This Lambda is responsible for updating the 'sync_kb_metadata' table at the end
 of a synchronisation workflow. It records the success or failure status,
 the last modified date (if successful), and any error messages.
 """
-
+import logging
+import os
 from utils.db import get_db_connection
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -67,7 +71,7 @@ def lambda_handler(event, context):
 
     except Exception as e:
         conn.run("ROLLBACK")
-        print(f"METADATA UPDATE ERROR [{kb_identifier}]: {str(e)}")
+        logger.error(f"METADATA UPDATE ERROR [{kb_identifier}]: {str(e)}")
         raise e
     finally:
         conn.close()

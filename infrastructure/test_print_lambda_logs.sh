@@ -1,12 +1,14 @@
 #!/bin/bash
 
+workspace=$(terraform workspace show)
+
 functions=(
-  # "jr1-client-ws-router"
-  # "jr1-crm-wh-router"
-  # "jr1-crm-contentguru-wh-authorizer"
-  "jr1-crm-tool"
-  "jr1-kb-sync-check-kb-meta"
-  "jr1-kb-sync-check-sync-meta"
+  # "${workspace}-client-ws-router"
+  # "${workspace}-crm-wh-router"
+  # "${workspace}-crm-contentguru-wh-authorizer"
+  "${workspace}-crm-tool"
+  "${workspace}-kb-sync-check-kb-meta"
+  "${workspace}-kb-sync-check-sync-meta"
 )
 
 for function in "${functions[@]}"; do

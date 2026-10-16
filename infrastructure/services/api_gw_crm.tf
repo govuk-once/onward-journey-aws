@@ -26,8 +26,35 @@ module "crm_wh_router" {
   reserved_concurrent_executions = 20
 
   environment_variables = {
-    LOG_LEVEL = "INFO"
+    LOG_LEVEL           = "INFO"
+    SESSIONS_TABLE_NAME = aws_dynamodb_table.sessions.name
+    SESSIONS_GSI_NAME   = "crm_chat_id-index"
+    WEBSOCKET_ENDPOINT  = replace(module.client_ws_gateway.wss_url, "wss://", "https://")
   }
+
+  policy_statements = [
+    {
+      Effect = "Allow"
+      Action = [
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem"
+      ]
+      Resource = [
+        aws_dynamodb_table.sessions.arn,
+        "${aws_dynamodb_table.sessions.arn}/index/crm_chat_id-index"
+      ]
+    },
+    {
+      Effect = "Allow"
+      Action = [
+        "execute-api:ManageConnections"
+      ]
+      Resource = [
+        "${module.client_ws_gateway.execution_arn}/${var.environment}/POST/@connections/*"
+      ]
+    }
+  ]
 }
 
 # -----------------------------------------------------------------------------

@@ -7,7 +7,12 @@ It retrieves all relevant articles from the configured remote KB provider
 """
 
 import json
+import logging
+import os
 from integrations.factory import ProviderFactory, Capability
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -25,7 +30,7 @@ def lambda_handler(event, context):
     Raises:
         Exception: If the provider cannot be instantiated or article fetching fails.
     """
-    print(f"Received event: {json.dumps(event)}")
+    logger.info(f"Received event: {json.dumps(event)}")
     kb_identifier = event.get("kb_identifier")
 
     try:
@@ -33,10 +38,10 @@ def lambda_handler(event, context):
 
         articles = provider.fetch_articles()
 
-        print(f"KB {kb_identifier}: Fetched {len(articles)} articles.")
+        logger.info(f"KB {kb_identifier}: Fetched {len(articles)} articles.")
         return {
             "articles": articles
         }
     except Exception as e:
-        print(f"❌ [ERROR] KB Article Fetch Failure: {str(e)}")
+        logger.error(f"❌ [ERROR] KB Article Fetch Failure: {str(e)}")
         raise

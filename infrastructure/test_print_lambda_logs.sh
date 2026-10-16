@@ -6,9 +6,13 @@ functions=(
   # "${workspace}-client-ws-router"
   # "${workspace}-crm-wh-router"
   # "${workspace}-crm-contentguru-wh-authorizer"
-  "${workspace}-crm-tool"
+  # "${workspace}-crm-tool"
   "${workspace}-kb-sync-check-kb-meta"
   "${workspace}-kb-sync-check-sync-meta"
+  "${workspace}-kb-sync-fetch-articles"
+  "${workspace}-kb-sync-upsert"
+  "${workspace}-kb-sync-update-sync-meta"
+  "${workspace}-kb-sync-cleanup-unmapped"
 )
 
 for function in "${functions[@]}"; do

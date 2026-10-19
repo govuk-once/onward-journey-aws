@@ -24,7 +24,9 @@ Examples:
 EOF
 }
 
-workspace=$(terraform workspace show)
+# Determine the script directory and current Terraform workspace
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+workspace=$(terraform -chdir="$SCRIPT_DIR/../infrastructure/services" workspace show)
 
 stateless_lambdas=(
   "${workspace}-client-ws-router"

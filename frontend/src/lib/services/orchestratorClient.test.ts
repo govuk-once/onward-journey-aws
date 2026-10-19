@@ -213,8 +213,8 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         expect(callbacks.onResponse).not.toHaveBeenCalled();
 
-        // Fast-forward past the 2.5s debounce timeout
-        jest.advanceTimersByTime(2600);
+        // Fast-forward past the 30s debounce timeout
+        jest.advanceTimersByTime(30001);
         await Promise.resolve(); // Flush microtask queue for the async timeout callback
 
         expect(callbacks.onResponse).toHaveBeenCalledWith("Response without done frame");
@@ -265,8 +265,8 @@ describe("OrchestratorClient (WebSocket)", () => {
         // Verify it was called exactly once
         expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
 
-        // Fast-forward past the 2.5s debounce timeout window
-        jest.advanceTimersByTime(3000);
+        // Fast-forward past the 30s debounce timeout window
+        jest.advanceTimersByTime(30001);
         await Promise.resolve();
 
         // Verify it wasn't called a second time by the fallback timer

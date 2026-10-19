@@ -88,11 +88,11 @@ export class OrchestratorClient {
                     console.error("[WebSocket] Failed to parse frame. Raw data:", event.data);
                 }
 
-                // Debounce Timer: Wait 2.5s for silence in case 'done' frame is dropped over the network
+                // Debounce Timer: Wait 30s for silence in case 'done' frame is dropped over the network
                 clearTimeout(streamTimeout);
                 streamTimeout = setTimeout(() => {
                     finalizeMessage();
-                }, 2500);
+                }, 30000);
             };
 
             this.ws.addEventListener("message", messageHandler);

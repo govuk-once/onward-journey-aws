@@ -66,7 +66,7 @@ locals {
         DB_HOST                  = aws_db_instance.dept_contacts_metadata.address
         DB_NAME                  = aws_db_instance.dept_contacts_metadata.db_name
         DB_USER                  = aws_db_instance.dept_contacts_metadata.username
-        DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        DB_SECRET_ARN            = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         SECRETS_ENDPOINT_URL     = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
         BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
       }
@@ -85,7 +85,7 @@ locals {
         DB_HOST              = aws_db_instance.dept_contacts_metadata.address
         DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
         DB_USER              = aws_db_instance.dept_contacts_metadata.username
-        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
       }
     }
@@ -103,7 +103,7 @@ locals {
         DB_HOST              = aws_db_instance.dept_contacts_metadata.address
         DB_NAME              = aws_db_instance.dept_contacts_metadata.db_name
         DB_USER              = aws_db_instance.dept_contacts_metadata.username
-        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.arn
+        DB_SECRET_ARN        = data.aws_secretsmanager_secret_version.dept_contacts_db_password.secret_arn
         SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0]["dns_name"]
       }
     }
@@ -158,68 +158,4 @@ resource "aws_lambda_function" "kb_sync" {
   tags = {
     Component = "kb-sync"
   }
-}
-
-# ==============================================================================
-# STATE MIGRATION GUARDS
-# TODO: Safe to remove once this refactor has been applied across active developer workspaces.
-# ==============================================================================
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_check_kb_meta
-  to   = aws_cloudwatch_log_group.kb_sync["check_kb_meta"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_check_kb_meta
-  to   = aws_lambda_function.kb_sync["check_kb_meta"]
-}
-
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_check_sync_meta
-  to   = aws_cloudwatch_log_group.kb_sync["check_sync_meta"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_check_sync_meta
-  to   = aws_lambda_function.kb_sync["check_sync_meta"]
-}
-
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_fetch_articles
-  to   = aws_cloudwatch_log_group.kb_sync["fetch_articles"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_fetch_articles
-  to   = aws_lambda_function.kb_sync["fetch_articles"]
-}
-
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_upsert
-  to   = aws_cloudwatch_log_group.kb_sync["upsert"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_upsert
-  to   = aws_lambda_function.kb_sync["upsert"]
-}
-
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_update_sync_meta
-  to   = aws_cloudwatch_log_group.kb_sync["update_sync_meta"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_update_sync_meta
-  to   = aws_lambda_function.kb_sync["update_sync_meta"]
-}
-
-moved {
-  from = aws_cloudwatch_log_group.kb_sync_cleanup_unmapped
-  to   = aws_cloudwatch_log_group.kb_sync["cleanup_unmapped"]
-}
-
-moved {
-  from = aws_lambda_function.kb_sync_cleanup_unmapped
-  to   = aws_lambda_function.kb_sync["cleanup_unmapped"]
 }

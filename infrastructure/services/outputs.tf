@@ -42,3 +42,19 @@ output "orchestrator_sg_id" {
   description = "The ID of the security group for the orchestration layer."
   value       = aws_security_group.orchestrator.id
 }
+
+## DYNAMODB STATE MANAGEMENT DATABASE
+output "dynamodb_sessions_table_name" {
+  description = "Name of the DynamoDB sessions table"
+  value       = aws_dynamodb_table.sessions.name
+}
+
+output "dynamodb_sessions_table_arn" {
+  description = "ARN of the DynamoDB sessions table"
+  value       = aws_dynamodb_table.sessions.arn
+}
+
+output "dynamodb_sessions_crm_chat_id_index" {
+  description = "Name of the GSI used to look up sessions by Storm CRM chat ID"
+  value       = "crm_chat_id-index"
+}

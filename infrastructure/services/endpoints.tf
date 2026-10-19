@@ -62,33 +62,3 @@ resource "aws_vpc_endpoint" "endpoints" {
     Component = "vpc-endpoints"
   }
 }
-
-# ==============================================================================
-# STATE MIGRATION GUARDS
-# TODO: Safe to remove these 'moved' blocks once this refactor has been applied
-# across all active developer workspaces.
-# ==============================================================================
-moved {
-  from = aws_vpc_endpoint.bedrock
-  to   = aws_vpc_endpoint.endpoints["bedrock"]
-}
-
-moved {
-  from = aws_vpc_endpoint.secrets
-  to   = aws_vpc_endpoint.endpoints["secrets"]
-}
-
-moved {
-  from = aws_vpc_endpoint.lambda
-  to   = aws_vpc_endpoint.endpoints["lambda"]
-}
-
-moved {
-  from = aws_vpc_endpoint.bedrock_agentcore
-  to   = aws_vpc_endpoint.endpoints["bedrock_agentcore"]
-}
-
-moved {
-  from = aws_vpc_endpoint.bedrock_gateway
-  to   = aws_vpc_endpoint.endpoints["bedrock_gateway"]
-}

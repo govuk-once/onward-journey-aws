@@ -129,3 +129,7 @@ locals {
 ```
 
 Run `terraform apply` and type `yes` to accept the changes. Alerting should now be set up for the new log group that you have added.
+
+## Section 4: Querying logs via Slack
+
+Querying CloudWatch logs from the oj-aws-errors Slack channel requires authorisation. The first time you run a query, Amazon Q will ask you to choose a user role. Log into the AWS console via the link that appears in the Slack channel. Choose the GDS workspace, and click allow. If prompted to choose a role, select `amazon_q_role`.

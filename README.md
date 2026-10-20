@@ -73,7 +73,15 @@ frontend_basic_auth_password = "<your secure password>"
 
 We use the GDS CLI to assume roles on our development machines. To see a list of relevant roles, run `gds aws | grep onwardjourney`. You can use these roles by running e.g. `gds aws <role-name> -- terraform plan`, or start a new authenticated shell session with `gds aws <role-name> -- $SHELL`.
 
-### Phase 1: The Foundation (VPC)
+### Phase 1: Error Alerting
+
+**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the alerting infrastructure**.
+
+Error alerting in Slack (or another chat application) uses an AWS account-wide workspace integration, which should be deployed before the VPC layer and developer workspaces when deploying to a new AWS account.
+
+Navigate to `infrastructure/slack-alerts` and follow the README instructions inside that directory.
+
+### Phase 2: The Foundation (VPC)
 **Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**.
 
 **CRITICAL:** This layer MUST be deployed using the **`default`** Terraform workspace.
@@ -94,7 +102,7 @@ terraform plan
 terraform apply
 ```
 
-### Phase 2: Your Developer Workspace (Services)
+### Phase 3: Your Developer Workspace (Services)
 Most daily development happens here. This layer uses **individual developer workspaces** for isolation. Follow these steps for a complete deployment of the services infrastructure:
 
 **1. Initialise and Select Workspace**
@@ -135,9 +143,6 @@ terraform apply
 **6. Integration Testing**
 Once the stack is green, follow the [Backend Integration Testing Guide](tests/README.md) to verify the deployment via the CLI.
 
-### Phase 3: Error Alerting
-
-To set up error alerting in Slack (or another chat application), navigate to `infrastructure/slack-alerts` and follow the README instructions inside that directory.
 
 ## Troubleshooting
 

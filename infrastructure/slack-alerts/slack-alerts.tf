@@ -13,12 +13,13 @@ variable "slack_channel_id" {
 }
 
 resource "aws_chatbot_slack_channel_configuration" "oj_aws_errors" {
-  configuration_name = "oj-aws-errors-config"
-  iam_role_arn       = aws_iam_role.amazon_q.arn
-  slack_channel_id   = var.slack_channel_id
-  slack_team_id      = var.slack_workspace_id
-  sns_topic_arns     = [aws_sns_topic.oj_aws_errors.arn]
-  logging_level      = "INFO"
+  configuration_name          = "oj-aws-errors-config"
+  iam_role_arn                = aws_iam_role.amazon_q.arn
+  slack_channel_id            = var.slack_channel_id
+  slack_team_id               = var.slack_workspace_id
+  sns_topic_arns              = [aws_sns_topic.oj_aws_errors.arn]
+  logging_level               = "INFO"
+  user_authorization_required = true
 }
 
 # Amazon Q Role

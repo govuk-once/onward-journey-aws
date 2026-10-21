@@ -8,7 +8,12 @@ in the database (e.g., removed from the seed CSV). It safely purges all
 orphaned vector embeddings and sync history for that specific KB.
 """
 
+import logging
+import os
 from utils.db import get_db_connection
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -35,7 +40,7 @@ def lambda_handler(event, context):
     if not kb_identifier:
         raise ValueError("kb_identifier is required for cleanup.")
 
-    print(f"Initiating purge for unmapped KB: {kb_identifier}")
+    logger.info(f"Initiating purge for unmapped KB: {kb_identifier}")
     conn = get_db_connection()
 
     try:
@@ -51,7 +56,7 @@ def lambda_handler(event, context):
 
         conn.run("COMMIT")
 
-        print(f"Successfully purged all data for {kb_identifier}.")
+        logger.info(f"Successfully purged all data for {kb_identifier}.")
         return {
             "status": "success",
             "action": "purged_unmapped_kb",
@@ -59,7 +64,7 @@ def lambda_handler(event, context):
         }
     except Exception as e:
         conn.run("ROLLBACK")
-        print(f"PURGE ERROR [{kb_identifier}]: {str(e)}")
+        logger.error(f"PURGE ERROR [{kb_identifier}]: {str(e)}")
         raise e
     finally:
         conn.close()

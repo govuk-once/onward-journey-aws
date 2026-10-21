@@ -7,7 +7,12 @@ provider (e.g., Genesys) to determine if a local sync is required.
 """
 
 import json
+import logging
+import os
 from integrations.factory import ProviderFactory, Capability
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def lambda_handler(event, context):
     """
@@ -27,14 +32,14 @@ def lambda_handler(event, context):
     Raises:
         Exception: If the provider cannot be instantiated or metadata fetch fails.
     """
-    print(f"Received event: {json.dumps(event)}")
+    logger.info(f"Received event: {json.dumps(event)}")
     kb_identifier = event.get("kb_identifier")
 
     try:
         provider = ProviderFactory.get_provider(kb_identifier, Capability.KB_SYNC_META)
         remote_date = provider.fetch_remote_modified_date()
 
-        print(f"KB {kb_identifier}: Remote modified date is {remote_date}")
+        logger.info(f"KB {kb_identifier}: Remote modified date is {remote_date}")
 
         return {
             "kb_identifier": kb_identifier,
@@ -42,5 +47,5 @@ def lambda_handler(event, context):
             "platform": provider.config["platform"]
         }
     except Exception as e:
-        print(f"❌ [ERROR] KB Metadata Check Failure: {str(e)}")
+        logger.error(f"❌ KB Metadata Check Failure: {str(e)}")
         raise

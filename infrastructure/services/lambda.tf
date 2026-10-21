@@ -59,6 +59,10 @@ resource "aws_lambda_function" "rds_seeder" {
     security_group_ids = [aws_security_group.rds_seeder_sg.id]
   }
 
+  logging_config {
+    log_format = "JSON"
+  }
+
   environment {
     variables = {
       DB_CONFIG                = jsonencode(local.seed_config)
@@ -101,6 +105,10 @@ resource "aws_lambda_function" "rds_tool" {
     security_group_ids = [aws_security_group.rds_tool_sg.id]
   }
 
+  logging_config {
+    log_format = "JSON"
+  }
+
   environment {
     variables = {
       CONTACTS_TABLE_NAME      = local.active_contacts_table
@@ -134,6 +142,10 @@ resource "aws_lambda_function" "crm_tool" {
   timeout          = 30
   architectures    = ["arm64"]
 
+  logging_config {
+    log_format = "JSON"
+  }
+
   environment {
     variables = {
       ENV_PREFIX = var.environment
@@ -164,6 +176,10 @@ resource "aws_lambda_function" "rds_init" {
   vpc_config {
     subnet_ids         = local.private_subnet_ids
     security_group_ids = [aws_security_group.rds_init_sg.id]
+  }
+
+  logging_config {
+    log_format = "JSON"
   }
 
   environment {

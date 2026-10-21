@@ -1,11 +1,15 @@
 import os
 import json
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 from utils.aws import get_secrets_client
 
 secrets_client = get_secrets_client()
 ENV_PREFIX = os.environ.get("ENV_PREFIX")
+
+logger = logging.getLogger()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 class BaseCrmProvider(ABC):
     def __init__(self, identifier: str, config: Dict[str, Any]):
@@ -26,7 +30,7 @@ class BaseCrmProvider(ABC):
         """Retrieve and cache the raw secret data from AWS Secrets Manager."""
         full_secret_name = f"{ENV_PREFIX}/{self.config['secret_path']}"
         platform = self.config.get('platform', 'unknown').capitalize()
-        print(f"Fetching {platform} Secrets from AWS Secrets Manager for: {self.identifier}")
+        logger.info(f"Fetching {platform} Secrets from AWS Secrets Manager for: {self.identifier}")
         response = secrets_client.get_secret_value(SecretId=full_secret_name)
         return json.loads(response["SecretString"])
 

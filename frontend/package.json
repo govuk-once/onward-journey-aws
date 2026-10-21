@@ -23,7 +23,7 @@
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@types/dompurify": "^3.0.5",
     "@types/jest": "^29.5.14",
-    "@types/node": "^24",
+    "@types/node": "^26",
     "@types/sanitize-html": "^2.16.1",
     "@types/showdown": "^2.0.6",
     "eslint": "^9.39.1",
@@ -43,7 +43,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">= 25",
+    "node": ">= 26",
     "npm": "^11.6.2"
   },
   "dependencies": {

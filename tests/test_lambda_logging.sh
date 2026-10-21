@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# This script is used to test the logging of AWS Lambda functions. For now, it only prints logs to the console as a visual check, but it could be extended or modified to test routing and/or act as a pass/fail test in the future.
+# This script is used to test the logging of AWS Lambda functions. For now, it runs against a hardcoded array of functions and prints logs to the console as a visual check, but it could be extended or modified to test routing and/or act as a pass/fail test in the future.
+
+# TO DO: Once the refactoring of the Lambda functions and alerting setup is complete, decide what to do with this script. Either:
+# 1. Remove it entirely, or
+# 2. Keep it as a test script for logging and alerting, but modify it to be a pass/fail test that checks for the presence of logs in CloudWatch and/or the presence of alerts in the alerting system. Consider using a dynamically generated rather than a hardcoded list of functions, and ensure that it doesn't modify production data or state, and that it can be run safely in a test environment.
 
 show_help() {
   cat << EOF
@@ -28,6 +32,7 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace=$(terraform -chdir="$SCRIPT_DIR/../infrastructure/services" workspace show)
 
+# 'stateless_lambdas' in this context includes Lambdas that safely reject the current dummy payload, even if they are designed to modify state or data under normal operation.
 stateless_lambdas=(
   "${workspace}-client-ws-router"
   "${workspace}-crm-wh-router"
@@ -39,6 +44,7 @@ stateless_lambdas=(
   "${workspace}-rds-tool"
 )
 
+#  'stateful_lambdas' are lambdas that modify state or data, so should be run with caution in development or test environments only.
 stateful_lambdas=(
   "${workspace}-rds-init"
   "${workspace}-rds-seeder"

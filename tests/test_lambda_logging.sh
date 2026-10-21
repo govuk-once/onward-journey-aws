@@ -32,12 +32,10 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace=$(terraform -chdir="$SCRIPT_DIR/../infrastructure/services" workspace show)
 
-# 'stateless_lambdas' in this context includes Lambdas that safely reject the current dummy payload, even if they are designed to modify state or data under normal operation.
+# 'stateless_lambdas' in this context are Lambdas that safely reject the current dummy payload.
 stateless_lambdas=(
   "${workspace}-client-ws-router"
-  "${workspace}-crm-wh-router"
   "${workspace}-crm-contentguru-wh-authorizer"
-  "${workspace}-crm-tool"
   "${workspace}-kb-sync-check-kb-meta"
   "${workspace}-kb-sync-check-sync-meta"
   "${workspace}-kb-sync-fetch-articles"
@@ -46,6 +44,8 @@ stateless_lambdas=(
 
 #  'stateful_lambdas' are lambdas that modify state or data, so should be run with caution in development or test environments only.
 stateful_lambdas=(
+  "${workspace}-crm-tool"
+  "${workspace}-crm-wh-router"
   "${workspace}-rds-init"
   "${workspace}-rds-seeder"
   "${workspace}-kb-sync-upsert"

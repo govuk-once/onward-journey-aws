@@ -27,7 +27,7 @@ resource "aws_lambda_layer_version" "shared_layers" {
   # would cause 'terraform plan' to crash because the file doesn't exist yet.
   description = "${each.value.description}. Build hash: ${each.value.trigger}"
 
-  compatible_runtimes      = ["python3.12"]
+  compatible_runtimes      = [local.lambda_runtime]
   compatible_architectures = ["arm64"]
 
   # Ensure the build process completes before we try to upload the layer.
@@ -48,7 +48,7 @@ resource "aws_lambda_function" "rds_seeder" {
   function_name    = "${var.environment}-rds-seeder"
   role             = aws_iam_role.rds_seeder_role.arn
   handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
+  runtime          = local.lambda_runtime
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 900
@@ -94,7 +94,7 @@ resource "aws_lambda_function" "rds_tool" {
   function_name    = "${var.environment}-rds-tool"
   role             = aws_iam_role.rds_tool_role.arn # Requires access to Bedrock and RDS
   handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
+  runtime          = local.lambda_runtime
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 120
@@ -136,7 +136,7 @@ resource "aws_lambda_function" "crm_tool" {
   function_name    = "${var.environment}-crm-tool"
   role             = aws_iam_role.crm_tool_role.arn
   handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
+  runtime          = local.lambda_runtime
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = 512
   timeout          = 30
@@ -167,7 +167,7 @@ resource "aws_lambda_function" "rds_init" {
   function_name    = "${var.environment}-rds-init"
   role             = aws_iam_role.rds_init_role.arn
   handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
+  runtime          = local.lambda_runtime
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn]
   memory_size      = 512
   timeout          = 300

@@ -3,7 +3,7 @@ name = "onward-journey"
 version = "0.1.0"
 description = "GOV.UK Onward Journey backend"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13.17"
 # Shared packages needed by BOTH Lambdas and the AgentCore runtime (will change when orchestrator lambda removed)
 dependencies = [
     "langchain-aws>=1.2.2",

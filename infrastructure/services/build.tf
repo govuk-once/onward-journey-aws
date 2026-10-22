@@ -60,7 +60,7 @@ locals {
     uv pip install \
       --target "$STAGING_DIR/python" \
       --python-platform aarch64-manylinux_2_28 \
-      --python-version 3.12 \
+      --python-version ${local.python_version} \
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \
@@ -139,7 +139,7 @@ locals {
     uv pip install \
       --target "$STAGING_DIR" \
       --python-platform aarch64-manylinux_2_28 \
-      --python-version 3.12 \
+      --python-version ${local.python_version} \
       --only-binary=:all: \
       --link-mode copy \
       --no-cache \

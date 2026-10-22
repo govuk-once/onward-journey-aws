@@ -135,7 +135,7 @@ resource "aws_lambda_function" "kb_sync" {
   function_name    = each.value.function_name
   role             = each.value.role_arn
   handler          = "handler.lambda_handler"
-  runtime          = "python3.12"
+  runtime          = local.lambda_runtime
   layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
   memory_size      = each.value.memory_size
   timeout          = each.value.timeout

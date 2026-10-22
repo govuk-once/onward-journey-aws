@@ -205,7 +205,7 @@ resource "aws_bedrockagentcore_agent_runtime" "orchestrator_runtime" {
   # AgentCore relies on an artifact block to pull the S3 hosted payload
   agent_runtime_artifact {
     code_configuration {
-      runtime     = "PYTHON_3_12"
+      runtime     = local.agentcore_runtime
       entry_point = ["main.py"]
 
       code {

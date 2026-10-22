@@ -67,3 +67,10 @@ variable "description" {
   type        = string
   default     = ""
 }
+
+variable "runtime" {
+
+  description = "Lambda runtime identifier"
+  type        = string
+  default     = "python3.13"
+}

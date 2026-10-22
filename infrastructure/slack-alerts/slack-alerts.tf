@@ -26,7 +26,7 @@ resource "aws_chatbot_slack_channel_configuration" "oj_aws_errors" {
   guardrail_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"]
 
   sns_topic_arns = [aws_sns_topic.oj_aws_errors.arn]
-  logging_level  = "ERROR"
+  logging_level  = "INFO"
 }
 
 resource "aws_iam_role" "amazon_q_notification_role" {

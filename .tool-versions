@@ -5,4 +5,4 @@ terraform  1.13.5
 pre-commit 4.5.0
 uv         0.13.4
 python     3.12
-nodejs 25
+nodejs     26

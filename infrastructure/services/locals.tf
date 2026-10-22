@@ -1,4 +1,9 @@
 locals {
+  # Python build and runtime versions
+  python_version    = "3.13"
+  lambda_runtime    = "python3.13"
+  agentcore_runtime = "PYTHON_3_13"
+
   # Finds all files within the '/mock_data' folder and creates a list of file paths (e.g., 'mock_rag_data.csv') for Terraform to track.
   mock_data_files = fileset("${path.module}/mock_data", "**")
 

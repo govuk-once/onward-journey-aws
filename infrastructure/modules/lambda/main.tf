@@ -76,7 +76,7 @@ resource "aws_lambda_function" "function" {
   description                    = var.description
   role                           = aws_iam_role.role.arn
   handler                        = var.handler
-  runtime                        = "python3.13"
+  runtime                        = var.runtime
   architectures                  = ["arm64"]
   timeout                        = var.timeout
   reserved_concurrent_executions = var.reserved_concurrent_executions

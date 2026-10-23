@@ -122,3 +122,54 @@ output "amplify_app_id" {
 output "amplify_main_branch_url" {
   value = "https://main.${aws_amplify_app.frontend.id}.amplifyapp.com"
 }
+
+# Note: region acts as the "control plane" for global services.
+# The data stored in the US is purely configuration metadata
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+resource "aws_wafv2_web_acl" "amplify_uk_only" {
+  provider    = aws.us_east_1
+  name        = "${var.environment}-amplify-uk-only"
+  description = "Block all non-UK traffic to the Amplify frontend"
+  scope       = "CLOUDFRONT" # Amplify requires the global CLOUDFRONT scope
+
+  default_action {
+    block {} # Block everything by default
+  }
+
+  rule {
+    name     = "allow-uk-traffic"
+    priority = 1
+
+    action {
+      allow {}
+    }
+
+    statement {
+      geo_match_statement {
+        country_codes = ["GB"]
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "allow-uk-traffic-metric"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.environment}-amplify-uk-only-metric"
+    sampled_requests_enabled   = false
+  }
+}
+
+resource "aws_wafv2_web_acl_association" "amplify_waf" {
+  provider     = aws.us_east_1
+  resource_arn = aws_amplify_app.frontend.arn
+  web_acl_arn  = aws_wafv2_web_acl.amplify_uk_only.arn
+}

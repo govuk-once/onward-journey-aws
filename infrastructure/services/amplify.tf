@@ -164,7 +164,7 @@ resource "aws_wafv2_web_acl" "amplify_uk_only" {
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = "${var.environment}-amplify-uk-only-metric"
-    sampled_requests_enabled   = true
+    sampled_requests_enabled   = false
   }
 }
 

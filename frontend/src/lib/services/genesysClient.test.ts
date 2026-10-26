@@ -6,7 +6,7 @@ import {
   type ConnectionClosedEvent,
   type SessionExpiredEvent,
 } from "./genesysClient";
-import { jest, expect, it, describe, beforeEach, afterEach } from "@jest/globals";
+import { vi, expect, it, describe, beforeEach, afterEach } from "vitest";
 
 class MockWebSocket {
   static CONNECTING = 0;
@@ -22,8 +22,8 @@ class MockWebSocket {
 
   constructor(public url: string) {}
 
-  send = jest.fn();
-  close = jest.fn();
+  send = vi.fn();
+  close = vi.fn();
 
   simulateOpen() {
     this.readyState = MockWebSocket.OPEN;
@@ -82,7 +82,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call sessionResponse handler when receiving SessionResponse message", () => {
-      const sessionResponseHandler = jest.fn();
+      const sessionResponseHandler = vi.fn();
       client.on("sessionResponse", sessionResponseHandler);
 
       const sessionResponseBody: SessionResponse = {
@@ -105,7 +105,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call message handler when receiving StructuredMessage", () => {
-      const messageHandler = jest.fn();
+      const messageHandler = vi.fn();
       client.on("message", messageHandler);
 
       const structuredMessageBody: StructuredMessage = {
@@ -134,7 +134,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call connectionClosed handler when receiving ConnectionClosedEvent", () => {
-      const connectionClosedHandler = jest.fn();
+      const connectionClosedHandler = vi.fn();
       client.on("connectionClosed", connectionClosedHandler);
 
       const connectionClosedBody: ConnectionClosedEvent = {
@@ -158,7 +158,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call sessionExpired handler when receiving SessionExpiredEvent", () => {
-      const sessionExpiredHandler = jest.fn();
+      const sessionExpiredHandler = vi.fn();
       client.on("sessionExpired", sessionExpiredHandler);
 
       const sessionExpiredBody: SessionExpiredEvent = {
@@ -179,7 +179,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call error handler when receiving Error message", () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       client.on("error", errorHandler);
 
       const errorBody = {
@@ -204,7 +204,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call rawMessage handler for all incoming messages", () => {
-      const rawMessageHandler = jest.fn();
+      const rawMessageHandler = vi.fn();
       client.on("rawMessage", rawMessageHandler);
 
       const message: BaseMessage = {
@@ -221,7 +221,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call error handler when receiving invalid JSON", () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       client.on("error", errorHandler);
 
       mockWebSocketInstance?.simulateMessage("not valid json");
@@ -231,8 +231,8 @@ describe("GenesysClient", () => {
     });
 
     it("should call multiple handlers for the same event", () => {
-      const handler1 = jest.fn();
-      const handler2 = jest.fn();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
       client.on("message", handler1);
       client.on("message", handler2);
 
@@ -255,7 +255,7 @@ describe("GenesysClient", () => {
     });
 
     it("should not call handler after it is removed with off()", () => {
-      const messageHandler = jest.fn();
+      const messageHandler = vi.fn();
       client.on("message", messageHandler);
       client.off("message", messageHandler);
 
@@ -272,8 +272,8 @@ describe("GenesysClient", () => {
     });
 
     it("should call both rawMessage and specific handler for a message", () => {
-      const rawMessageHandler = jest.fn();
-      const sessionResponseHandler = jest.fn();
+      const rawMessageHandler = vi.fn();
+      const sessionResponseHandler = vi.fn();
       client.on("rawMessage", rawMessageHandler);
       client.on("sessionResponse", sessionResponseHandler);
 
@@ -293,7 +293,7 @@ describe("GenesysClient", () => {
 
   describe("WebSocket connection events", () => {
     it("should call connected handler when WebSocket opens", async () => {
-      const connectedHandler = jest.fn();
+      const connectedHandler = vi.fn();
       client.on("connected", connectedHandler);
 
       const connectPromise = client.connect();
@@ -304,7 +304,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call disconnected handler when WebSocket closes", async () => {
-      const disconnectedHandler = jest.fn();
+      const disconnectedHandler = vi.fn();
       client.on("disconnected", disconnectedHandler);
 
       const connectPromise = client.connect();
@@ -319,7 +319,7 @@ describe("GenesysClient", () => {
     });
 
     it("should call error handler and reject promise when WebSocket errors during connect", async () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       client.on("error", errorHandler);
 
       const connectPromise = client.connect();

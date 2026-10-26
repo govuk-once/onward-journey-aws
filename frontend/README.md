@@ -21,7 +21,7 @@ npm run dev -- --open
 
 ## Testing
 
-You can run the jest unit tests by running:
+You can run the vitest unit tests by running:
 
 ```sh
 npm run test

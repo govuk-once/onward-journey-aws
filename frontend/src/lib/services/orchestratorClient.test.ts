@@ -1,4 +1,4 @@
-import { jest, expect, describe, it, beforeEach, afterEach } from "@jest/globals";
+import { vi, expect, describe, it, beforeEach, afterEach } from "vitest";
 import { OrchestratorClient, type OrchestratorCallbacks } from "./orchestratorClient";
 
 // ---------------------------------------------------------------------------
@@ -17,8 +17,8 @@ class MockWebSocket {
 
     url: string;
     readyState: number = MockWebSocket.OPEN;
-    send = jest.fn();
-    close = jest.fn();
+    send = vi.fn();
+    close = vi.fn();
 
     private listeners: Record<string, Array<{ callback: MockCallback; once: boolean }>> = {
         open: [],
@@ -84,7 +84,7 @@ describe("OrchestratorClient (WebSocket)", () => {
     const mockRegion = "eu-west-2";
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        vi.useFakeTimers();
         MockWebSocket.instances = [];
 
         // Replace global WebSocket with mock
@@ -93,17 +93,17 @@ describe("OrchestratorClient (WebSocket)", () => {
         client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion);
 
         callbacks = {
-            onChunk: jest.fn<(chunk: string) => void>(),
-            onResponse: jest.fn<(response: string) => Promise<void> | void>().mockImplementation(() => {}),
-            onSignal: jest.fn<(state: string, payload: unknown) => Promise<void> | void>().mockImplementation(() => {}),
-            onComplete: jest.fn<() => Promise<void> | void>().mockImplementation(() => {}),
-            onError: jest.fn<(error: unknown) => void>(),
+            onChunk: vi.fn<(chunk: string) => void>(),
+            onResponse: vi.fn<(response: string) => Promise<void> | void>().mockImplementation(() => {}),
+            onSignal: vi.fn<(state: string, payload: unknown) => Promise<void> | void>().mockImplementation(() => {}),
+            onComplete: vi.fn<() => Promise<void> | void>().mockImplementation(() => {}),
+            onError: vi.fn<(error: unknown) => void>(),
         };
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
-        jest.useRealTimers();
+        vi.restoreAllMocks();
+        vi.useRealTimers();
     });
 
     it("should establish a WebSocket connection and send the payload when socket is OPEN", async () => {
@@ -124,7 +124,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         // Force socket state to CONNECTING
         const originalConstructor = global.WebSocket;
 
-        const mockWsConstructor = jest.fn().mockImplementation((url: unknown) => {
+        const mockWsConstructor = vi.fn(function(url: unknown) {
             const ws = new MockWebSocket(url as string);
             ws.readyState = MockWebSocket.CONNECTING; // 0
             return ws;
@@ -214,7 +214,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(callbacks.onResponse).not.toHaveBeenCalled();
 
         // Fast-forward past the 30s debounce timeout
-        jest.advanceTimersByTime(30001);
+        vi.advanceTimersByTime(30001);
         await Promise.resolve(); // Flush microtask queue for the async timeout callback
 
         expect(callbacks.onResponse).toHaveBeenCalledWith("Response without done frame");
@@ -223,7 +223,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
     it("should call onError when WebSocket encounters an error", async () => {
         // Spy on console.error to keep the test runner output clean
-        const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
         const ws = MockWebSocket.instances[0];
@@ -238,7 +238,7 @@ describe("OrchestratorClient (WebSocket)", () => {
     });
 
     it("should handle malformed JSON frames gracefully without throwing", async () => {
-        const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
         const ws = MockWebSocket.instances[0];
 
@@ -266,7 +266,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
 
         // Fast-forward past the 30s debounce timeout window
-        jest.advanceTimersByTime(30001);
+        vi.advanceTimersByTime(30001);
         await Promise.resolve();
 
         // Verify it wasn't called a second time by the fallback timer

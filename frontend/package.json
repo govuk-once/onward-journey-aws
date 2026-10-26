@@ -46,7 +46,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.1088.0",
     "aws4fetch": "^1.0.20",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.17",
     "govuk-frontend": "^5.14.0",
     "sanitize-html": "^2.17.7",
     "showdown": "^2.1.0"

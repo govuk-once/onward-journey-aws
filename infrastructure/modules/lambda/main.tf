@@ -11,10 +11,12 @@ data "archive_file" "zip" {
 resource "aws_cloudwatch_log_group" "logs" {
   name              = "/aws/lambda/${var.environment}-${var.function_name}"
   retention_in_days = var.log_retention_days
+  tags              = var.tags
 }
 
 resource "aws_iam_role" "role" {
   name = "${var.environment}-${var.function_name}-role"
+  tags = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -37,6 +39,7 @@ resource "aws_iam_policy" "policy" {
   count       = var.policy_statements != null ? 1 : 0
   name        = "${var.environment}-${var.function_name}-policy"
   description = "Execution policy for ${var.function_name}"
+  tags        = var.tags
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -80,6 +83,7 @@ resource "aws_lambda_function" "function" {
   architectures                  = ["arm64"]
   timeout                        = var.timeout
   reserved_concurrent_executions = var.reserved_concurrent_executions
+  tags                           = var.tags
 
   logging_config {
     log_format = "JSON"

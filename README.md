@@ -4,8 +4,8 @@
 A prototype hosted on AWS for connecting users to further support after a chat session cannot produce a satisfactory answer.
 
 This project uses a **Layered Infrastructure** model:
-* **The Foundation (`infrastructure/vpc`):** A persistent, shared network (VPC, Subnets, S3 Gateway) managed in the **`default`** Terraform workspace.
-* **The Workspaces (`infrastructure/services`):** Isolated developer environments (Lambdas, RDS, Bedrock, Step Function ETL) managed via **dedicated developer workspaces**.
+- **The Shared Foundation (`infrastructure/shared`):** Persistent, shared networking (VPC, Subnets, S3 Gateway, routing) and centralised alerting managed in the **`default`** Terraform workspace.
+- **The Workspaces (`infrastructure/services`):** Isolated developer environments (Lambdas, RDS, Bedrock, Step Function ETL) managed via **dedicated developer workspaces**.
 
 For detailed information on the infrastructure architecture, environment isolation, and database management, please refer to the [Infrastructure README](infrastructure/README.md).
 
@@ -55,7 +55,7 @@ bucket               = "govuk-once-onwardjourney-development-<AWS account ID>-tf
 use_lockfile         = true
 encrypt              = true
 ```
-*Note: You do not need to set `key` or `workspace_key_prefix` here. We use a layered architecture where specific component files (`vpc.config`, `services.config`, `slack.config`) automatically handle the state file paths for you to prevent accidental overwrites.*
+*Note: You do not need to set `key` or `workspace_key_prefix` here. We use a layered architecture where specific component files (`shared.config`, `services.config`) automatically handle the state file paths for you to prevent accidental overwrites.*
 
 ### Create your Local Variables
 You must set your environment name, account ID, and a placeholder for the SNS topic used for error alerting.
@@ -73,36 +73,45 @@ frontend_basic_auth_password = "<your secure password>"
 
 We use the GDS CLI to assume roles on our development machines. To see a list of relevant roles, run `gds aws | grep onwardjourney`. You can use these roles by running e.g. `gds aws <role-name> -- terraform plan`, or start a new authenticated shell session with `gds aws <role-name> -- $SHELL`.
 
-### Phase 1: Error Alerting
-
-**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the alerting infrastructure**.
-
-Error alerting in Slack (or another chat application) uses an AWS account-wide workspace integration, which should be deployed before the VPC layer and developer workspaces when deploying to a new AWS account.
-
-Navigate to `infrastructure/slack-alerts` and follow the README instructions inside that directory.
-
-### Phase 2: The Foundation (VPC)
-**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network infrastructure**.
+### Phase 1: The Shared Foundation
+**Note:** You only need to run this phase if you are deploying to a **new AWS account** or have **changed the shared network or alerting infrastructure**.
 
 **CRITICAL:** This layer MUST be deployed using the **`default`** Terraform workspace.
 
 ```bash
-cd infrastructure/vpc
+cd infrastructure/shared
 
-# 1. Initialise - combining your environment config with the specific VPC config
-terraform init -backend-config="../environments/<environment_name>.config" -backend-config="vpc.config" -reconfigure
+# 1. Initialise - combining your environment config with the specific shared config
+terraform init -backend-config="../environments/<environment_name>.config" -backend-config="shared.config" -reconfigure
 
 # 2. Workspace Check - Ensure you are in 'default'. An asterisk will be displayed next to the selected workspace.
 terraform workspace list
 
-# 3. Plan - To view what changes your terraform code will make to the 'default' shared network
+# 3. Plan - To view what changes your terraform code will make to the 'default' shared infrastructure
 terraform plan
 
 # 4. Deploy to the 'default' workspace
 terraform apply
 ```
 
-### Phase 3: Your Developer Workspace (Services)
+**5. Set Slack Webhook in AWS Console (Fresh Deployments Only)**
+After the first apply, populate the webhook secret created by the shared stack:
+- Navigate to **AWS Console** -> **Secrets Manager**.
+- Locate the Slack webhook secret (e.g. `shared-slack-alerts-webhook-url`).
+- Set the secret value as a JSON object:
+  ```json
+  {
+    "webhook_url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK]"
+  }
+  ```
+
+#### Error Alerting in Slack
+Error alerting is managed centrally within this layer:
+- CloudWatch metric alarms (for Lambdas, NAT Gateways, and SQS queues) publish directly to an account-wide SNS topic (`slack_alerts`).
+- A dedicated Slack Notifier Lambda (`app/lambdas/slack_notifier/handler.py`) consumes these notifications, dynamically resolves affected resources, extracts up to three recent error logs (strictly excluding warnings), and builds direct AWS Console deep links.
+- Messages are dispatched to Slack via the incoming webhook URL stored securely in AWS Secrets Manager, with support for push notification previews and grouped alert diagnostics.
+
+### Phase 2: Your Developer Workspace (Services)
 Most daily development happens here. This layer uses **individual developer workspaces** for isolation. Follow these steps for a complete deployment of the services infrastructure:
 
 **1. Initialise and Select Workspace**
@@ -117,7 +126,7 @@ terraform workspace select <workspace_name> || terraform workspace new <workspac
 ```
 
 **2. Validate**
-* Run `terraform validate` to ensure your specific environment names meet Bedrock's regex requirements.
+- Run `terraform validate` to ensure your specific environment names meet Bedrock's regex requirements.
 
 **3. First Deployment (Expected Failure)**
 ```bash

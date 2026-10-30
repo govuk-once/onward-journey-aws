@@ -54,7 +54,9 @@ def execute_crm_method(
     # TODO: Replace placeholder response with multi-provider dispatch via ProviderFactory
     #       once the DVLA Storm message forwarding API integration is implemented.
     if method == "forward_user_message_to_crm":
-        logger.info(f"Forwarding active user message to CRM for thread_id: {thread_id}")
+        logger.info(
+            "Forwarding active user message to CRM for thread_id: %s", thread_id
+        )
         return {"status": "success", "message": "User message forwarded to CRM"}
 
     # Phase 1: Resolve provider adapter via ProviderFactory for live chat orchestration.
@@ -72,8 +74,6 @@ def execute_crm_method(
         result = provider.generate_handoff_signal(event)
         log_metric("LiveHandoffInitiated", {"Target": chat_id, "Trace": thread_id})
         return result
-
-    return {"error": f"METHOD_ERROR: {method} not supported."}
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -113,7 +113,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     for required_field in ["method", "thread_id"]:
         if not event.get(required_field):
             logger.error(
-                f"Missing mandatory '{required_field}' parameter in event: {audit_json}"
+                "Missing mandatory '%s' parameter in event: %s",
+                required_field,
+                audit_json,
             )
             return {
                 "error": f"VALIDATION_ERROR: Missing required '{required_field}' parameter."

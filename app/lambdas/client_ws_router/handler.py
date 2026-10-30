@@ -23,24 +23,50 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
-AGENTCORE_CLIENT = boto3.client("bedrock-agentcore")
+
+def _resolve_endpoint_url(endpoint_url: Optional[str]) -> Optional[str]:
+    """Ensure the endpoint URL has a valid scheme required by botocore."""
+    if not endpoint_url:
+        return None
+    cleaned = endpoint_url.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(("http://", "https://")):
+        return f"https://{cleaned}"
+    return cleaned
+
+
+AGENT_RUNTIME_ENDPOINT = _resolve_endpoint_url(
+    os.environ.get("AGENT_RUNTIME_ENDPOINT_URL")
+)
+AGENTCORE_CLIENT = boto3.client(
+    "bedrock-agentcore",
+    endpoint_url=AGENT_RUNTIME_ENDPOINT,
+)
 LAMBDA_CLIENT = boto3.client("lambda")
 DYNAMODB_RESOURCE = boto3.resource("dynamodb")
-SESSION_TTL_SECONDS = (
-    14 * 86_400
-)  # 14 days in seconds (14 * 86,400s) for session audit retention
+
+# 14 days in seconds (14 * 86,400s) for session audit retention
+SESSION_TTL_SECONDS = 14 * 86_400
+TABLE_CACHE: Optional[Any] = None
 
 
 def get_table():
-    """Retrieve the DynamoDB sessions Table resource, failing fast if unconfigured."""
-    table_name = os.environ.get("SESSIONS_TABLE_NAME")
-    if not table_name:
-        logger.error("Missing required environment variable: SESSIONS_TABLE_NAME")
-        raise RuntimeError("Missing required environment variable: SESSIONS_TABLE_NAME")
-    return DYNAMODB_RESOURCE.Table(table_name)
+    """Retrieve the DynamoDB sessions Table resource with in-memory caching."""
+    global TABLE_CACHE
+    if TABLE_CACHE is None:
+        table_name = os.environ.get("SESSIONS_TABLE_NAME")
+        if not table_name:
+            logger.error("Missing required environment variable: SESSIONS_TABLE_NAME")
+            raise RuntimeError(
+                "Missing required environment variable: SESSIONS_TABLE_NAME"
+            )
+        TABLE_CACHE = DYNAMODB_RESOURCE.Table(table_name)
+    return TABLE_CACHE
 
 
 def get_session(thread_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve an existing session record by thread_id."""
     table = get_table()
     response = table.get_item(Key={"session_id": thread_id})
     return response.get("Item")
@@ -49,6 +75,12 @@ def get_session(thread_id: str) -> Optional[Dict[str, Any]]:
 def create_session(
     thread_id: str, actor_id: str, websocket_connection_id: str
 ) -> Dict[str, Any]:
+    """
+    Create a new session record in DynamoDB.
+
+    Enforces concurrency safety via a conditional write. If another concurrent execution
+    initialised the session first, gracefully recovers by fetching and touching that record.
+    """
     table = get_table()
     now_epoch = int(time.time())
     item = {
@@ -60,9 +92,24 @@ def create_session(
         "updated_at": now_epoch,
         "ttl": now_epoch + SESSION_TTL_SECONDS,
     }
-    table.put_item(Item=item)
-    logger.info(f"Initialised session record for thread_id={thread_id}")
-    return item
+
+    try:
+        table.put_item(
+            Item=item,
+            ConditionExpression="attribute_not_exists(session_id)",
+        )
+        logger.info("Initialised session record for thread_id=%s", thread_id)
+        return item
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            logger.warning(
+                "Session %s was created concurrently; refreshing existing record",
+                thread_id,
+            )
+            existing_session = get_session(thread_id)
+            if existing_session:
+                return touch_session(existing_session, websocket_connection_id)
+        raise
 
 
 def touch_session(
@@ -102,15 +149,17 @@ def route_to_crm(
     crm_tool_arn = os.environ.get("CRM_TOOL_LAMBDA_ARN")
     if not crm_tool_arn:
         logger.error(
-            f"Routing failed for thread_id={thread_id}: CRM_TOOL_LAMBDA_ARN environment variable is missing"
+            "Routing failed for thread_id=%s: CRM_TOOL_LAMBDA_ARN environment variable is missing",
+            thread_id,
         )
         return {"statusCode": 500, "body": "Server configuration error"}
 
     if not crm_chat_id or not live_chat_identifier:
         logger.error(
-            f"Routing to CRM failed for thread_id={thread_id}: "
-            f"session is in HUMAN_CHAT but missing required attributes "
-            f"(crm_chat_id={bool(crm_chat_id)}, live_chat_identifier={bool(live_chat_identifier)})"
+            "Routing to CRM failed for thread_id=%s: session is in HUMAN_CHAT but missing required attributes (crm_chat_id=%s, live_chat_identifier=%s)",
+            thread_id,
+            bool(crm_chat_id),
+            bool(live_chat_identifier),
         )
         return {
             "statusCode": 500,
@@ -133,7 +182,8 @@ def route_to_crm(
             Payload=json.dumps(payload).encode("utf-8"),
         )
         logger.info(
-            f"Bypassed AI agent: forwarded message directly to CRM for thread_id={thread_id}"
+            "Bypassed AI agent: forwarded message directly to CRM for thread_id=%s",
+            thread_id,
         )
         return {"statusCode": 200, "body": "Message routed to human adviser"}
 
@@ -142,8 +192,11 @@ def route_to_crm(
         error_msg = e.response.get("Error", {}).get("Message", "No message provided")
         request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error(
-            f"AWS ClientError invoking CRM tool Lambda for thread_id={thread_id} | "
-            f"Code={error_code} | RequestId={request_id} | Message={error_msg}",
+            "AWS ClientError invoking CRM tool Lambda for thread_id=%s | Code=%s | RequestId=%s | Message=%s",
+            thread_id,
+            error_code,
+            request_id,
+            error_msg,
             exc_info=True,
         )
         return {"statusCode": 500, "body": "Failed to route message to adviser"}
@@ -161,15 +214,17 @@ def route_to_agentcore(
     agent_runtime_arn = os.environ.get("AGENT_RUNTIME_ARN")
     if not agent_runtime_arn:
         logger.error(
-            f"Routing failed for websocket_connection_id={websocket_connection_id}: "
-            f"AGENT_RUNTIME_ARN environment variable is missing"
+            "Routing failed for websocket_connection_id=%s: AGENT_RUNTIME_ARN environment variable is missing",
+            websocket_connection_id,
         )
         return {"statusCode": 500, "body": "Server configuration error"}
 
     if not domain_name or not stage:
         logger.error(
-            f"Routing to AgentCore failed for thread_id={thread_id}: "
-            f"missing gateway context (domain_name={bool(domain_name)}, stage={bool(stage)})"
+            "Routing to AgentCore failed for thread_id=%s: missing gateway context (domain_name=%s, stage=%s)",
+            thread_id,
+            bool(domain_name),
+            bool(stage),
         )
         return {
             "statusCode": 500,
@@ -194,7 +249,9 @@ def route_to_agentcore(
             payload=json.dumps(payload).encode("utf-8"),
         )
         logger.info(
-            f"Successfully routed payload to AgentCore for websocket_connection_id={websocket_connection_id} | thread_id={thread_id}"
+            "Successfully routed payload to AgentCore for websocket_connection_id=%s | thread_id=%s",
+            websocket_connection_id,
+            thread_id,
         )
         return {"statusCode": 200, "body": "Message routed"}
 
@@ -203,8 +260,11 @@ def route_to_agentcore(
         error_msg = e.response.get("Error", {}).get("Message", "No message provided")
         request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error(
-            f"AWS ClientError invoking AgentCore runtime for websocket_connection_id={websocket_connection_id} | "
-            f"Code={error_code} | RequestId={request_id} | Message={error_msg}",
+            "AWS ClientError invoking AgentCore runtime for websocket_connection_id=%s | Code=%s | RequestId=%s | Message=%s",
+            websocket_connection_id,
+            error_code,
+            request_id,
+            error_msg,
             exc_info=True,
         )
         return {"statusCode": 500, "body": "Failed to route message to AI agent"}
@@ -219,15 +279,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     stage = request_context.get("stage")
 
     logger.info(
-        f"Execution route={route_key} | WebSocketConnectionId={websocket_connection_id} | Stage={stage}"
+        "Execution route=%s | WebSocketConnectionId=%s | Stage=%s",
+        route_key,
+        websocket_connection_id,
+        stage,
     )
 
     if route_key == "$connect":
-        logger.info(f"Client connected: {websocket_connection_id}")
+        logger.info("Client connected: %s", websocket_connection_id)
         return {"statusCode": 200, "body": "Connected"}
 
     if route_key == "$disconnect":
-        logger.info(f"Client disconnected: {websocket_connection_id}")
+        logger.info("Client disconnected: %s", websocket_connection_id)
         return {"statusCode": 200, "body": "Disconnected"}
 
     if route_key == "$default":
@@ -238,7 +301,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 body = json.loads(raw_body)
             except json.JSONDecodeError:
                 logger.warning(
-                    f"Non-JSON payload received for websocket_connection_id={websocket_connection_id}"
+                    "Non-JSON payload received for websocket_connection_id=%s",
+                    websocket_connection_id,
                 )
                 body = {"message": raw_body}
         elif isinstance(raw_body, dict):
@@ -251,8 +315,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         if not user_message or not thread_id:
             logger.warning(
-                f"Validation failed for websocket_connection_id={websocket_connection_id}: "
-                f"missing required fields (message={bool(user_message)}, thread_id={bool(thread_id)})"
+                "Validation failed for websocket_connection_id=%s: missing required fields (message=%s, thread_id=%s)",
+                websocket_connection_id,
+                bool(user_message),
+                bool(thread_id),
             )
             return {
                 "statusCode": 400,
@@ -263,8 +329,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         if len(thread_id) < 33:
             logger.warning(
-                f"Validation failed for websocket_connection_id={websocket_connection_id}: "
-                f"thread_id length ({len(thread_id)}) is under minimum 33 chars"
+                "Validation failed for websocket_connection_id=%s: thread_id length (%s) is under minimum 33 chars",
+                websocket_connection_id,
+                len(thread_id),
             )
             return {
                 "statusCode": 400,
@@ -276,7 +343,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         if not actor_id:
             logger.error(
-                f"Authorisation context missing actor_id for websocket_connection_id={websocket_connection_id}"
+                "Authorisation context missing actor_id for websocket_connection_id=%s",
+                websocket_connection_id,
             )
             return {
                 "statusCode": 401,
@@ -291,12 +359,16 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         session_state = session.get("state")
         if not session_state:
-            logger.error(f"Session {thread_id} in DynamoDB has no state attribute")
+            logger.error("Session %s in DynamoDB has no state attribute", thread_id)
             return {"statusCode": 500, "body": "Invalid session state in database"}
 
         logger.info(
-            f"Routing message for websocket_connection_id={websocket_connection_id} | thread_id={thread_id} | "
-            f"state={session_state} | actor_id={actor_id} | message_length={len(user_message)}"
+            "Routing message for websocket_connection_id=%s | thread_id=%s | state=%s | actor_id=%s | message_length=%s",
+            websocket_connection_id,
+            thread_id,
+            session_state,
+            actor_id,
+            len(user_message),
         )
 
         if session_state == "HUMAN_CHAT":
@@ -319,7 +391,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
 
         logger.error(
-            f"Unrecognised session state: {session_state} for thread_id={thread_id}"
+            "Unrecognised session state: %s for thread_id=%s",
+            session_state,
+            thread_id,
         )
         return {
             "statusCode": 500,
@@ -327,6 +401,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
     logger.warning(
-        f"Unsupported route received: route={route_key} | websocket_connection_id={websocket_connection_id}"
+        "Unsupported route received: route=%s | websocket_connection_id=%s",
+        route_key,
+        websocket_connection_id,
     )
     return {"statusCode": 400, "body": "Unsupported route"}

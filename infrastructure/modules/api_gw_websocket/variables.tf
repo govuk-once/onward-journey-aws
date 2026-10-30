@@ -13,6 +13,12 @@ variable "target_lambda_arn" {
   type        = string
 }
 
+variable "authorizer_lambda_arn" {
+  description = "Invoke ARN of the Lambda authoriser for the $connect route"
+  type        = string
+  default     = null
+}
+
 variable "api_description" {
   description = "Description of the WebSocket API Gateway instance"
   type        = string

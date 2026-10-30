@@ -5,18 +5,20 @@ Acts as a custom REQUEST authoriser for inbound WebSocket API Gateway connection
 handshakes ($connect route). Validates client access by extracting a pre-shared
 authorisation token from the connection query parameters (`auth_token`) and
 matching it against a token-to-actor registry retrieved from AWS Secrets Manager
-(cached in-memory across warm Lambda executions).
+(cached in-memory across warm Lambda executions with a TTL).
 
 Execution outcomes:
 - Valid token: Generates an IAM 'Allow' policy scoped strictly to the incoming
       methodArn and attaches the resolved `actor_id` to the authoriser context.
 - Invalid token or missing auth_token: Returns an IAM 'Deny' policy.
-- Malformed invocation (missing methodArn): Fails fast and raises ValueError.
+- Malformed invocation (missing methodArn) or Infra Failure: Fails fast and raises
+      exceptions (e.g., ValueError, ClientError) resulting in API GW 500 errors.
 """
 
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Optional
 
 import boto3
@@ -43,30 +45,42 @@ SECRETS_MANAGER_CLIENT = boto3.client(
     "secretsmanager",
     endpoint_url=ENDPOINT_URL,
 )
+
 SECRET_CACHE: Optional[Dict[str, str]] = None
+CACHE_TIMESTAMP: float = 0.0
+CACHE_TTL_SECONDS = (
+    300  # 5mins in-memory retention before refreshing from Secrets Manager
+)
 
 
 def get_token_registry() -> Dict[str, str]:
-    """Retrieve and parse the token registry from AWS Secrets Manager with in-memory caching."""
-    global SECRET_CACHE
-    if SECRET_CACHE is None:
+    """Retrieve and parse the token registry from AWS Secrets Manager with a TTL cache."""
+    global SECRET_CACHE, CACHE_TIMESTAMP
+
+    if SECRET_CACHE is None or (time.time() - CACHE_TIMESTAMP > CACHE_TTL_SECONDS):
         secret_arn = os.environ.get("SECRET_ARN")
         if not secret_arn:
             logger.error("Missing required environment variable: SECRET_ARN")
             raise RuntimeError("Missing required environment variable: SECRET_ARN")
 
-        logger.info(
-            "Cold start: Fetching token registry from Secrets Manager: %s", secret_arn
-        )
+        logger.info("Fetching token registry from Secrets Manager: %s", secret_arn)
+
         response = SECRETS_MANAGER_CLIENT.get_secret_value(SecretId=secret_arn)
-        raw_secret = response.get("SecretString", "{}")
+        raw_secret = response.get("SecretString")
+        if not raw_secret:
+            logger.error("Secret %s contains no SecretString payload", secret_arn)
+            raise ValueError(f"Secret {secret_arn} does not contain text SecretString")
+
         try:
-            SECRET_CACHE = json.loads(raw_secret)
+            parsed_secret = json.loads(raw_secret)
+            SECRET_CACHE = parsed_secret
+            CACHE_TIMESTAMP = time.time()
         except json.JSONDecodeError:
             logger.error(
                 "Failed to parse token registry secret as JSON payload", exc_info=True
             )
-            SECRET_CACHE = {}
+            raise ValueError("Token registry secret is not valid JSON")
+
     return SECRET_CACHE
 
 
@@ -128,22 +142,17 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         return generate_iam_policy("unauthorized", "Deny", method_arn)
 
-    try:
-        token_registry = get_token_registry()
-        actor_id = token_registry.get(incoming_token)
+    token_registry = get_token_registry()
+    actor_id = token_registry.get(incoming_token)
 
-        if not actor_id:
-            logger.warning("DENY: Connection rejected due to unrecognised auth_token")
-            return generate_iam_policy("unauthorized", "Deny", method_arn)
-
-        logger.info("ALLOW: Authorised WebSocket connection for actor_id=%s", actor_id)
-        return generate_iam_policy(
-            principal_id=str(actor_id),
-            effect="Allow",
-            resource=method_arn,
-            context={"actor_id": str(actor_id)},
-        )
-
-    except Exception as e:
-        logger.error("Authoriser execution failed: %s", type(e).__name__, exc_info=True)
+    if not actor_id:
+        logger.warning("DENY: Connection rejected due to unrecognised auth_token")
         return generate_iam_policy("unauthorized", "Deny", method_arn)
+
+    logger.info("ALLOW: Authorised WebSocket connection for actor_id=%s", actor_id)
+    return generate_iam_policy(
+        principal_id=str(actor_id),
+        effect="Allow",
+        resource=method_arn,
+        context={"actor_id": str(actor_id)},
+    )

@@ -22,9 +22,9 @@ module "authorizer_lambda" {
   security_group_ids = var.security_group_ids
 
   environment_variables = {
-    SECRET_ARN                   = aws_secretsmanager_secret.signing_secret.arn
-    PRINCIPAL_ID                 = var.authorizer_name
-    SECRETS_MANAGER_ENDPOINT_URL = var.secretsmanager_endpoint_url
+    SECRET_ARN           = aws_secretsmanager_secret.signing_secret.arn
+    PRINCIPAL_ID         = var.authorizer_name
+    SECRETS_ENDPOINT_URL = var.secretsmanager_endpoint_url
   }
 
   policy_statements = [

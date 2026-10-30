@@ -8,11 +8,10 @@ matching it against a token-to-actor registry retrieved from AWS Secrets Manager
 (cached in-memory across warm Lambda executions).
 
 Execution outcomes:
-    - Valid token: Generates an IAM 'Allow' policy and attaches the resolved
-      `actor_id` to the authoriser context. API Gateway persists this context
-      for downstream routes ($default).
-    - Invalid or missing token: Returns an IAM 'Deny' policy (HTTP 401 Unauthorized),
-      terminating the connection before socket establishment.
+- Valid token: Generates an IAM 'Allow' policy scoped strictly to the incoming
+      methodArn and attaches the resolved `actor_id` to the authoriser context.
+- Invalid token or missing auth_token: Returns an IAM 'Deny' policy.
+- Malformed invocation (missing methodArn): Fails fast and raises ValueError.
 """
 
 import json
@@ -25,11 +24,24 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
+
+def _resolve_endpoint_url(endpoint_url: Optional[str]) -> Optional[str]:
+    """Ensure the endpoint URL has a valid scheme required by botocore."""
+    if not endpoint_url:
+        return None
+    cleaned = endpoint_url.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(("http://", "https://")):
+        return f"https://{cleaned}"
+    return cleaned
+
+
 # Initialise client with VPC Endpoint URL override if private DNS is disabled
-ENDPOINT_URL = os.environ.get("SECRETS_MANAGER_ENDPOINT_URL")
+ENDPOINT_URL = _resolve_endpoint_url(os.environ.get("SECRETS_ENDPOINT_URL"))
 SECRETS_MANAGER_CLIENT = boto3.client(
     "secretsmanager",
-    endpoint_url=ENDPOINT_URL if ENDPOINT_URL else None,
+    endpoint_url=ENDPOINT_URL,
 )
 SECRET_CACHE: Optional[Dict[str, str]] = None
 
@@ -38,7 +50,11 @@ def get_token_registry() -> Dict[str, str]:
     """Retrieve and parse the token registry from AWS Secrets Manager with in-memory caching."""
     global SECRET_CACHE
     if SECRET_CACHE is None:
-        secret_arn = os.environ["SECRET_ARN"]
+        secret_arn = os.environ.get("SECRET_ARN")
+        if not secret_arn:
+            logger.error("Missing required environment variable: SECRET_ARN")
+            raise RuntimeError("Missing required environment variable: SECRET_ARN")
+
         logger.info(
             "Cold start: Fetching token registry from Secrets Manager: %s", secret_arn
         )
@@ -85,7 +101,11 @@ def generate_iam_policy(
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Validate WebSocket $connect handshake auth_token and map to an authorised actor_id."""
-    method_arn = event.get("methodArn", "*")
+    method_arn = event.get("methodArn")
+    if not method_arn:
+        logger.error("Authoriser request rejected: missing mandatory 'methodArn'")
+        raise ValueError("Missing required 'methodArn' in authoriser event")
+
     query_params = event.get("queryStringParameters") or {}
 
     # Case-insensitive lookup for auth_token query parameter

@@ -37,12 +37,13 @@ resource "aws_lambda_permission" "allow_websocket_invoke_authorizer" {
 # WEBSOCKET API GATEWAY
 # -----------------------------------------------------------------------------
 module "client_ws_gateway" {
-  source                = "../modules/api_gw_websocket"
-  environment           = var.environment
-  api_name              = "client"
-  target_lambda_arn     = module.client_ws_router_lambda.invoke_arn
-  authorizer_lambda_arn = module.client_ws_authorizer_lambda.invoke_arn
-  api_description       = "Inbound WebSocket API Gateway for client browser connections"
+  source                    = "../modules/api_gw_websocket"
+  environment               = var.environment
+  api_name                  = "client"
+  target_lambda_arn         = module.client_ws_router_lambda.invoke_arn
+  enable_connect_authorizer = true
+  authorizer_lambda_arn     = module.client_ws_authorizer_lambda.invoke_arn
+  api_description           = "Inbound WebSocket API Gateway for client browser connections"
 }
 
 # -----------------------------------------------------------------------------
@@ -55,12 +56,16 @@ module "client_ws_router_lambda" {
   source_dir    = "client_ws_router"
   timeout       = 29
 
+  subnet_ids         = local.private_subnet_ids
+  security_group_ids = [aws_security_group.client_ws_router.id]
+
   environment_variables = {
     ENVIRONMENT                = var.environment
     AGENT_RUNTIME_ARN          = aws_bedrockagentcore_agent_runtime.orchestrator_runtime.agent_runtime_arn
     SESSIONS_TABLE_NAME        = aws_dynamodb_table.sessions.name
     CRM_TOOL_LAMBDA_ARN        = aws_lambda_function.crm_tool.arn
     AGENT_RUNTIME_ENDPOINT_URL = "https://${aws_vpc_endpoint.endpoints["bedrock_agentcore"].dns_entry[0].dns_name}"
+    LAMBDA_ENDPOINT_URL        = "https://${aws_vpc_endpoint.endpoints["lambda"].dns_entry[0].dns_name}"
   }
 
   policy_statements = [

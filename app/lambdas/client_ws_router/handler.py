@@ -43,7 +43,11 @@ AGENTCORE_CLIENT = boto3.client(
     "bedrock-agentcore",
     endpoint_url=AGENT_RUNTIME_ENDPOINT,
 )
-LAMBDA_CLIENT = boto3.client("lambda")
+LAMBDA_ENDPOINT = _resolve_endpoint_url(os.environ.get("LAMBDA_ENDPOINT_URL"))
+LAMBDA_CLIENT = boto3.client(
+    "lambda",
+    endpoint_url=LAMBDA_ENDPOINT,
+)
 DYNAMODB_RESOURCE = boto3.resource("dynamodb")
 
 # 14 days in seconds (14 * 86,400s) for session audit retention

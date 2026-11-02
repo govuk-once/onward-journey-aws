@@ -13,6 +13,11 @@ jobs:
   frontend-checks:
     runs-on: ubuntu-latest
 
+    env:
+      PUBLIC_ORCHESTRATOR_URL: "https://dummy-url.com"
+      PUBLIC_COGNITO_IDENTITY_POOL_ID: "dummy-pool-id"
+      PUBLIC_AWS_REGION: "eu-west-2"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,10 +40,6 @@ jobs:
       - name: Run SvelteKit Check
         working-directory: frontend
         run: npm run check
-        env:
-          PUBLIC_ORCHESTRATOR_URL: "https://dummy-url.com"
-          PUBLIC_COGNITO_IDENTITY_POOL_ID: "dummy-pool-id"
-          PUBLIC_AWS_REGION: "eu-west-2"
 
       - name: Prepare assets
         working-directory: frontend

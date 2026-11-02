@@ -158,9 +158,12 @@ resource "aws_iam_policy" "slack_notifier_access" {
         Effect = "Allow"
         Action = [
           "logs:DescribeLogGroups",
-          "logs:FilterLogEvents"
+          "logs:FilterLogEvents",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
         ]
-        # Allow access to log groups and their underlying log streams
+        # Allow access to read culprit logs and write its own execution logs
         Resource = "arn:aws:logs:eu-west-2:*:*"
       }
     ]

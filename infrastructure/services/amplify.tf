@@ -50,7 +50,6 @@ locals {
   frontend_config_hash = sha1(join("", [
     filemd5("${local.frontend_dir}/package.json"),
     filemd5("${local.frontend_dir}/package-lock.json"),
-    filemd5("${local.frontend_dir}/svelte.config.js"),
     filemd5("${local.frontend_dir}/vite.config.ts"),
   ]))
 }

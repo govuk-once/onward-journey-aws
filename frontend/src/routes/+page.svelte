@@ -8,7 +8,7 @@
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
   import { onMount } from "svelte";
-  import { PUBLIC_ORCHESTRATOR_URL, PUBLIC_COGNITO_IDENTITY_POOL_ID, PUBLIC_AWS_REGION } from "$env/static/public";
+  import { PUBLIC_ORCHESTRATOR_URL, PUBLIC_COGNITO_IDENTITY_POOL_ID, PUBLIC_AWS_REGION } from "$app/env/public";
 
   let connectionType: 'AI' | 'HUMAN' = $state('AI');
   let isConnecting: boolean = $state(false);

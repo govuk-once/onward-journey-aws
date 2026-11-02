@@ -89,6 +89,11 @@ resource "aws_secretsmanager_secret_version" "dvla_storm_val" {
 # WebSocket Client Handshake Authorisation
 # -----------------------------------------------------------------------------
 
+# Generate secure random UUIDs for the initial deployment to prevent hardcoded
+# placeholder credentials from being exposed in source control.
+resource "random_uuid" "default_ws_token" {}
+resource "random_uuid" "default_actor_id" {}
+
 resource "aws_secretsmanager_secret" "ws_auth_tokens" {
   name        = "${var.environment}/websocket/auth-tokens"
   description = "Pre-shared authorisation tokens and actor_id mapping for WebSocket $connect"
@@ -96,8 +101,12 @@ resource "aws_secretsmanager_secret" "ws_auth_tokens" {
 
 resource "aws_secretsmanager_secret_version" "ws_auth_tokens_val" {
   secret_id = aws_secretsmanager_secret.ws_auth_tokens.id
+
+  # We inject the dynamically generated UUIDs as the initial secure state.
+  # The lifecycle block ensures that subsequent terraform applies will not
+  # overwrite any manual token rotations or future cohort token mappings.
   secret_string = jsonencode({
-    "placeholder-token" = "placeholder-actor-id"
+    (random_uuid.default_ws_token.result) = random_uuid.default_actor_id.result
   })
 
   lifecycle {

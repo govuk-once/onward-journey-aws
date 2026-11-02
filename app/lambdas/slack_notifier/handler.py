@@ -126,13 +126,55 @@ def get_search_terms(alarm_name: str) -> list[str]:
 
 
 def is_actual_error(message: str) -> bool:
-    """Filters out log events where error tokens appear inside warning messages."""
-    msg_upper = message.upper()
-    if '"LOG_LEVEL": "WARNING"' in msg_upper or '"LEVEL": "WARNING"' in msg_upper:
+    """
+    Determines if a log event is an actual error.
+    Handles structured JSON logs, log-level prefixes, and raw string logs.
+    """
+    if not message or not isinstance(message, str):
         return False
-    if "[WARNING]" in msg_upper or "WARN:" in msg_upper:
+
+    # 1. Structured JSON: Check level explicitly
+    try:
+        log_data = json.loads(message)
+        if isinstance(log_data, dict):
+            level = str(log_data.get("log_level", log_data.get("level", ""))).upper()
+            if level:
+                # If an explicit log level is defined in the JSON, trust it completely
+                return level in {"ERROR", "EXCEPTION", "FATAL", "CRITICAL"}
+    except json.JSONDecodeError:
+        pass  # Fall back to regex analysis for raw/prefixed text
+
+    # 2. Discard warnings (both stringified JSON and standard bracketed prefixes)
+    if re.search(
+        r'["\'](?:log_level|level)["\']\s*:\s*["\']warn(?:ing)?["\']',
+        message,
+        re.IGNORECASE,
+    ):
         return False
-    return "ERROR" in msg_upper or "EXCEPTION" in msg_upper
+    if re.search(r"\[\s*warn(?:ing)?\s*\]|\bwarn(?:ing)?\s*:", message, re.IGNORECASE):
+        return False
+
+    # 3. Discard explicit INFO / DEBUG logs that happen to contain the word "error"
+    # (e.g. "[INFO] 0 errors found" or '"level": "info"')
+    if re.search(
+        r'["\'](?:log_level|level)["\']\s*:\s*["\'](?:info|debug|trace)["\']',
+        message,
+        re.IGNORECASE,
+    ):
+        return False
+    if re.search(
+        r"\[\s*(?:info|debug|trace)\s*\]|\b(?:info|debug|trace)\s*:",
+        message,
+        re.IGNORECASE,
+    ):
+        # Don't discard if there is an unhandled traceback attached
+        if not re.search(r"\b(?:traceback|exception)\b", message, re.IGNORECASE):
+            return False
+
+    # 4. Match genuine error keywords with word boundaries
+    return bool(
+        re.search(r"\b(error|exception|fatal|critical)\b", message, re.IGNORECASE)
+    )
 
 
 def resolve_infra_links_and_snippets(data: dict) -> tuple[list[str], str | None]:

@@ -12,7 +12,16 @@ from botocore.config import Config
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-boto_cfg = Config(retries={"max_attempts": 3, "mode": "standard"})
+# Configure explicit client timeouts to prevent unhandled Lambda runtime terminations:
+# - max_attempts=3: Retries transient AWS API throttling or network blips using standard backoff.
+# - connect_timeout=2: Regional TCP handshakes in eu-west-2 resolve in <20ms; 2s fails fast on connection hangs.
+# - read_timeout=5: Regional reads (Secrets Manager, Logs) return in <500ms; 5s ensures worst-case retries
+#   (3 attempts x 5s = 15s) do not outlast the Lambda's overall execution timeout.
+boto_cfg = Config(
+    retries={"max_attempts": 3, "mode": "standard"},
+    connect_timeout=2,
+    read_timeout=5,
+)
 secrets_client = boto3.client(
     "secretsmanager", region_name="eu-west-2", config=boto_cfg
 )

@@ -92,10 +92,6 @@ resource "aws_secretsmanager_secret_version" "dvla_storm_val" {
 resource "aws_secretsmanager_secret" "ws_auth_tokens" {
   name        = "${var.environment}/websocket/auth-tokens"
   description = "Pre-shared authorisation tokens and actor_id mapping for WebSocket $connect"
-
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
 }
 
 resource "aws_secretsmanager_secret_version" "ws_auth_tokens_val" {

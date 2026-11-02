@@ -36,3 +36,9 @@ variable "throttling_rate_limit" {
   type        = number
   default     = 100
 }
+
+variable "enable_connect_authorizer" {
+  description = "Set to true to provision a REQUEST authoriser on the $connect route"
+  type        = bool
+  default     = false
+}

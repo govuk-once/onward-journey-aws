@@ -12,7 +12,7 @@ resource "aws_apigatewayv2_integration" "router" {
 }
 
 resource "aws_apigatewayv2_authorizer" "connect_authorizer" {
-  count            = var.authorizer_lambda_arn != null ? 1 : 0
+  count            = var.enable_connect_authorizer ? 1 : 0
   api_id           = aws_apigatewayv2_api.websocket.id
   authorizer_type  = "REQUEST"
   authorizer_uri   = var.authorizer_lambda_arn
@@ -24,8 +24,8 @@ resource "aws_apigatewayv2_route" "connect" {
   api_id             = aws_apigatewayv2_api.websocket.id
   route_key          = "$connect"
   target             = "integrations/${aws_apigatewayv2_integration.router.id}"
-  authorization_type = var.authorizer_lambda_arn != null ? "CUSTOM" : "NONE"
-  authorizer_id      = var.authorizer_lambda_arn != null ? aws_apigatewayv2_authorizer.connect_authorizer[0].id : null
+  authorization_type = var.enable_connect_authorizer ? "CUSTOM" : "NONE"
+  authorizer_id      = var.enable_connect_authorizer ? aws_apigatewayv2_authorizer.connect_authorizer[0].id : null
 }
 
 resource "aws_apigatewayv2_route" "disconnect" {

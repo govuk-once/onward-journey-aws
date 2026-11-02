@@ -1,5 +1,5 @@
 locals {
-  stack_name = "shared-slack-alerts"
+  stack_name = "shared-infrastructure"
 }
 
 terraform {
@@ -13,7 +13,10 @@ terraform {
   }
 
   backend "s3" {
-    # backend configuration passed in dynamically via slack-alerts.config
+    # We do not have a workspace_key_prefix because the VPC uses the 'default' workspace.
+    # Specify a dedicated static key for the shared network state.
+    # (Bucket and region can still be passed in via your .config file during init)
+    key = "shared.tfstate"
   }
 }
 
@@ -24,7 +27,7 @@ provider "aws" {
     tags = {
       Product           = "ai-govuk"
       Service           = "onward-journey"
-      Component         = "alerting"
+      Component         = "networking"
       Environment       = "shared"
       Owner             = "onward-journey-team"
       Source            = "onward-journey-aws"

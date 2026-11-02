@@ -62,11 +62,6 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# Fetch shared Slack notification topic provisioned by infrastructure/slack-alerts
-data "aws_sns_topic" "slack_alerts" {
-  name = "oj-aws-errors"
-}
-
 # -----------------------------------------------------------------------------
 # NAT Gateway Security & Performance CloudWatch Alarms
 # -----------------------------------------------------------------------------
@@ -128,7 +123,7 @@ resource "aws_cloudwatch_metric_alarm" "nat_alarms" {
   }
 
   alarm_description = each.value.alarm_description
-  alarm_actions     = [data.aws_sns_topic.slack_alerts.arn]
+  alarm_actions     = [aws_sns_topic.slack_alerts.arn]
 
   tags = { Name = each.value.alarm_name }
 }

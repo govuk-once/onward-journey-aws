@@ -74,3 +74,9 @@ variable "runtime" {
   type        = string
   default     = "python3.13"
 }
+
+variable "tags" {
+  description = "Optional map of additional tags to assign to the Lambda function and related resources"
+  type        = map(string)
+  default     = {}
+}

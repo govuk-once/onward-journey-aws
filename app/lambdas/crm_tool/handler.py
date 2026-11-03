@@ -75,6 +75,11 @@ def execute_crm_method(
         log_metric("LiveHandoffInitiated", {"Target": chat_id, "Trace": thread_id})
         return result
 
+    logger.error("Method registered in SUPPORTED_METHODS but unhandled: %s", method)
+    return {
+        "error": f"NOT_IMPLEMENTED: Handler for method '{method}' is not implemented."
+    }
+
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """

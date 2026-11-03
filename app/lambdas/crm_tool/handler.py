@@ -47,7 +47,7 @@ def execute_crm_method(
 
     # Reject unsupported methods immediately before provider resolution
     if method not in SUPPORTED_METHODS:
-        logger.error(f"Unknown method: {method}")
+        logger.error("Unknown method: %s", method)
         return {"error": f"METHOD_ERROR: {method} not supported."}
 
     # Phase 2: User message forwarding during an active human session.
@@ -122,10 +122,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
 
     # Record sanitised audit trace without leaking user message content
-    logger.info(f"CRM TOOL CALL | ThreadId: {thread_id} | Event: {audit_json}")
+    logger.info("CRM TOOL CALL | ThreadId: %s | Event: %s", thread_id, audit_json)
 
     try:
         return execute_crm_method(method, thread_id, chat_id, event)
     except Exception as e:
-        logger.error(f"CRM TOOL TOP-LEVEL FAILURE: {e}", exc_info=True)
+        logger.error("CRM TOOL TOP-LEVEL FAILURE: %s", e, exc_info=True)
         return {"error": "SERVICE_ERROR: Internal Tool Error."}

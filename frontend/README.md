@@ -1,16 +1,38 @@
 # Frontend
 
-This directory is a sveltekit application that serves as an interface for the Onward Journey tool.
+This directory is a SvelteKit application that serves as an interface for the Onward Journey tool.
 
-Currently, this connects to an Orchestrator service which provides AI responses and can initiate a handoff to a human advisor via Genesys Web Messaging.
+Currently, this connects to an Orchestrator service which provides AI responses and can initiate a handoff to a human adviser via Genesys Web Messaging.
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm ci` (or `npm install`), create an `.env` file using the `.env.example` as your template. The `PUBLIC_ORCHESTRATOR_URL` and `PUBLIC_COGNITO_IDENTITY_POOL_ID` should be populated after running a successful `terraform apply` (the values are found in the terraform outputs).
+Navigate to the frontend directory:
 
-The `PUBLIC_ORCHESTRATOR_URL` connects the frontend to the backend orchestration layer. The `PUBLIC_COGNITO_IDENTITY_POOL_ID` is required to authenticate the connection to the orchestrator.
+```sh
+cd frontend
+```
 
-Then, run the server
+Install dependencies with `npm ci` (or `npm install`), then create an `.env` file using `.env.example` as your template.
+
+The values in `.env` should be populated after running a successful `terraform apply` in `infrastructure/services`:
+
+* `PUBLIC_COGNITO_IDENTITY_POOL_ID`: Required to authenticate the connection to the orchestrator (found in the Terraform outputs).
+* `PUBLIC_ORCHESTRATOR_URL`: Connects the frontend to the backend orchestration layer. Because the WebSocket connection requires handshake authorisation, you must append your authorisation token as a query parameter to the end of the WebSocket URL.
+
+### Sourcing the Authorisation Token
+
+A secure default token is generated automatically during deployment:
+
+1. Navigate to **AWS Console** -> **Secrets Manager**.
+2. Locate the secret named `${var.environment}/websocket/auth-tokens`.
+3. In the secret's JSON payload, copy the **key** string (the token UUID).
+4. Append this token to the end of `PUBLIC_ORCHESTRATOR_URL` in your `.env` file:
+
+```env
+PUBLIC_ORCHESTRATOR_URL=wss://<api_id>.execute-api.eu-west-2.amazonaws.com/<env_prefix>?auth_token=<your-token-uuid>
+```
+
+Then, run the development server:
 
 ```sh
 npm run dev
@@ -21,7 +43,7 @@ npm run dev -- --open
 
 ## Testing
 
-You can run the vitest unit tests by running:
+Run vitest unit tests:
 
 ```sh
 npm run test

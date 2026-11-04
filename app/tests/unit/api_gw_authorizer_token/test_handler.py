@@ -28,7 +28,6 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv(
         "SECRET_ARN", "arn:aws:secretsmanager:eu-west-2:123:secret:ws-tokens"
     )
-    monkeypatch.setenv("CACHE_TTL_SECONDS", "300")
 
 
 @pytest.fixture

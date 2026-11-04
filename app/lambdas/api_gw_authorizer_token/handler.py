@@ -39,8 +39,17 @@ def _resolve_endpoint_url(endpoint_url: Optional[str]) -> Optional[str]:
     return cleaned
 
 
-# Initialise client with VPC Endpoint URL override if private DNS is disabled
-ENDPOINT_URL = _resolve_endpoint_url(os.environ.get("SECRETS_ENDPOINT_URL"))
+def _require_endpoint_url(env_var_name: str) -> str:
+    """Validate and format a mandatory VPC endpoint URL on Lambda cold start."""
+    raw_url = os.environ.get(env_var_name)
+    resolved = _resolve_endpoint_url(raw_url)
+    if not resolved:
+        logger.error("Missing required environment variable: %s", env_var_name)
+        raise RuntimeError(f"Missing required environment variable: {env_var_name}")
+    return resolved
+
+
+ENDPOINT_URL = _require_endpoint_url("SECRETS_ENDPOINT_URL")
 SECRETS_MANAGER_CLIENT = boto3.client(
     "secretsmanager",
     endpoint_url=ENDPOINT_URL,

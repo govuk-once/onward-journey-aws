@@ -4,6 +4,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.lambdas.api_gw_authorizer_token.handler import (
+    _require_endpoint_url,
     _resolve_endpoint_url,
     lambda_handler,
 )
@@ -75,6 +76,27 @@ class TestEndpointUrlResolution:
     )
     def test_resolve_endpoint_url_normalises_schemes(self, raw_url, expected):
         assert _resolve_endpoint_url(raw_url) == expected
+
+    def test_require_endpoint_url_returns_normalised_url_when_present(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TEST_ENDPOINT", "custom.secrets.aws")
+        assert _require_endpoint_url("TEST_ENDPOINT") == "https://custom.secrets.aws"
+
+    @pytest.mark.parametrize("empty_val", [None, "", "   "])
+    def test_require_endpoint_url_raises_runtime_error_when_missing_or_blank(
+        self, monkeypatch, empty_val
+    ):
+        if empty_val is None:
+            monkeypatch.delenv("TEST_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("TEST_ENDPOINT", empty_val)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Missing required environment variable: TEST_ENDPOINT",
+        ):
+            _require_endpoint_url("TEST_ENDPOINT")
 
 
 class TestQueryParamValidation:

@@ -36,14 +36,22 @@ def _resolve_endpoint_url(endpoint_url: Optional[str]) -> Optional[str]:
     return cleaned
 
 
-AGENT_RUNTIME_ENDPOINT = _resolve_endpoint_url(
-    os.environ.get("AGENT_RUNTIME_ENDPOINT_URL")
-)
+def _require_endpoint_url(env_var_name: str) -> str:
+    """Validate and format a mandatory VPC endpoint URL on Lambda cold start."""
+    raw_url = os.environ.get(env_var_name)
+    resolved = _resolve_endpoint_url(raw_url)
+    if not resolved:
+        logger.error("Missing required environment variable: %s", env_var_name)
+        raise RuntimeError(f"Missing required environment variable: {env_var_name}")
+    return resolved
+
+
+AGENT_RUNTIME_ENDPOINT = _require_endpoint_url("AGENT_RUNTIME_ENDPOINT_URL")
 AGENTCORE_CLIENT = boto3.client(
     "bedrock-agentcore",
     endpoint_url=AGENT_RUNTIME_ENDPOINT,
 )
-LAMBDA_ENDPOINT = _resolve_endpoint_url(os.environ.get("LAMBDA_ENDPOINT_URL"))
+LAMBDA_ENDPOINT = _require_endpoint_url("LAMBDA_ENDPOINT_URL")
 LAMBDA_CLIENT = boto3.client(
     "lambda",
     endpoint_url=LAMBDA_ENDPOINT,
@@ -156,7 +164,7 @@ def route_to_crm(
             "Routing failed for thread_id=%s: CRM_TOOL_LAMBDA_ARN environment variable is missing",
             thread_id,
         )
-        return {"statusCode": 500, "body": "Server configuration error"}
+        raise RuntimeError("Missing required environment variable: CRM_TOOL_LAMBDA_ARN")
 
     if not crm_chat_id or not live_chat_identifier:
         logger.error(
@@ -179,31 +187,29 @@ def route_to_crm(
         "live_chat_identifier": live_chat_identifier,
     }
 
-    try:
-        LAMBDA_CLIENT.invoke(
-            FunctionName=crm_tool_arn,
-            InvocationType="Event",
-            Payload=json.dumps(payload).encode("utf-8"),
-        )
-        logger.info(
-            "Bypassed AI agent: forwarded message directly to CRM for thread_id=%s",
-            thread_id,
-        )
-        return {"statusCode": 200, "body": "Message routed to human adviser"}
+    response = LAMBDA_CLIENT.invoke(
+        FunctionName=crm_tool_arn,
+        InvocationType="RequestResponse",
+        Payload=json.dumps(payload).encode("utf-8"),
+    )
 
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "UnknownError")
-        error_msg = e.response.get("Error", {}).get("Message", "No message provided")
-        request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-        logger.error(
-            "AWS ClientError invoking CRM tool Lambda for thread_id=%s | Code=%s | RequestId=%s | Message=%s",
-            thread_id,
-            error_code,
-            request_id,
-            error_msg,
-            exc_info=True,
+    result = json.loads(response["Payload"].read())
+
+    # If the downstream Lambda crashed or returned an error, fail fast
+    if "FunctionError" in response or "error" in result:
+        error_detail = result.get("error") or result.get(
+            "errorMessage", "Unknown error"
         )
-        return {"statusCode": 500, "body": "Failed to route message to adviser"}
+        logger.error(
+            "CRM tool execution failed for thread_id=%s: %s", thread_id, error_detail
+        )
+        raise RuntimeError(f"CRM tool execution failed: {error_detail}")
+
+    logger.info(
+        "Bypassed AI agent: forwarded message directly to CRM for thread_id=%s",
+        thread_id,
+    )
+    return {"statusCode": 200, "body": "Message routed to human adviser"}
 
 
 def route_to_agentcore(

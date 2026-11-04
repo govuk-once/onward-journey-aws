@@ -13,6 +13,7 @@ if SHARED_DIR.is_dir() and str(SHARED_DIR) not in sys.path:
 # Global environment defaults for unit test session
 os.environ.setdefault("ENV_PREFIX", "unit")
 os.environ.setdefault("AGENT_RUNTIME_ENDPOINT_URL", "agent.mock.aws")
+os.environ.setdefault("LAMBDA_ENDPOINT_URL", "lambda.mock.aws")
 os.environ.setdefault("BEDROCK_RUNTIME_ENDPOINT", "bedrock.mock.aws")
 os.environ.setdefault("SECRETS_ENDPOINT_URL", "secrets.mock.aws")
 os.environ.setdefault("GATEWAY_URL", "https://mock.gateway.aws")

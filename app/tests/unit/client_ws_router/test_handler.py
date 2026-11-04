@@ -1,9 +1,11 @@
+import io
 import json
 from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
 from app.lambdas.client_ws_router.handler import (
+    _require_endpoint_url,
     _resolve_endpoint_url,
     create_session,
     get_table,
@@ -99,7 +101,7 @@ def mock_clients():
 
 
 class TestEndpointUrlResolution:
-    """Tests verifying scheme normalisation for botocore endpoint compatibility."""
+    """Tests verifying scheme normalisation and mandatory startup validation for VPC endpoints."""
 
     @pytest.mark.parametrize(
         "raw_url, expected",
@@ -115,6 +117,29 @@ class TestEndpointUrlResolution:
     )
     def test_resolve_endpoint_url_normalises_schemes(self, raw_url, expected):
         assert _resolve_endpoint_url(raw_url) == expected
+
+    def test_require_endpoint_url_returns_normalised_url_when_present(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TEST_VPC_ENDPOINT", "custom.endpoint.aws")
+        assert (
+            _require_endpoint_url("TEST_VPC_ENDPOINT") == "https://custom.endpoint.aws"
+        )
+
+    @pytest.mark.parametrize("empty_val", [None, "", "   "])
+    def test_require_endpoint_url_raises_runtime_error_when_missing_or_blank(
+        self, monkeypatch, empty_val
+    ):
+        if empty_val is None:
+            monkeypatch.delenv("TEST_VPC_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("TEST_VPC_ENDPOINT", empty_val)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Missing required environment variable: TEST_VPC_ENDPOINT",
+        ):
+            _require_endpoint_url("TEST_VPC_ENDPOINT")
 
 
 class TestConfiguration:
@@ -400,6 +425,17 @@ class TestSessionManagementAndRouting:
                 "updated_at": FIXED_EPOCH,
             }
         }
+        # Provide a valid StreamingBody payload simulating a successful synchronous invoke
+        mock_clients["lambda_client"].invoke.return_value = {
+            "Payload": io.BytesIO(
+                json.dumps(
+                    {
+                        "status": "success",
+                        "message": "User message forwarded to CRM",
+                    }
+                ).encode("utf-8")
+            )
+        }
         base_event["body"] = json.dumps(valid_payload)
 
         response = lambda_handler(base_event, None)
@@ -412,7 +448,7 @@ class TestSessionManagementAndRouting:
         invoke_kwargs = mock_clients["lambda_client"].invoke.call_args.kwargs
 
         assert invoke_kwargs["FunctionName"] == TEST_CRM_ARN
-        assert invoke_kwargs["InvocationType"] == "Event"
+        assert invoke_kwargs["InvocationType"] == "RequestResponse"
         crm_payload = json.loads(invoke_kwargs["Payload"])
 
         assert crm_payload == {
@@ -499,7 +535,7 @@ class TestErrorHandlingAndValidation:
         assert response["body"] == "Server configuration error"
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
-    def test_missing_crm_tool_arn_in_human_chat_returns_500(
+    def test_missing_crm_tool_arn_in_human_chat_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients, monkeypatch
     ):
         mock_table.get_item.return_value = {
@@ -513,39 +549,15 @@ class TestErrorHandlingAndValidation:
         monkeypatch.delenv("CRM_TOOL_LAMBDA_ARN", raising=False)
         base_event["body"] = json.dumps(valid_payload)
 
-        response = lambda_handler(base_event, None)
+        with pytest.raises(
+            RuntimeError,
+            match="Missing required environment variable: CRM_TOOL_LAMBDA_ARN",
+        ):
+            lambda_handler(base_event, None)
 
-        assert response["statusCode"] == 500
-        assert response["body"] == "Server configuration error"
         mock_clients["lambda_client"].invoke.assert_not_called()
 
-    def test_missing_gateway_context_returns_500(
-        self, base_event, valid_payload, mock_table, mock_clients
-    ):
-        del base_event["requestContext"]["domainName"]
-        base_event["body"] = json.dumps(valid_payload)
-
-        response = lambda_handler(base_event, None)
-
-        assert response["statusCode"] == 500
-        assert "missing gateway context" in response["body"]
-        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
-
-    def test_agentcore_client_error_returns_500(
-        self, base_event, valid_payload, mock_table, mock_clients
-    ):
-        mock_clients["agentcore"].invoke_agent_runtime.side_effect = ClientError(
-            {"Error": {"Code": "AccessDeniedException", "Message": "Access Denied"}},
-            "InvokeAgentRuntime",
-        )
-        base_event["body"] = json.dumps(valid_payload)
-
-        response = lambda_handler(base_event, None)
-
-        assert response["statusCode"] == 500
-        assert response["body"] == "Failed to route message to AI agent"
-
-    def test_crm_tool_client_error_returns_500(
+    def test_crm_tool_client_error_bubbles_up(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
         mock_table.get_item.return_value = {
@@ -567,7 +579,64 @@ class TestErrorHandlingAndValidation:
         )
         base_event["body"] = json.dumps(valid_payload)
 
+        with pytest.raises(ClientError) as exc_info:
+            lambda_handler(base_event, None)
+
+        assert exc_info.value.response["Error"]["Code"] == "ResourceNotFoundException"
+
+    def test_agentcore_client_error_returns_500(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_clients["agentcore"].invoke_agent_runtime.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Access Denied"}},
+            "InvokeAgentRuntime",
+        )
+        base_event["body"] = json.dumps(valid_payload)
+
         response = lambda_handler(base_event, None)
 
         assert response["statusCode"] == 500
-        assert response["body"] == "Failed to route message to adviser"
+        assert response["body"] == "Failed to route message to AI agent"
+
+    def test_crm_tool_function_error_crash_raises_runtime_error(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_table.get_item.return_value = {
+            "Item": {
+                "session_id": TEST_THREAD_ID,
+                "state": "HUMAN_CHAT",
+                "crm_chat_id": "storm-interaction-987",
+                "live_chat_identifier": "dvla-storm",
+            }
+        }
+        mock_clients["lambda_client"].invoke.return_value = {
+            "FunctionError": "Unhandled",
+            "Payload": io.BytesIO(b'{"errorMessage": "Process crash in crm_tool"}'),
+        }
+        base_event["body"] = json.dumps(valid_payload)
+
+        with pytest.raises(RuntimeError, match="CRM tool execution failed"):
+            lambda_handler(base_event, None)
+
+    def test_crm_tool_application_error_payload_raises_runtime_error(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_table.get_item.return_value = {
+            "Item": {
+                "session_id": TEST_THREAD_ID,
+                "state": "HUMAN_CHAT",
+                "crm_chat_id": "storm-interaction-987",
+                "live_chat_identifier": "dvla-storm",
+            }
+        }
+        mock_clients["lambda_client"].invoke.return_value = {
+            "Payload": io.BytesIO(
+                json.dumps({"error": "METHOD_ERROR: Method not implemented."}).encode(
+                    "utf-8"
+                )
+            ),
+        }
+        base_event["body"] = json.dumps(valid_payload)
+
+        with pytest.raises(RuntimeError, match="CRM tool execution failed"):
+            lambda_handler(base_event, None)

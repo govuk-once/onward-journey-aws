@@ -156,6 +156,19 @@ resource "aws_security_group" "client_ws_router" {
   }
 }
 
+# CLIENT WEBSOCKET AUTHORISER SECURITY GROUP
+# Group for the client WebSocket token authoriser Lambda.
+resource "aws_security_group" "client_ws_authorizer" {
+  name        = "${var.environment}-client-ws-authorizer-sg"
+  description = "Security group for the Client WebSocket token authoriser Lambda"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-client-ws-authorizer-sg"
+    Component = "websocket-client"
+  }
+}
+
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
@@ -244,12 +257,21 @@ resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_endpoints" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow Content Guru authoriser to reach SecretsManager endpoint"
+  description                  = "Allow Content Guru authorizer to reach SecretsManager endpoint"
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
   security_group_id            = aws_security_group.secrets_manager.id
   referenced_security_group_id = aws_security_group.crm_contentguru_wh_authorizer.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_client_authorizer_to_secrets_manager" {
+  description                  = "Allow Client WebSocket authorizer to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.client_ws_authorizer.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_client_router_to_endpoints" {
@@ -358,8 +380,17 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
 }
 
 resource "aws_vpc_security_group_egress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow outbound traffic from Content Guru authoriser to Secrets Manager"
+  description                  = "Allow outbound traffic from Content Guru authorizer to Secrets Manager"
   security_group_id            = aws_security_group.crm_contentguru_wh_authorizer.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_client_authorizer_to_secrets_manager" {
+  description                  = "Allow outbound traffic from Client WebSocket authorizer to Secrets Manager"
+  security_group_id            = aws_security_group.client_ws_authorizer.id
   referenced_security_group_id = aws_security_group.secrets_manager.id
   ip_protocol                  = "tcp"
   from_port                    = 443

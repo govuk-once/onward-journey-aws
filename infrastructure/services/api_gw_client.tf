@@ -8,7 +8,7 @@ module "client_ws_authorizer_lambda" {
   source_dir    = "api_gw_authorizer_token"
 
   subnet_ids         = local.private_subnet_ids
-  security_group_ids = [aws_security_group.crm_contentguru_wh_authorizer.id]
+  security_group_ids = [aws_security_group.client_ws_authorizer.id]
 
   environment_variables = {
     ENVIRONMENT          = var.environment

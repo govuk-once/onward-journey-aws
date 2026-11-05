@@ -227,7 +227,7 @@ def route_to_agentcore(
             "Routing failed for websocket_connection_id=%s: AGENT_RUNTIME_ARN environment variable is missing",
             websocket_connection_id,
         )
-        return {"statusCode": 500, "body": "Server configuration error"}
+        raise RuntimeError("Missing required environment variable: AGENT_RUNTIME_ARN")
 
     if not domain_name or not stage:
         logger.error(
@@ -250,34 +250,19 @@ def route_to_agentcore(
         "thread_id": thread_id,
     }
 
-    try:
-        AGENTCORE_CLIENT.invoke_agent_runtime(
-            agentRuntimeArn=agent_runtime_arn,
-            runtimeSessionId=thread_id,
-            contentType="application/json",
-            accept="application/json",
-            payload=json.dumps(payload).encode("utf-8"),
-        )
-        logger.info(
-            "Successfully routed payload to AgentCore for websocket_connection_id=%s | thread_id=%s",
-            websocket_connection_id,
-            thread_id,
-        )
-        return {"statusCode": 200, "body": "Message routed"}
-
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "UnknownError")
-        error_msg = e.response.get("Error", {}).get("Message", "No message provided")
-        request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-        logger.error(
-            "AWS ClientError invoking AgentCore runtime for websocket_connection_id=%s | Code=%s | RequestId=%s | Message=%s",
-            websocket_connection_id,
-            error_code,
-            request_id,
-            error_msg,
-            exc_info=True,
-        )
-        return {"statusCode": 500, "body": "Failed to route message to AI agent"}
+    AGENTCORE_CLIENT.invoke_agent_runtime(
+        agentRuntimeArn=agent_runtime_arn,
+        runtimeSessionId=thread_id,
+        contentType="application/json",
+        accept="application/json",
+        payload=json.dumps(payload).encode("utf-8"),
+    )
+    logger.info(
+        "Successfully routed payload to AgentCore for websocket_connection_id=%s | thread_id=%s",
+        websocket_connection_id,
+        thread_id,
+    )
+    return {"statusCode": 200, "body": "Message routed"}
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

@@ -101,7 +101,6 @@ def mock_clients():
 
 
 class TestEndpointUrlResolution:
-    """Tests verifying scheme normalisation and mandatory startup validation for VPC endpoints."""
 
     @pytest.mark.parametrize(
         "raw_url, expected",
@@ -142,12 +141,11 @@ class TestEndpointUrlResolution:
             _require_endpoint_url("TEST_VPC_ENDPOINT")
 
 
-class TestConfiguration:
+class TestSessionsTableInitialisation:
 
     def test_get_table_raises_runtime_error_when_sessions_table_name_missing(
         self, monkeypatch
     ):
-        """Verifies get_table fails fast if SESSIONS_TABLE_NAME is absent from the environment."""
         monkeypatch.delenv("SESSIONS_TABLE_NAME", raising=False)
 
         with pytest.raises(
@@ -157,7 +155,6 @@ class TestConfiguration:
             get_table()
 
     def test_get_table_reuses_cached_table_instance(self, monkeypatch):
-        """Verifies get_table caches the Table resource in-memory across warm calls."""
         monkeypatch.setenv("SESSIONS_TABLE_NAME", "test-sessions-table")
         first_instance = get_table()
         second_instance = get_table()
@@ -227,7 +224,6 @@ class TestPayloadValidation:
     def test_thread_id_below_minimum_length_returns_bad_request(
         self, base_event, valid_payload, invalid_id, mock_table, mock_clients
     ):
-        """Verifies that thread_ids under Bedrock's 33-character minimum are rejected before database or model calls."""
         valid_payload["thread_id"] = invalid_id
         base_event["body"] = json.dumps(valid_payload)
 
@@ -269,7 +265,6 @@ class TestAuthoriserContext:
     def test_ignores_spoofed_actor_id_in_body_and_strictly_uses_authorizer_context(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        """Ensures a client cannot spoof identity by injecting an actor_id into the message body."""
         valid_payload["actor_id"] = "malicious-spoofed-actor"
         base_event["requestContext"]["authorizer"] = {
             "actor_id": "verified-authorizer-actor"
@@ -371,7 +366,6 @@ class TestSessionManagementAndRouting:
     def test_creates_session_recovers_gracefully_on_concurrent_race_condition(
         self, mock_table, fixed_time
     ):
-        """Verifies that create_session gracefully handles ConditionalCheckFailedException when another worker initialised the session first."""
         mock_table.put_item.side_effect = ClientError(
             {
                 "Error": {
@@ -461,7 +455,7 @@ class TestSessionManagementAndRouting:
         }
 
 
-class TestErrorHandlingAndValidation:
+class TestSessionAndGatewayContextValidation:
 
     @pytest.mark.parametrize(
         "session_attrs",
@@ -523,16 +517,33 @@ class TestErrorHandlingAndValidation:
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
         mock_clients["lambda_client"].invoke.assert_not_called()
 
-    def test_missing_agent_runtime_arn_returns_500(
-        self, base_event, valid_payload, mock_table, mock_clients, monkeypatch
+    def test_missing_gateway_context_returns_500(
+        self, base_event, valid_payload, mock_table, mock_clients
     ):
-        monkeypatch.delenv("AGENT_RUNTIME_ARN", raising=False)
+        del base_event["requestContext"]["domainName"]
         base_event["body"] = json.dumps(valid_payload)
 
         response = lambda_handler(base_event, None)
 
         assert response["statusCode"] == 500
-        assert response["body"] == "Server configuration error"
+        assert "missing gateway context" in response["body"]
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
+
+
+class TestMissingRoutingEnvironmentVariables:
+
+    def test_missing_agent_runtime_arn_raises_runtime_error(
+        self, base_event, valid_payload, mock_table, mock_clients, monkeypatch
+    ):
+        monkeypatch.delenv("AGENT_RUNTIME_ARN", raising=False)
+        base_event["body"] = json.dumps(valid_payload)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Missing required environment variable: AGENT_RUNTIME_ARN",
+        ):
+            lambda_handler(base_event, None)
+
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
     def test_missing_crm_tool_arn_in_human_chat_raises_runtime_error(
@@ -556,6 +567,23 @@ class TestErrorHandlingAndValidation:
             lambda_handler(base_event, None)
 
         mock_clients["lambda_client"].invoke.assert_not_called()
+
+
+class TestDownstreamErrorPropagation:
+
+    def test_agentcore_client_error_bubbles_up(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_clients["agentcore"].invoke_agent_runtime.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Access Denied"}},
+            "InvokeAgentRuntime",
+        )
+        base_event["body"] = json.dumps(valid_payload)
+
+        with pytest.raises(ClientError) as exc_info:
+            lambda_handler(base_event, None)
+
+        assert exc_info.value.response["Error"]["Code"] == "AccessDeniedException"
 
     def test_crm_tool_client_error_bubbles_up(
         self, base_event, valid_payload, mock_table, mock_clients
@@ -583,20 +611,6 @@ class TestErrorHandlingAndValidation:
             lambda_handler(base_event, None)
 
         assert exc_info.value.response["Error"]["Code"] == "ResourceNotFoundException"
-
-    def test_agentcore_client_error_returns_500(
-        self, base_event, valid_payload, mock_table, mock_clients
-    ):
-        mock_clients["agentcore"].invoke_agent_runtime.side_effect = ClientError(
-            {"Error": {"Code": "AccessDeniedException", "Message": "Access Denied"}},
-            "InvokeAgentRuntime",
-        )
-        base_event["body"] = json.dumps(valid_payload)
-
-        response = lambda_handler(base_event, None)
-
-        assert response["statusCode"] == 500
-        assert response["body"] == "Failed to route message to AI agent"
 
     def test_crm_tool_function_error_crash_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients

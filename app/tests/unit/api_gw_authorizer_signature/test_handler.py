@@ -2,7 +2,12 @@ import base64
 import hashlib
 import hmac
 import pytest
-from app.lambdas.api_gw_authorizer_signature.handler import lambda_handler
+
+from app.lambdas.api_gw_authorizer_signature.handler import (
+    _require_endpoint_url,
+    _resolve_endpoint_url,
+    lambda_handler,
+)
 
 TEST_SECRET = "Mock-secret-key-123"
 DEFAULT_SAMPLE_BODY = '{"event": "chat_message", "text": "Hello World"}'
@@ -62,6 +67,46 @@ def build_event():
         return event
 
     return _builder
+
+
+class TestEndpointUrlResolution:
+    """Tests verifying scheme normalisation and mandatory startup validation for VPC endpoints."""
+
+    @pytest.mark.parametrize(
+        "raw_url, expected",
+        [
+            ("secrets.mock.aws", "https://secrets.mock.aws"),
+            ("  secrets.mock.aws  ", "https://secrets.mock.aws"),
+            ("https://custom.endpoint.aws", "https://custom.endpoint.aws"),
+            ("http://localhost:4566", "http://localhost:4566"),
+            (None, None),
+            ("", None),
+            ("   ", None),
+        ],
+    )
+    def test_resolve_endpoint_url_normalises_schemes(self, raw_url, expected):
+        assert _resolve_endpoint_url(raw_url) == expected
+
+    def test_require_endpoint_url_returns_normalised_url_when_present(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TEST_ENDPOINT", "custom.secrets.aws")
+        assert _require_endpoint_url("TEST_ENDPOINT") == "https://custom.secrets.aws"
+
+    @pytest.mark.parametrize("empty_val", [None, "", "   "])
+    def test_require_endpoint_url_raises_runtime_error_when_missing_or_blank(
+        self, monkeypatch, empty_val
+    ):
+        if empty_val is None:
+            monkeypatch.delenv("TEST_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("TEST_ENDPOINT", empty_val)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Missing required environment variable: TEST_ENDPOINT",
+        ):
+            _require_endpoint_url("TEST_ENDPOINT")
 
 
 class TestHeaderValidation:

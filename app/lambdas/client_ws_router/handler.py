@@ -77,77 +77,67 @@ def get_table():
     return TABLE_CACHE
 
 
-def get_session(thread_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieve an existing session record by thread_id."""
-    table = get_table()
-    response = table.get_item(Key={"session_id": thread_id})
-    return response.get("Item")
-
-
-def create_session(
+def upsert_and_get_session(
     thread_id: str, actor_id: str, websocket_connection_id: str
 ) -> Dict[str, Any]:
     """
-    Create a new session record in DynamoDB.
+        Atomically upsert session state in DynamoDB and return the latest attributes.
 
-    Enforces concurrency safety via a conditional write. If another concurrent execution
-    initialised the session first, gracefully recovers by fetching and touching that record.
+        Uses an atomic `update_item` operation:
+    - If the thread_id does not exist, DynamoDB initialises a new session item.
+    - If the thread_id already exists, DynamoDB updates the timestamps, connection ID,
+          and rolling TTL without resetting existing conversational state (e.g. HUMAN_CHAT).
+    - Guarantees tenancy isolation by preventing any actor from writing to a session
+          owned by another actor.
     """
     table = get_table()
     now_epoch = int(time.time())
-    item = {
-        "session_id": thread_id,
-        "actor_id": actor_id,
-        "websocket_connection_id": websocket_connection_id,
-        "state": "AI_CHAT",
-        "created_at": now_epoch,
-        "updated_at": now_epoch,
-        "ttl": now_epoch + SESSION_TTL_SECONDS,
-    }
+    new_ttl = now_epoch + SESSION_TTL_SECONDS
 
     try:
-        table.put_item(
-            Item=item,
-            ConditionExpression="attribute_not_exists(session_id)",
+        response = table.update_item(
+            Key={"session_id": thread_id},
+            UpdateExpression=(
+                # 1. Attributes updated on EVERY interaction (rolling activity window):
+                "SET updated_at = :now, "
+                "websocket_connection_id = :conn, "
+                "#ttl = :ttl, "
+                # 2. Attributes set ONLY when the record is first created:
+                #    if_not_exists ensures we do not overwrite the creator or reset state mid-conversation
+                "actor_id = if_not_exists(actor_id, :actor), "
+                "#state = if_not_exists(#state, :default_state), "
+                "created_at = if_not_exists(created_at, :now)"
+            ),
+            # Security Guard: Allow the write if the session is brand new OR if the
+            # authenticated caller matches the existing session owner.
+            # Throws ConditionalCheckFailedException if another actor attempts to access this thread_id.
+            ConditionExpression="attribute_not_exists(actor_id) OR actor_id = :actor",
+            # Aliases for DynamoDB reserved keywords ('ttl' and 'state')
+            ExpressionAttributeNames={
+                "#ttl": "ttl",
+                "#state": "state",
+            },
+            ExpressionAttributeValues={
+                ":now": now_epoch,
+                ":conn": websocket_connection_id,
+                ":ttl": new_ttl,
+                ":actor": actor_id,
+                ":default_state": "AI_CHAT",
+            },
+            # Instructs DynamoDB to return the full record immediately after the write, eliminating the need for a follow-up get_item call.
+            ReturnValues="ALL_NEW",
         )
-        logger.info("Initialised session record for thread_id=%s", thread_id)
-        return item
+        return response.get("Attributes", {})
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-            logger.warning(
-                "Session %s was created concurrently; refreshing existing record",
+            logger.error(
+                "Session ownership violation: thread_id=%s is already claimed by another actor. "
+                "Caller actor_id=%s does not match the session owner. Connection ID: %s",
                 thread_id,
+                actor_id,
+                websocket_connection_id,
             )
-            existing_session = get_session(thread_id)
-            if existing_session:
-                return touch_session(existing_session, websocket_connection_id)
         raise
-
-
-def touch_session(
-    session: Dict[str, Any], websocket_connection_id: str
-) -> Dict[str, Any]:
-    """Refresh session updated_at, rolling TTL, and active connection ID."""
-    table = get_table()
-    now_epoch = int(time.time())
-    new_ttl = now_epoch + SESSION_TTL_SECONDS
-    thread_id = session["session_id"]
-
-    table.update_item(
-        Key={"session_id": thread_id},
-        UpdateExpression="SET updated_at = :now, websocket_connection_id = :conn, #ttl = :ttl",
-        ExpressionAttributeNames={"#ttl": "ttl"},
-        ExpressionAttributeValues={
-            ":now": now_epoch,
-            ":conn": websocket_connection_id,
-            ":ttl": new_ttl,
-        },
-    )
-
-    session["updated_at"] = now_epoch
-    session["websocket_connection_id"] = websocket_connection_id
-    session["ttl"] = new_ttl
-    return session
 
 
 def route_to_crm(
@@ -346,11 +336,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "body": "Unauthorised: Missing connection identity context",
             }
 
-        session = get_session(thread_id)
-        if session:
-            session = touch_session(session, websocket_connection_id)
-        else:
-            session = create_session(thread_id, actor_id, websocket_connection_id)
+        session = upsert_and_get_session(thread_id, actor_id, websocket_connection_id)
 
         session_state = session.get("state")
         if not session_state:

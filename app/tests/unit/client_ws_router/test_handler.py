@@ -7,9 +7,9 @@ from botocore.exceptions import ClientError
 from app.lambdas.client_ws_router.handler import (
     _require_endpoint_url,
     _resolve_endpoint_url,
-    create_session,
     get_table,
     lambda_handler,
+    upsert_and_get_session,
 )
 
 TEST_AGENT_ARN = "arn:aws:bedrock:eu-west-2:123456789012:runtime/agent-123"
@@ -75,8 +75,8 @@ def mock_table():
         table = MagicMock()
         mock_get_table.return_value = table
         # Default mock: active AI_CHAT session
-        table.get_item.return_value = {
-            "Item": {
+        table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "AI_CHAT",
                 "created_at": FIXED_EPOCH,
@@ -198,7 +198,7 @@ class TestPayloadValidation:
 
         assert response["statusCode"] == 400
         assert "Missing required payload attributes" in response["body"]
-        mock_table.get_item.assert_not_called()
+        mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
     def test_missing_thread_id_returns_bad_request(
@@ -211,7 +211,7 @@ class TestPayloadValidation:
 
         assert response["statusCode"] == 400
         assert "Missing required payload attributes" in response["body"]
-        mock_table.get_item.assert_not_called()
+        mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
     @pytest.mark.parametrize(
@@ -231,7 +231,7 @@ class TestPayloadValidation:
 
         assert response["statusCode"] == 400
         assert "Invalid 'thread_id'" in response["body"]
-        mock_table.get_item.assert_not_called()
+        mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
     def test_non_json_string_body_fails_validation_gracefully(
@@ -243,7 +243,7 @@ class TestPayloadValidation:
 
         assert response["statusCode"] == 400
         assert "Missing required payload attributes" in response["body"]
-        mock_table.get_item.assert_not_called()
+        mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
 
@@ -289,7 +289,7 @@ class TestAuthoriserContext:
 
         assert response["statusCode"] == 401
         assert "Unauthorised" in response["body"]
-        mock_table.get_item.assert_not_called()
+        mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
 
@@ -337,80 +337,57 @@ class TestAgentCoreRouting:
 
 class TestSessionManagementAndRouting:
 
-    def test_creates_session_with_audit_timestamps_when_existing_session_not_found(
+    def test_upsert_session_calls_update_item_with_atomic_expressions(
         self, base_event, valid_payload, mock_table, mock_clients, fixed_time
     ):
-        mock_table.get_item.return_value = {}
         base_event["body"] = json.dumps(valid_payload)
-
         response = lambda_handler(base_event, None)
 
         assert response["statusCode"] == 200
-        mock_table.put_item.assert_called_once()
-        mock_table.update_item.assert_not_called()
+        mock_table.update_item.assert_called_once()
+        update_args = mock_table.update_item.call_args.kwargs
 
-        put_call_kwargs = mock_table.put_item.call_args.kwargs
+        assert update_args["Key"] == {"session_id": TEST_THREAD_ID}
+        assert update_args["ReturnValues"] == "ALL_NEW"
         assert (
-            put_call_kwargs["ConditionExpression"] == "attribute_not_exists(session_id)"
+            update_args["ConditionExpression"]
+            == "attribute_not_exists(actor_id) OR actor_id = :actor"
         )
-
-        put_item = put_call_kwargs["Item"]
-        assert put_item["session_id"] == TEST_THREAD_ID
-        assert put_item["websocket_connection_id"] == TEST_CONNECTION_ID
-        assert put_item["state"] == "AI_CHAT"
-        assert put_item["created_at"] == FIXED_EPOCH
-        assert put_item["updated_at"] == FIXED_EPOCH
-        assert put_item["ttl"] == EXPECTED_TTL
+        assert update_args["ExpressionAttributeValues"][":conn"] == TEST_CONNECTION_ID
+        assert update_args["ExpressionAttributeValues"][":now"] == FIXED_EPOCH
+        assert update_args["ExpressionAttributeValues"][":ttl"] == EXPECTED_TTL
+        assert update_args["ExpressionAttributeValues"][":actor"] == "auth-actor-uuid"
+        assert update_args["ExpressionAttributeValues"][":default_state"] == "AI_CHAT"
         mock_clients["agentcore"].invoke_agent_runtime.assert_called_once()
 
-    def test_creates_session_recovers_gracefully_on_concurrent_race_condition(
-        self, mock_table, fixed_time
+    def test_upsert_session_bubbles_conditional_check_failed_exception_on_actor_mismatch(
+        self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.put_item.side_effect = ClientError(
+        mock_table.update_item.side_effect = ClientError(
             {
                 "Error": {
                     "Code": "ConditionalCheckFailedException",
                     "Message": "The conditional request failed",
                 }
             },
-            "PutItem",
+            "UpdateItem",
         )
-        mock_table.get_item.return_value = {
-            "Item": {
-                "session_id": TEST_THREAD_ID,
-                "state": "AI_CHAT",
-                "created_at": FIXED_EPOCH - 10,
-                "updated_at": FIXED_EPOCH - 10,
-            }
-        }
-
-        session = create_session(TEST_THREAD_ID, "auth-actor", TEST_CONNECTION_ID)
-
-        assert session["session_id"] == TEST_THREAD_ID
-        assert session["updated_at"] == FIXED_EPOCH
-        mock_table.update_item.assert_called_once()
-
-    def test_updates_timestamp_and_rolling_ttl_on_existing_session(
-        self, base_event, valid_payload, mock_table, mock_clients, fixed_time
-    ):
         base_event["body"] = json.dumps(valid_payload)
-        response = lambda_handler(base_event, None)
 
-        assert response["statusCode"] == 200
-        mock_table.update_item.assert_called_once()
-        mock_table.put_item.assert_not_called()
+        with pytest.raises(ClientError) as exc_info:
+            lambda_handler(base_event, None)
 
-        update_args = mock_table.update_item.call_args.kwargs
-        assert update_args["Key"] == {"session_id": TEST_THREAD_ID}
-        assert update_args["ExpressionAttributeValues"][":conn"] == TEST_CONNECTION_ID
-        assert update_args["ExpressionAttributeValues"][":now"] == FIXED_EPOCH
-        assert update_args["ExpressionAttributeValues"][":ttl"] == EXPECTED_TTL
+        assert (
+            exc_info.value.response["Error"]["Code"]
+            == "ConditionalCheckFailedException"
+        )
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
     def test_routes_to_crm_tool_and_bypasses_agentcore_when_state_is_human_chat(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "HUMAN_CHAT",
                 "crm_chat_id": "storm-interaction-987",
@@ -473,7 +450,7 @@ class TestSessionAndGatewayContextValidation:
             "state": "HUMAN_CHAT",
             **session_attrs,
         }
-        mock_table.get_item.return_value = {"Item": session_data}
+        mock_table.update_item.return_value = {"Attributes": session_data}
         base_event["body"] = json.dumps(valid_payload)
 
         response = lambda_handler(base_event, None)
@@ -485,8 +462,8 @@ class TestSessionAndGatewayContextValidation:
     def test_unrecognised_session_state_returns_500(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "INVALID_STATE",
             }
@@ -503,8 +480,8 @@ class TestSessionAndGatewayContextValidation:
     def test_session_missing_state_attribute_returns_500(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
             }
         }
@@ -549,12 +526,14 @@ class TestMissingRoutingEnvironmentVariables:
     def test_missing_crm_tool_arn_in_human_chat_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients, monkeypatch
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "HUMAN_CHAT",
                 "crm_chat_id": "storm-interaction-987",
                 "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
             }
         }
         monkeypatch.delenv("CRM_TOOL_LAMBDA_ARN", raising=False)
@@ -588,12 +567,14 @@ class TestDownstreamErrorPropagation:
     def test_crm_tool_client_error_bubbles_up(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "HUMAN_CHAT",
                 "crm_chat_id": "storm-interaction-987",
                 "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
             }
         }
         mock_clients["lambda_client"].invoke.side_effect = ClientError(
@@ -615,12 +596,14 @@ class TestDownstreamErrorPropagation:
     def test_crm_tool_function_error_crash_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "HUMAN_CHAT",
                 "crm_chat_id": "storm-interaction-987",
                 "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
             }
         }
         mock_clients["lambda_client"].invoke.return_value = {
@@ -635,12 +618,14 @@ class TestDownstreamErrorPropagation:
     def test_crm_tool_application_error_payload_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
-        mock_table.get_item.return_value = {
-            "Item": {
+        mock_table.update_item.return_value = {
+            "Attributes": {
                 "session_id": TEST_THREAD_ID,
                 "state": "HUMAN_CHAT",
                 "crm_chat_id": "storm-interaction-987",
                 "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
             }
         }
         mock_clients["lambda_client"].invoke.return_value = {

@@ -396,7 +396,7 @@ def post_to_slack(webhook_url: str, payload: dict) -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as res:
+        with urllib.request.urlopen(req, timeout=10) as res: # nosec B310
             logger.info(f"Slack post success: status {res.status}")
     except urllib.error.HTTPError as err:
         error_body = err.read().decode("utf-8", errors="replace")

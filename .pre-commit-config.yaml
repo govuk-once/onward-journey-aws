@@ -3,30 +3,43 @@
 exclude: ^frontend/static/
 
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-- repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.104.0
-  hooks:
-    - id: terraform_fmt
-      files: ^infrastructure/
-    - id: terraform_tflint
-      files: ^infrastructure/
-- repo: local
-  hooks:
-    - id: frontend-lint
-      name: ESLint (frontend)
-      entry: bash -c 'cd frontend && npm run lint'
-      language: system
-      files: ^frontend/
-      pass_filenames: false
-    - id: frontend-svelte-check
-      name: SvelteKit Check (frontend)
-      entry: bash -c 'cd frontend && npm run check'
-      language: system
-      files: ^frontend/
-      pass_filenames: false
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.104.0
+    hooks:
+      - id: terraform_fmt
+        files: ^infrastructure/
+      - id: terraform_tflint
+        files: ^infrastructure/
+
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: ESLint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-svelte-check
+        name: SvelteKit Check (frontend)
+        entry: bash -c 'cd frontend && npm run check'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        name: Bandit security linter
+        args:
+          - "--severity-level=medium"
+          - "--confidence-level=medium"
+        exclude: ^(tests/|app/tests/)
+        files: ^app/

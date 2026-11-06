@@ -11,7 +11,10 @@ locals {
     aws_cloudwatch_log_group.crm_tool.name,
     aws_cloudwatch_log_group.rds_init.name,
     aws_cloudwatch_log_group.rds_tool.name,
-    module.crm_wh_router.log_group_name
+    module.crm_wh_router.log_group_name,
+    module.client_ws_router_lambda.log_group_name,
+    module.client_ws_authorizer_lambda.log_group_name,
+    module.crm_contentguru_wh_authorizer.log_group_name,
   ]
 
   # Dynamically collects log groups for all KB sync Lambdas defined in the for_each map

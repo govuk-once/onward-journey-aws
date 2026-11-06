@@ -13,9 +13,12 @@ jobs:
   run-backend:
     uses: ./.github/workflows/backend-unit-tests.yml
 
+  run-dependency-review:
+    uses: ./.github/workflows/dependency-review.yml
+
   all-checks-passed:
     name: "All CI Checks Passed"
-    needs: [run-frontend, run-infrastructure, run-backend]
+    needs: [run-frontend, run-infrastructure, run-backend, run-dependency-review]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +36,11 @@ jobs:
 
           if [ "${{ needs.run-backend.result }}" != "success" ]; then
             echo "Backend checks failed!"
+            exit 1
+          fi
+
+          if [ "${{ needs.run-dependency-review.result }}" != "success" ]; then
+            echo "Dependency review checks failed!"
             exit 1
           fi
 

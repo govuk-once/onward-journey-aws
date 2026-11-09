@@ -5,6 +5,7 @@ export interface ConversationMessageProps {
   user?: string;
   image?: string;
   isSelf: boolean;
+  footerText?: string;
 }
 
 export type ListableConversationMessageProps = ConversationMessageProps &

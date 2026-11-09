@@ -240,6 +240,7 @@
         message: await markdownToHtml("Hi, I'm GOV.UK Chat 👋. I use AI to help you find what you need on GOV.UK."),
         user: "GOV.UK Chat",
         isSelf: false,
+        footerText: "Messages will be saved for 90 days.",
         id: uuid()
       });
     })();

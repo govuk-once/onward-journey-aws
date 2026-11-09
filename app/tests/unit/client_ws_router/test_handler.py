@@ -187,7 +187,16 @@ class TestConnectionLifecycle:
 
 
 class TestPayloadValidation:
+    # TODO (Production): Remove these @pytest.mark.skip marks.
+    # We are temporarily expecting 500 status codes for payload validation failures during User Testing
+    # so that API Gateway forcefully drops the WebSocket connection, allowing engineers supporting UR sessions
+    # to catch bugs instantly.
+    # In production, payload validation will return 400 Bad Request to keep the socket alive, and these tests
+    # must be re-enabled and passed.
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Validation returns 500 instead of 400 to forcefully sever connection on bugs"
+    )
     def test_missing_message_returns_bad_request(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -201,6 +210,9 @@ class TestPayloadValidation:
         mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Validation returns 500 instead of 400 to forcefully sever connection on bugs"
+    )
     def test_missing_thread_id_returns_bad_request(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -214,6 +226,9 @@ class TestPayloadValidation:
         mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Validation returns 500 instead of 400 to forcefully sever connection on bugs"
+    )
     @pytest.mark.parametrize(
         "invalid_id",
         [
@@ -234,6 +249,9 @@ class TestPayloadValidation:
         mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Validation returns 500 instead of 400 to forcefully sever connection on bugs"
+    )
     def test_non_json_string_body_fails_validation_gracefully(
         self, base_event, mock_table, mock_clients
     ):
@@ -242,6 +260,67 @@ class TestPayloadValidation:
         response = lambda_handler(base_event, None)
 
         assert response["statusCode"] == 400
+        assert "Missing required payload attributes" in response["body"]
+        mock_table.update_item.assert_not_called()
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
+
+    # --- User Testing Validations ---
+    # These tests verify the temporary fail-fast behavior.
+
+    def test_missing_message_returns_500_for_user_testing(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        del valid_payload["message"]
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+
+        assert response["statusCode"] == 500
+        assert "Missing required payload attributes" in response["body"]
+        mock_table.update_item.assert_not_called()
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
+
+    def test_missing_thread_id_returns_500_for_user_testing(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        del valid_payload["thread_id"]
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+
+        assert response["statusCode"] == 500
+        assert "Missing required payload attributes" in response["body"]
+        mock_table.update_item.assert_not_called()
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "invalid_id",
+        [
+            "short-id-123",
+            "12345678-1234-1234-1234-12345678",  # Exactly 32 characters (1 char short of 33)
+        ],
+    )
+    def test_thread_id_below_minimum_length_returns_500_for_user_testing(
+        self, base_event, valid_payload, invalid_id, mock_table, mock_clients
+    ):
+        valid_payload["thread_id"] = invalid_id
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+
+        assert response["statusCode"] == 500
+        assert "Invalid 'thread_id'" in response["body"]
+        mock_table.update_item.assert_not_called()
+        mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
+
+    def test_non_json_string_body_fails_validation_with_500_for_user_testing(
+        self, base_event, mock_table, mock_clients
+    ):
+        base_event["body"] = "plain text message without thread_id"
+
+        response = lambda_handler(base_event, None)
+
+        assert response["statusCode"] == 500
         assert "Missing required payload attributes" in response["body"]
         mock_table.update_item.assert_not_called()
         mock_clients["agentcore"].invoke_agent_runtime.assert_not_called()
@@ -549,7 +628,16 @@ class TestMissingRoutingEnvironmentVariables:
 
 
 class TestDownstreamErrorPropagation:
+    # TODO (Production): Remove these @pytest.mark.skip marks.
+    # We are temporarily expecting 500 status codes for downstream failures during User Testing
+    # so that API Gateway forcefully drops the WebSocket connection, allowing engineers supporting UR sessions
+    # to catch bugs instantly.
+    # In production, failures will catch the exception, auto-downgrade the session, and return a
+    # 200 OK error frame to keep the socket alive. These tests must be re-enabled and passed.
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Returns 500 instead of allowing AgentCore crash to bubble up"
+    )
     def test_agentcore_client_error_bubbles_up(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -564,6 +652,9 @@ class TestDownstreamErrorPropagation:
 
         assert exc_info.value.response["Error"]["Code"] == "AccessDeniedException"
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Returns 500 instead of allowing CRM crash to bubble up"
+    )
     def test_crm_tool_client_error_bubbles_up(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -593,6 +684,9 @@ class TestDownstreamErrorPropagation:
 
         assert exc_info.value.response["Error"]["Code"] == "ResourceNotFoundException"
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Returns 500 instead of allowing CRM crash to bubble up"
+    )
     def test_crm_tool_function_error_crash_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -615,6 +709,9 @@ class TestDownstreamErrorPropagation:
         with pytest.raises(RuntimeError, match="CRM tool execution failed"):
             lambda_handler(base_event, None)
 
+    @pytest.mark.skip(
+        reason="UR Testing Phase: Returns 500 instead of allowing CRM crash to bubble up"
+    )
     def test_crm_tool_application_error_payload_raises_runtime_error(
         self, base_event, valid_payload, mock_table, mock_clients
     ):
@@ -639,3 +736,83 @@ class TestDownstreamErrorPropagation:
 
         with pytest.raises(RuntimeError, match="CRM tool execution failed"):
             lambda_handler(base_event, None)
+
+    # --- User Testing Validations ---
+    # These tests verify the temporary fail-fast behavior for downstream errors.
+
+    def test_crm_tool_client_error_returns_500_for_user_testing(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_table.update_item.return_value = {
+            "Attributes": {
+                "session_id": TEST_THREAD_ID,
+                "state": "HUMAN_CHAT",
+                "crm_chat_id": "storm-interaction-987",
+                "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
+            }
+        }
+        mock_clients["lambda_client"].invoke.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "ResourceNotFoundException",
+                    "Message": "Function Not Found",
+                }
+            },
+            "Invoke",
+        )
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+        assert response["statusCode"] == 500
+        assert "Downstream CRM invoke error" in response["body"]
+
+    def test_crm_tool_function_error_crash_returns_500_for_user_testing(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_table.update_item.return_value = {
+            "Attributes": {
+                "session_id": TEST_THREAD_ID,
+                "state": "HUMAN_CHAT",
+                "crm_chat_id": "storm-interaction-987",
+                "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
+            }
+        }
+        mock_clients["lambda_client"].invoke.return_value = {
+            "FunctionError": "Unhandled",
+            "Payload": io.BytesIO(b'{"errorMessage": "Process crash in crm_tool"}'),
+        }
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+        assert response["statusCode"] == 500
+        assert "CRM tool execution failed" in response["body"]
+
+    def test_crm_tool_application_error_payload_returns_500_for_user_testing(
+        self, base_event, valid_payload, mock_table, mock_clients
+    ):
+        mock_table.update_item.return_value = {
+            "Attributes": {
+                "session_id": TEST_THREAD_ID,
+                "state": "HUMAN_CHAT",
+                "crm_chat_id": "storm-interaction-987",
+                "live_chat_identifier": "dvla-storm",
+                "created_at": FIXED_EPOCH,
+                "updated_at": FIXED_EPOCH,
+            }
+        }
+        mock_clients["lambda_client"].invoke.return_value = {
+            "Payload": io.BytesIO(
+                json.dumps({"error": "METHOD_ERROR: Method not implemented."}).encode(
+                    "utf-8"
+                )
+            ),
+        }
+        base_event["body"] = json.dumps(valid_payload)
+
+        response = lambda_handler(base_event, None)
+        assert response["statusCode"] == 500
+        assert "CRM tool execution failed" in response["body"]

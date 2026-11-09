@@ -9,6 +9,23 @@ Validates session state in DynamoDB:
 - AI_CHAT: Dispatches frame and session context to Bedrock AgentCore.
 - HUMAN_CHAT: Bypasses AgentCore and invokes CRM Tool Lambda directly.
 Tracks session audit timestamps (created_at, updated_at).
+
+# TODO: TACTICAL FAIL-FAST FOR USER TESTING PHASE
+# To ensure maximum observability during moderated user research, this router intentionally
+# returns HTTP 500 status codes when catching downstream integration faults or malformed payloads.
+# A 500 status instructs API Gateway to sever the client's WebSocket connection (Close Code 1011).
+#
+# This "fail fast" behavior ensures that engineers monitoring Slack immediately
+# spot bugs via connection drops, rather than masking failures behind silent frontend timeouts or
+# getting users trapped in broken conversational states.
+#
+# FOR PRODUCTION:
+# This approach must be refactored before integration with the parent chat application:
+# 1. The API Gateway `$default` route must be configured with a Route Response integration.
+# 2. Exceptions and validation errors caught here must return a `200 OK` (to keep the socket alive)
+#    along with a standardised JSON error frame in the body (e.g. `{"type": "error", "message": "..."}`).
+# 3. For downstream CRM failures during `HUMAN_CHAT`, the session state must be explicitly
+#    auto-downgraded in DynamoDB back to `AI_CHAT` before returning the error frame to the user.
 """
 
 import json
@@ -84,11 +101,10 @@ def upsert_and_get_session(
         Atomically upsert session state in DynamoDB and return the latest attributes.
 
         Uses an atomic `update_item` operation:
-    - If the thread_id does not exist, DynamoDB initialises a new session item.
-    - If the thread_id already exists, DynamoDB updates the timestamps, connection ID,
-          and rolling TTL without resetting existing conversational state (e.g. HUMAN_CHAT).
-    - Guarantees tenancy isolation by preventing any actor from writing to a session
-          owned by another actor.
+            - If the thread_id does not exist, DynamoDB initialises a new session item.
+            - If the thread_id already exists, DynamoDB updates the timestamps, connection ID,
+                and rolling TTL without resetting existing conversational state (e.g. HUMAN_CHAT).
+    - Guarantees tenancy isolation by preventing any actor from writing to a session owned by another actor.
     """
     table = get_table()
     now_epoch = int(time.time())
@@ -110,7 +126,8 @@ def upsert_and_get_session(
             ),
             # Security Guard: Allow the write if the session is brand new OR if the
             # authenticated caller matches the existing session owner.
-            # Throws ConditionalCheckFailedException if another actor attempts to access this thread_id.
+            # Throws ConditionalCheckFailedException if another actor attempts to access this thread_id,
+            # which intentionally bubbles up to crash the Lambda and sever the attacker's WebSocket connection.
             ConditionExpression="attribute_not_exists(actor_id) OR actor_id = :actor",
             # Aliases for DynamoDB reserved keywords ('ttl' and 'state')
             ExpressionAttributeNames={
@@ -177,23 +194,42 @@ def route_to_crm(
         "live_chat_identifier": live_chat_identifier,
     }
 
-    response = LAMBDA_CLIENT.invoke(
-        FunctionName=crm_tool_arn,
-        InvocationType="RequestResponse",
-        Payload=json.dumps(payload).encode("utf-8"),
-    )
-
-    result = json.loads(response["Payload"].read())
-
-    # If the downstream Lambda crashed or returned an error, fail fast
-    if "FunctionError" in response or "error" in result:
-        error_detail = result.get("error") or result.get(
-            "errorMessage", "Unknown error"
+    try:
+        response = LAMBDA_CLIENT.invoke(
+            FunctionName=crm_tool_arn,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
         )
+
+        result = json.loads(response["Payload"].read())
+
+        if "FunctionError" in response or "error" in result:
+            error_detail = result.get("error") or result.get(
+                "errorMessage", "Unknown error"
+            )
+            logger.error(
+                "CRM tool execution failed for thread_id=%s: %s",
+                thread_id,
+                error_detail,
+            )
+            # TODO (Production Refactor): See top-level docstring. Replace 500 with session auto-downgrade and 200 error frame.
+            return {
+                "statusCode": 500,
+                "body": f"CRM tool execution failed: {error_detail}",
+            }
+
+    except ClientError as e:
         logger.error(
-            "CRM tool execution failed for thread_id=%s: %s", thread_id, error_detail
+            "Failed to invoke CRM tool for thread_id=%s: %s",
+            thread_id,
+            str(e),
+            exc_info=True,
         )
-        raise RuntimeError(f"CRM tool execution failed: {error_detail}")
+        # TODO (Production Refactor): See top-level docstring. Replace 500 with session auto-downgrade and 200 error frame.
+        return {
+            "statusCode": 500,
+            "body": f"Downstream CRM invoke error: {str(e)}",
+        }
 
     logger.info(
         "Bypassed AI agent: forwarded message directly to CRM for thread_id=%s",
@@ -299,27 +335,29 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         thread_id = body.get("thread_id")
 
         if not user_message or not thread_id:
-            logger.warning(
+            logger.error(
                 "Validation failed for websocket_connection_id=%s: missing required fields (message=%s, thread_id=%s)",
                 websocket_connection_id,
                 bool(user_message),
                 bool(thread_id),
             )
+            # TODO (Production Refactor): See top-level docstring. Replace 500 with 200 JSON error frame.
             return {
-                "statusCode": 400,
+                "statusCode": 500,
                 "body": "Missing required payload attributes: 'message' or 'thread_id'",
             }
 
         thread_id = str(thread_id)
 
         if len(thread_id) < 33:
-            logger.warning(
+            logger.error(
                 "Validation failed for websocket_connection_id=%s: thread_id length (%s) is under minimum 33 chars",
                 websocket_connection_id,
                 len(thread_id),
             )
+            # TODO (Production Refactor): See top-level docstring. Replace 500 with 200 JSON error frame.
             return {
-                "statusCode": 400,
+                "statusCode": 500,
                 "body": "Invalid 'thread_id': Must be at least 33 characters long (e.g. UUIDv4 string)",
             }
 

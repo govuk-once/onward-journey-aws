@@ -14,7 +14,7 @@
   let isConnecting: boolean = $state(false);
   let messages: ListableConversationMessageProps[] = $state([]);
   let showTypingIndicator: boolean = $state(false);
-  let responderName: string = $state("GOV.UK AI");
+  let responderName: string = $state("GOV.UK Chat");
   let threadId = uuid();
   let genesysClient: GenesysClient | null = null;
   let orchestrator: OrchestratorClient | null = null;
@@ -41,7 +41,7 @@
       id: uuid()
     }];
 
-    responderName = "GOV.UK AI";
+    responderName = "GOV.UK Chat";
 
     // Create the placeholder.
     const aiMessageId = uuid();
@@ -49,7 +49,7 @@
 
     messages = [...messages, {
       message: "",
-      user: "GOV.UK AI",
+      user: "GOV.UK Chat",
       isSelf: false,
       id: aiMessageId
     }];
@@ -237,8 +237,8 @@
   onMount(() => {
     (async () => {
       messages.push({
-        message: await markdownToHtml("Hello! I'm the GOV.UK Onward Journey AI. How can I help you today?"),
-        user: "GOV.UK AI",
+        message: await markdownToHtml("Hi, I'm GOV.UK Chat 👋. I use AI to help you find what you need on GOV.UK."),
+        user: "GOV.UK Chat",
         isSelf: false,
         id: uuid()
       });

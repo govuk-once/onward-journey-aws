@@ -27,7 +27,7 @@
           <span class="app-c-conversation-message__loading-text">
             {#if user === 'System'}
               Connecting you to a human advisor
-            {:else if user === 'GOV.UK AI'}
+            {:else if user === 'GOV.UK Chat'}
               Thinking
             {:else}
               Typing

@@ -143,6 +143,32 @@ resource "aws_security_group" "crm_contentguru_wh_authorizer" {
   }
 }
 
+# CLIENT WEBSOCKET ROUTER SECURITY GROUP
+# Group for the client WebSocket router Lambda.
+resource "aws_security_group" "client_ws_router" {
+  name        = "${var.environment}-client-ws-router-sg"
+  description = "Security group for the Client WebSocket Router Lambda"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-client-ws-router-sg"
+    Component = "websocket-client"
+  }
+}
+
+# CLIENT WEBSOCKET AUTHORISER SECURITY GROUP
+# Group for the client WebSocket token authoriser Lambda.
+resource "aws_security_group" "client_ws_authorizer" {
+  name        = "${var.environment}-client-ws-authorizer-sg"
+  description = "Security group for the Client WebSocket token authoriser Lambda"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-client-ws-authorizer-sg"
+    Component = "websocket-client"
+  }
+}
+
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
@@ -231,12 +257,30 @@ resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_endpoints" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow Content Guru authoriser to reach SecretsManager endpoint"
+  description                  = "Allow Content Guru authorizer to reach SecretsManager endpoint"
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
   security_group_id            = aws_security_group.secrets_manager.id
   referenced_security_group_id = aws_security_group.crm_contentguru_wh_authorizer.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_client_authorizer_to_secrets_manager" {
+  description                  = "Allow Client WebSocket authorizer to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.client_ws_authorizer.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_client_router_to_endpoints" {
+  description                  = "Allow Client Router to reach Bedrock AgentCore endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.client_ws_router.id
 }
 
 # ======================= EGRESS RULES (INTERNAL) ===========================================
@@ -336,9 +380,27 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
 }
 
 resource "aws_vpc_security_group_egress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow outbound traffic from Content Guru authoriser to Secrets Manager"
+  description                  = "Allow outbound traffic from Content Guru authorizer to Secrets Manager"
   security_group_id            = aws_security_group.crm_contentguru_wh_authorizer.id
   referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_client_authorizer_to_secrets_manager" {
+  description                  = "Allow outbound traffic from Client WebSocket authorizer to Secrets Manager"
+  security_group_id            = aws_security_group.client_ws_authorizer.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_client_router_to_vpc_endpoints" {
+  description                  = "Allow outbound traffic from Client Router to VPC endpoints"
+  security_group_id            = aws_security_group.client_ws_router.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
@@ -378,4 +440,19 @@ resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_internet_ht
   from_port         = 443
   to_port           = 443
   cidr_ipv4         = "0.0.0.0/0"
+}
+
+# Fetch the official AWS-managed DynamoDB prefix list
+data "aws_prefix_list" "dynamodb" {
+  name = "com.amazonaws.${var.aws_region}.dynamodb"
+}
+
+# Allow outbound traffic from Client Router to DynamoDB Gateway Endpoint
+resource "aws_vpc_security_group_egress_rule" "allow_client_router_to_dynamodb" {
+  description       = "Allow outbound HTTPS traffic from Client Router to DynamoDB"
+  security_group_id = aws_security_group.client_ws_router.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
 }

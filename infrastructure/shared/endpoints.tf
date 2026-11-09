@@ -6,7 +6,7 @@
 data "aws_region" "current" {}
 
 # ==============================================================================
-# 1. S3 GATEWAY ENDPOINT
+# S3 GATEWAY ENDPOINT
 # ==============================================================================
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
@@ -31,7 +31,31 @@ resource "aws_vpc_endpoint_route_table_association" "s3_private" {
 }
 
 # ==============================================================================
-# 2. SHARED INTERFACE ENDPOINTS
+# DYNAMODB GATEWAY ENDPOINT
+# ==============================================================================
+resource "aws_vpc_endpoint" "dynamodb" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+
+  tags = {
+    Name      = "shared-dynamodb-gateway"
+    Component = "vpc-endpoints"
+  }
+}
+
+resource "aws_vpc_endpoint_route_table_association" "dynamodb_main" {
+  vpc_endpoint_id = aws_vpc_endpoint.dynamodb.id
+  route_table_id  = aws_vpc.main.main_route_table_id
+}
+
+resource "aws_vpc_endpoint_route_table_association" "dynamodb_private" {
+  vpc_endpoint_id = aws_vpc_endpoint.dynamodb.id
+  route_table_id  = aws_route_table.private.id
+}
+
+# ==============================================================================
+# SHARED INTERFACE ENDPOINTS
 # ==============================================================================
 resource "aws_security_group" "shared_endpoints_sg" {
   name        = "shared-endpoints-sg"

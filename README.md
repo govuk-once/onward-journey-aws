@@ -142,6 +142,7 @@ terraform apply
 **4. Set Passwords in AWS Console**
 * **Database Password:** Navigate to **AWS Console** -> **Secrets Manager**. Locate `${var.environment}-dept-contacts-db-password` and set the **plaintext** value. (Ensure no trailing newlines or spaces are included).
 * **CRM Secrets:** Navigate to **Secrets Manager** and set the key values for `${var.environment}/crm-creds/*`.
+- **WebSocket Auth Tokens:** Locate `${var.environment}/websocket/auth-tokens`. The initial deployment generates a secure, random UUID token and mapped `actor_id` to prevent hardcoded credentials in source control. The secret is stored as a JSON object where the **key** is the WebSocket auth token (retrieve this string to use in your local frontend `.env` or Postman connection queries) and the **value** is the corresponding `actor_id` used by the backend.
 
 **5. Final Deployment**
 Run the apply again to provision the RDS instance and trigger the Seeder.

@@ -40,7 +40,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "dataset_cleanup" {
 
     # Cleans up the old versions kept by versioning after 30 days
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days           = 30
+      newer_noncurrent_versions = 3
+    }
+
+    expiration {
+      expired_object_delete_marker = true
     }
   }
 }
@@ -133,14 +138,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "infrastructure_cleanup" {
       prefix = "builds/"
     }
 
-    # Cleans up the current version of the build zip after 30 days
-    expiration {
-      days = 30
-    }
-
     # Cleans up the old versions kept by versioning after 30 days
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days           = 30
+      newer_noncurrent_versions = 3
+    }
+
+    expiration {
+      expired_object_delete_marker = true
     }
   }
 }

@@ -79,7 +79,7 @@ resource "null_resource" "build_and_deploy_frontend" {
       npm ci
 
       # Build the app with the Orchestrator URL and Cognito pool injected
-      export PUBLIC_ORCHESTRATOR_URL="${module.client_ws_gateway.wss_url}"
+      export PUBLIC_CLIENT_WEBSOCKET_URL="${module.client_ws_gateway.wss_url}"
       export PUBLIC_COGNITO_IDENTITY_POOL_ID="${aws_cognito_identity_pool.frontend_anon.id}"
       export PUBLIC_AWS_REGION="${var.aws_region}"
       npm run build

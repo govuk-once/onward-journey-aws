@@ -26,7 +26,7 @@ cp .env.example .env
 Populate the values using the outputs from a successful `terraform apply` in `infrastructure/services`:
 
 * `PUBLIC_COGNITO_IDENTITY_POOL_ID`: Authenticates the client connection to the orchestrator (found in Terraform outputs).
-* `PUBLIC_ORCHESTRATOR_URL`: The WebSocket endpoint for the backend orchestration layer. Because connection handshakes require authorisation, you must append an `auth_token` query parameter to this URL.
+* `PUBLIC_CLIENT_WEBSOCKET_URL`: The WebSocket endpoint for the backend orchestration layer. Because connection handshakes require authorisation, you must append an `auth_token` query parameter to this URL.
 
 #### Sourcing the Authorizer Token
 
@@ -46,11 +46,11 @@ A default token-to-actor mapping is generated as UUIDs during initial deployment
 
    > **Note on editing and rotation:** Terraform generates these initial UUIDs purely to bootstrap deployment and ignores subsequent changes (`ignore_changes = [secret_string]`). You can freely edit this JSON in Secrets Manager to rotate tokens, update actor mappings, or add additional token/actor pairs for other clients and automated tests without Terraform overwriting your changes.
 
-4. Copy the **key** string and append it as the `auth_token` query parameter to `PUBLIC_ORCHESTRATOR_URL` in `.env`.
+4. Copy the **key** string and append it as the `auth_token` query parameter to `PUBLIC_CLIENT_WEBSOCKET_URL` in `.env`.
 
    **Example format:**
    ```env
-   PUBLIC_ORCHESTRATOR_URL=wss://<api_id>[.execute-api.eu-west-2.amazonaws.com/](https://.execute-api.eu-west-2.amazonaws.com/)<env_prefix>?auth_token=<your-token-uuid>
+   PUBLIC_CLIENT_WEBSOCKET_URL=wss://<api_id>[.execute-api.eu-west-2.amazonaws.com/](https://.execute-api.eu-west-2.amazonaws.com/)<env_prefix>?auth_token=<your-token-uuid>
    ```
 
    Replace all three placeholders with your actual deployment values:

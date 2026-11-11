@@ -72,6 +72,11 @@ class MockWebSocket {
         this.readyState = MockWebSocket.OPEN;
         this.dispatchEvent("open");
     }
+    // Helper for tests: simulate WebSocket closure
+    emitClose(code: number, reason: string = "") {
+        this.readyState = MockWebSocket.CLOSED;
+        this.dispatchEvent("close", { code, reason });
+    }
 }
 // ---------------------------------------------------------------------------
 
@@ -82,6 +87,7 @@ describe("OrchestratorClient (WebSocket)", () => {
     const mockUrl = "wss://api.example.com/ws";
     const mockPoolId = "eu-west-2:00000000-0000-0000-0000-000000000000";
     const mockRegion = "eu-west-2";
+    const mockAuthToken = "mock-auth-token"
 
     beforeEach(() => {
         vi.useFakeTimers();
@@ -90,7 +96,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         // Replace global WebSocket with mock
         global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
-        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion);
+        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, mockAuthToken);
 
         callbacks = {
             onChunk: vi.fn<(chunk: string) => void>(),
@@ -112,11 +118,10 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(MockWebSocket.instances.length).toBe(1);
         const ws = MockWebSocket.instances[0];
 
-        expect(ws.url).toBe(mockUrl);
+        expect(ws.url).toBe(`${mockUrl}?auth_token=${mockAuthToken}`);
         expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
             message: "hello",
             thread_id: "thread-1234567890-1234567890-123456",
-            actor_id: "test"
         }));
     });
 
@@ -140,7 +145,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         global.WebSocket = mockWsConstructor as unknown as typeof WebSocket;
 
-        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion);
+        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, mockAuthToken);
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
 
         const ws = MockWebSocket.instances[0];
@@ -152,7 +157,6 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
             message: "hello",
             thread_id: "thread-1234567890-1234567890-123456",
-            actor_id: "test"
         }));
 
         global.WebSocket = originalConstructor;
@@ -228,10 +232,12 @@ describe("OrchestratorClient (WebSocket)", () => {
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
         const ws = MockWebSocket.instances[0];
 
-        const error = new Error("WebSocket connection error");
+        const error = new Event("error");
         ws.emitError(error);
 
-        expect(callbacks.onError).toHaveBeenCalledWith(error);
+        expect(callbacks.onError).toHaveBeenCalledWith(
+            expect.objectContaining({ message: "WebSocket connection failed." })
+        );
         expect(callbacks.onResponse).not.toHaveBeenCalled();
 
         consoleSpy.mockRestore();
@@ -318,5 +324,55 @@ describe("OrchestratorClient (WebSocket)", () => {
         expect(callbacks.onResponse).toHaveBeenCalledTimes(2);
         expect(callbacks.onResponse).toHaveBeenNthCalledWith(1, "Response 1");
         expect(callbacks.onResponse).toHaveBeenNthCalledWith(2, "Response 2");
+    });
+
+    it("should throw a configuration error if auth token is missing", () => {
+        expect(() => {
+            new OrchestratorClient(mockUrl, mockPoolId, mockRegion, "");
+        }).toThrow("Configuration error: PUBLIC_WEBSOCKET_AUTH_TOKEN is missing.");
+    });
+
+    it("should trigger onError when WebSocket closes abnormally (e.g. 401/403 token rejection)", async () => {
+        const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        await client.sendMessage("hello", "thread-123", callbacks);
+        const ws = MockWebSocket.instances[0];
+
+        // Simulate API Gateway rejecting the connection before it opens
+        ws.emitClose(1008, "Policy Violation");
+
+        expect(callbacks.onError).toHaveBeenCalledWith(
+            expect.objectContaining({ message: "WebSocket closed unexpectedly (Code: 1008)" })
+        );
+        expect(callbacks.onResponse).not.toHaveBeenCalled();
+
+        consoleSpy.mockRestore();
+    });
+
+    it("should safely redact the auth token from synchronous error messages", async () => {
+        // Temporarily override the WebSocket mock with a class that throws on instantiation
+        const originalWebSocket = global.WebSocket;
+
+        class MockFailingWebSocket {
+            constructor(url: string) {
+                throw new Error(`Failed to connect to ${url}`);
+            }
+        }
+
+        global.WebSocket = MockFailingWebSocket as unknown as typeof WebSocket;
+
+        const badClient = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, "SECRET-TOKEN-123");
+
+        await badClient.sendMessage("hello", "thread-123", callbacks);
+
+        // Verify the UI callback received an error, and the token was scrubbed
+        const capturedError = vi.mocked(callbacks.onError).mock.calls[0][0] as Error;
+
+        expect(capturedError.message).not.toContain("SECRET-TOKEN-123");
+        expect(capturedError.message).toContain("***REDACTED***");
+        expect(capturedError.message).toContain("Failed to connect to");
+
+        // Clean up
+        global.WebSocket = originalWebSocket;
     });
 });

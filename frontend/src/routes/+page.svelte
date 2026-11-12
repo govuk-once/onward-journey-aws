@@ -95,8 +95,12 @@
         // No action needed for AI
       },
 
-      onError: (err) => {
+      onError: async (err) => {
         console.error("Orchestrator error:", err);
+        const errorHtml = await markdownToHtml(`**Connection Error:** Unable to reach the AI service. Please try again later.`);
+        messages = messages.map(m =>
+          m.id === aiMessageId ? { ...m, message: errorHtml } : m
+        );
       }
     });
   };

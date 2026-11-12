@@ -373,4 +373,44 @@ describe("OrchestratorClient (WebSocket)", () => {
         // Clean up
         global.WebSocket = originalWebSocket;
     });
+
+    it("should nullify socket and clean up open listener on handshake rejection", async () => {
+        const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        // Force socket state to CONNECTING
+        const originalConstructor = global.WebSocket;
+        const mockWsConstructor = vi.fn(function(url: unknown) {
+            const ws = new MockWebSocket(url as string);
+            ws.readyState = MockWebSocket.CONNECTING; // 0
+            return ws;
+        });
+
+        Object.assign(mockWsConstructor, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
+        global.WebSocket = mockWsConstructor as unknown as typeof WebSocket;
+
+        await client.sendMessage("hello", "thread-123", callbacks);
+        const ws = MockWebSocket.instances[0];
+
+        // Ensure the open listener was attached during CONNECTING state
+        // @ts-expect-error accessing private property for test verification
+        expect(ws.listeners["open"].length).toBe(1);
+
+        // Simulate API Gateway rejecting the connection before it opens
+        ws.emitClose(1008, "Policy Violation");
+        await Promise.resolve(); // flush microtasks
+
+        // Prove the open listener was cleaned up
+        // @ts-expect-error accessing private property for test verification
+        expect(ws.listeners["open"].length).toBe(0);
+
+        // Prove the socket was nullified so a new message forces a fresh connection
+        await client.sendMessage("retry message", "thread-123", callbacks);
+
+        // If it was nullified, a NEW instance of MockWebSocket should have been created
+        expect(MockWebSocket.instances.length).toBe(2);
+
+        // Clean up
+        global.WebSocket = originalConstructor;
+        consoleSpy.mockRestore();
+    });
 });

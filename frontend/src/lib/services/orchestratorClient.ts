@@ -38,6 +38,7 @@ export class OrchestratorClient {
 
             let fullText = "";
             let streamTimeout: ReturnType<typeof setTimeout>;
+            let openHandler: (() => void) | null = null;
 
             // Helper to cleanly finalize a message
             const finalizeMessage = async (isError = false) => {
@@ -55,6 +56,15 @@ export class OrchestratorClient {
                     this.ws.removeEventListener("message", messageHandler);
                     this.ws.removeEventListener("error", errorHandler);
                     this.ws.removeEventListener("close", closeHandler);
+
+                    if (openHandler) {
+                        this.ws.removeEventListener("open", openHandler);
+                    }
+
+                    // Destroy the dead socket reference so the next message triggers a fresh connection
+                    if (isError) {
+                        this.ws = null;
+                    }
                 }
             };
 
@@ -136,10 +146,11 @@ export class OrchestratorClient {
             // If the socket is still opening, queue the send. Otherwise, send immediately.
             if (this.ws.readyState === WebSocket.CONNECTING) {
                 // Use { once: true } so this listener automatically deletes itself after firing
-                this.ws.addEventListener("open", () => {
+                openHandler = () => {
                     console.log("[WebSocket] Connected successfully.");
                     this.ws!.send(payload);
-                }, { once: true });
+                };
+                this.ws.addEventListener("open", openHandler, { once: true });
             } else if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(payload);
             } else {

@@ -21,15 +21,26 @@
 
   const CONNECTING_MESSAGE_ID = "connecting-to-human-advisor";
 
-  const orchestratorUrl = PUBLIC_CLIENT_WEBSOCKET_URL;
-  const identityPoolId = PUBLIC_COGNITO_IDENTITY_POOL_ID;
-  const awsRegion = PUBLIC_AWS_REGION;
-  const authToken = PUBLIC_WEBSOCKET_AUTH_TOKEN;
+  const config = {
+    "Orchestrator URL": PUBLIC_CLIENT_WEBSOCKET_URL,
+    "Cognito Pool ID": PUBLIC_COGNITO_IDENTITY_POOL_ID,
+    "AWS Region": PUBLIC_AWS_REGION,
+    "Auth Token": PUBLIC_WEBSOCKET_AUTH_TOKEN
+  };
 
-  if (!orchestratorUrl || !identityPoolId || !awsRegion || !authToken) {
-    console.warn("Orchestrator configuration incomplete (URL, Auth Token, Cognito Pool ID, or AWS Region missing). AI Chat will not be available.");
+  const missingConfig = Object.entries(config)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missingConfig.length > 0) {
+    console.warn(`Orchestrator configuration incomplete (${missingConfig.join(", ")} missing). AI Chat will not be available.`);
   } else {
-    orchestrator = new OrchestratorClient(orchestratorUrl, identityPoolId, awsRegion, authToken);
+    orchestrator = new OrchestratorClient(
+      PUBLIC_CLIENT_WEBSOCKET_URL as string,
+      PUBLIC_COGNITO_IDENTITY_POOL_ID as string,
+      PUBLIC_AWS_REGION as string,
+      PUBLIC_WEBSOCKET_AUTH_TOKEN as string
+    );
   }
 
   const handleAiMessage = async (userInput: string) => {

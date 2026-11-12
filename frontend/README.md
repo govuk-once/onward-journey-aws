@@ -23,8 +23,8 @@ Create a local `.env` file using the template:
 cp .env.example .env
 ```
 
-* `PUBLIC_CLIENT_WEBSOCKET_URL`: The WebSocket endpoint for the backend. Populate this value using the output from a successful `terraform apply` in `infrastructure/services`:
-* `PUBLIC_WEBSOCKET_AUTH_TOKEN`: Use the key of the JSON object stored as a secret at `${var.environment}/websocket/auth-tokens`.
+* `PUBLIC_CLIENT_WEBSOCKET_URL`: The WebSocket endpoint for the backend. Populate this value using the output from a successful `terraform apply` in `infrastructure/services`.
+* `PUBLIC_WEBSOCKET_AUTH_TOKEN`: Use the key of the JSON object stored as a secret at `${var.environment}/websocket/auth-tokens` (see below).
 
 #### Sourcing the Authorizer Token
 

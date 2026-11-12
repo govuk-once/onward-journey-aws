@@ -150,7 +150,7 @@ export class OrchestratorClient {
             let safeErrorMessage = "An unexpected error occurred.";
             if (error instanceof Error) {
                 // Redact token if it happens to be in the error message
-                safeErrorMessage = error.message.replace(this.authToken, "***REDACTED***");
+                safeErrorMessage = error.message.replaceAll(this.authToken, "***REDACTED***");
             }
 
             callbacks.onError(new Error(safeErrorMessage));

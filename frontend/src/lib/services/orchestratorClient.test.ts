@@ -353,20 +353,20 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         class MockFailingWebSocket {
             constructor(url: string) {
-                throw new Error(`Failed to connect to ${url}`);
+                throw new Error(`Failed to connect to ${url} with token ${mockAuthToken}`);
             }
         }
 
         global.WebSocket = MockFailingWebSocket as unknown as typeof WebSocket;
 
-        const badClient = new OrchestratorClient(mockUrl, "SECRET-TOKEN-123");
+        const badClient = new OrchestratorClient(mockUrl, mockAuthToken);
 
         await badClient.sendMessage("hello", "thread-123", callbacks);
 
         // Verify the UI callback received an error, and the token was scrubbed
         const capturedError = vi.mocked(callbacks.onError).mock.calls[0][0] as Error;
 
-        expect(capturedError.message).not.toContain("SECRET-TOKEN-123");
+        expect(capturedError.message).not.toContain(mockAuthToken);
         expect(capturedError.message).toContain("***REDACTED***");
         expect(capturedError.message).toContain("Failed to connect to");
 

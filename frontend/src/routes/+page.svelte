@@ -8,7 +8,7 @@
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
   import { onMount } from "svelte";
-  import { PUBLIC_CLIENT_WEBSOCKET_URL, PUBLIC_WEBSOCKET_AUTH_TOKEN, PUBLIC_COGNITO_IDENTITY_POOL_ID, PUBLIC_AWS_REGION } from "$app/env/public";
+  import { PUBLIC_CLIENT_WEBSOCKET_URL, PUBLIC_WEBSOCKET_AUTH_TOKEN } from "$app/env/public";
 
   let connectionType: 'AI' | 'HUMAN' = $state('AI');
   let isConnecting: boolean = $state(false);
@@ -23,8 +23,6 @@
 
   const config = {
     "Orchestrator URL": PUBLIC_CLIENT_WEBSOCKET_URL,
-    "Cognito Pool ID": PUBLIC_COGNITO_IDENTITY_POOL_ID,
-    "AWS Region": PUBLIC_AWS_REGION,
     "Auth Token": PUBLIC_WEBSOCKET_AUTH_TOKEN
   };
 
@@ -37,8 +35,6 @@
   } else {
     orchestrator = new OrchestratorClient(
       PUBLIC_CLIENT_WEBSOCKET_URL as string,
-      PUBLIC_COGNITO_IDENTITY_POOL_ID as string,
-      PUBLIC_AWS_REGION as string,
       PUBLIC_WEBSOCKET_AUTH_TOKEN as string
     );
   }

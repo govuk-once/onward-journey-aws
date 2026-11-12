@@ -23,10 +23,8 @@ Create a local `.env` file using the template:
 cp .env.example .env
 ```
 
-Populate the values using the outputs from a successful `terraform apply` in `infrastructure/services`:
-
-* `PUBLIC_COGNITO_IDENTITY_POOL_ID`: Authenticates the client connection to the orchestrator (found in Terraform outputs).
-* `PUBLIC_CLIENT_WEBSOCKET_URL`: The WebSocket endpoint for the backend orchestration layer. Because connection handshakes require authorisation, you must append an `auth_token` query parameter to this URL.
+* `PUBLIC_CLIENT_WEBSOCKET_URL`: The WebSocket endpoint for the backend. Populate this value using the output from a successful `terraform apply` in `infrastructure/services`:
+* `PUBLIC_WEBSOCKET_AUTH_TOKEN`: Use the key of the JSON object stored as a secret at `${var.environment}/websocket/auth-tokens`.
 
 #### Sourcing the Authorizer Token
 

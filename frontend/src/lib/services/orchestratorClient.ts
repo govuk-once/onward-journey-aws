@@ -14,25 +14,16 @@ export interface OrchestratorCallbacks {
 
 export class OrchestratorClient {
     private url: string;
-    private identityPoolId: string;
-    private region: string;
     private authToken: string;
     private ws: WebSocket | null = null;
 
-    constructor(url: string, identityPoolId: string, region: string, authToken: string) {
+    constructor(url: string, authToken: string) {
         if (!url) throw new Error("Configuration error: url is missing.");
-        if (!identityPoolId) throw new Error("Configuration error: identityPoolId is missing.");
-        if (!region) throw new Error("Configuration error: region is missing.");
         if (!authToken) {
             throw new Error("Configuration error: PUBLIC_WEBSOCKET_AUTH_TOKEN is missing.");
         }
 
-        // TODO: these parameters are retained so Svelte component instantiation doesn't break.
-        // They will potentially be useful when for Subtask 6 and implementation of
-        // presigned WSS URLs or passing Cognito tokens during the socket connection phase.
         this.url = url;
-        this.identityPoolId = identityPoolId;
-        this.region = region;
         this.authToken = authToken;
     }
 

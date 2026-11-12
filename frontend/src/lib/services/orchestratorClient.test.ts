@@ -85,8 +85,6 @@ describe("OrchestratorClient (WebSocket)", () => {
     let callbacks: OrchestratorCallbacks;
 
     const mockUrl = "wss://api.example.com/ws";
-    const mockPoolId = "eu-west-2:00000000-0000-0000-0000-000000000000";
-    const mockRegion = "eu-west-2";
     const mockAuthToken = "mock-auth-token"
 
     beforeEach(() => {
@@ -96,7 +94,7 @@ describe("OrchestratorClient (WebSocket)", () => {
         // Replace global WebSocket with mock
         global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
-        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, mockAuthToken);
+        client = new OrchestratorClient(mockUrl, mockAuthToken);
 
         callbacks = {
             onChunk: vi.fn<(chunk: string) => void>(),
@@ -145,7 +143,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         global.WebSocket = mockWsConstructor as unknown as typeof WebSocket;
 
-        client = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, mockAuthToken);
+        client = new OrchestratorClient(mockUrl, mockAuthToken);
         await client.sendMessage("hello", "thread-1234567890-1234567890-123456", callbacks);
 
         const ws = MockWebSocket.instances[0];
@@ -328,7 +326,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
     it("should throw a configuration error if auth token is missing", () => {
         expect(() => {
-            new OrchestratorClient(mockUrl, mockPoolId, mockRegion, "");
+            new OrchestratorClient(mockUrl, "");
         }).toThrow("Configuration error: PUBLIC_WEBSOCKET_AUTH_TOKEN is missing.");
     });
 
@@ -361,7 +359,7 @@ describe("OrchestratorClient (WebSocket)", () => {
 
         global.WebSocket = MockFailingWebSocket as unknown as typeof WebSocket;
 
-        const badClient = new OrchestratorClient(mockUrl, mockPoolId, mockRegion, "SECRET-TOKEN-123");
+        const badClient = new OrchestratorClient(mockUrl, "SECRET-TOKEN-123");
 
         await badClient.sendMessage("hello", "thread-123", callbacks);
 

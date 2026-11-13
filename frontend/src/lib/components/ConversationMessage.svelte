@@ -1,6 +1,13 @@
 <script lang="ts">
   import type { ConversationMessageProps } from "$lib/types/ConversationMessage"
-  let { message, user, image, isSelf = true }: ConversationMessageProps = $props();
+
+  let {
+    message,
+    user,
+    image,
+    isSelf = true,
+    footerText
+  }: ConversationMessageProps = $props();
 </script>
 
 <li class="app-c-conversation-message">
@@ -20,14 +27,14 @@
       {/if}
       <div class="govuk-body-m govuk-!-margin-bottom-0">
         {#if message}
-         <!-- the html passed here is sanitised -->
+          <!-- the html passed here is sanitised -->
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html message}
         {:else}
           <span class="app-c-conversation-message__loading-text">
             {#if user === 'System'}
               Connecting you to a human advisor
-            {:else if user === 'GOV.UK AI'}
+            {:else if user === 'GOV.UK Chat'}
               Thinking
             {:else}
               Typing
@@ -36,6 +43,11 @@
           </span>
         {/if}
       </div>
+      {#if footerText}
+        <div class="app-c-conversation-message__footer govuk-body-s">
+          {footerText}
+        </div>
+      {/if}
     </div>
   </div>
 </li>

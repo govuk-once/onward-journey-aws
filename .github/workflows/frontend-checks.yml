@@ -14,9 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PUBLIC_ORCHESTRATOR_URL: "https://dummy-url.com"
-      PUBLIC_COGNITO_IDENTITY_POOL_ID: "dummy-pool-id"
-      PUBLIC_AWS_REGION: "eu-west-2"
+      PUBLIC_CLIENT_WEBSOCKET_URL: "https://dummy-url.com"
+      PUBLIC_WEBSOCKET_AUTH_TOKEN: "dummy-auth-token"
 
     steps:
       - name: Checkout code

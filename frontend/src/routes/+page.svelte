@@ -8,7 +8,7 @@
   import { OrchestratorClient } from "$lib/services/orchestratorClient";
   import { markdownToHtml } from "$lib/utils/markdown";
   import { onMount } from "svelte";
-  import { PUBLIC_ORCHESTRATOR_URL, PUBLIC_COGNITO_IDENTITY_POOL_ID, PUBLIC_AWS_REGION } from "$app/env/public";
+  import { PUBLIC_CLIENT_WEBSOCKET_URL, PUBLIC_WEBSOCKET_AUTH_TOKEN } from "$app/env/public";
 
   let connectionType: 'AI' | 'HUMAN' = $state('AI');
   let isConnecting: boolean = $state(false);
@@ -21,14 +21,22 @@
 
   const CONNECTING_MESSAGE_ID = "connecting-to-human-advisor";
 
-  const orchestratorUrl = PUBLIC_ORCHESTRATOR_URL;
-  const identityPoolId = PUBLIC_COGNITO_IDENTITY_POOL_ID;
-  const awsRegion = PUBLIC_AWS_REGION;
+  const config = {
+    "Orchestrator URL": PUBLIC_CLIENT_WEBSOCKET_URL,
+    "Auth Token": PUBLIC_WEBSOCKET_AUTH_TOKEN
+  };
 
-  if (!orchestratorUrl || !identityPoolId || !awsRegion) {
-    console.warn("Orchestrator configuration incomplete (URL, Cognito Pool ID, or AWS Region missing). AI Chat will not be available.");
+  const missingConfig = Object.entries(config)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missingConfig.length > 0) {
+    console.warn(`Orchestrator configuration incomplete (${missingConfig.join(", ")} missing). AI Chat will not be available.`);
   } else {
-    orchestrator = new OrchestratorClient(orchestratorUrl, identityPoolId, awsRegion);
+    orchestrator = new OrchestratorClient(
+      PUBLIC_CLIENT_WEBSOCKET_URL as string,
+      PUBLIC_WEBSOCKET_AUTH_TOKEN as string
+    );
   }
 
   const handleAiMessage = async (userInput: string) => {
@@ -87,8 +95,12 @@
         // No action needed for AI
       },
 
-      onError: (err) => {
+      onError: async (err) => {
         console.error("Orchestrator error:", err);
+        const errorHtml = await markdownToHtml(`**Connection Error:** Unable to reach the AI service. Please try again later.`);
+        messages = messages.map(m =>
+          m.id === aiMessageId ? { ...m, message: errorHtml } : m
+        );
       }
     });
   };

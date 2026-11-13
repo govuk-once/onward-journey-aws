@@ -64,8 +64,6 @@ resource "null_resource" "build_and_deploy_frontend" {
     frontend_config_hash = local.frontend_config_hash
     # Re-run if the WebSocket URL changes
     backend_url = module.client_ws_gateway.wss_url
-    # Re-run if the Cognito pool changes
-    cognito_pool_id = aws_cognito_identity_pool.frontend_anon.id
   }
 
   provisioner "local-exec" {
@@ -78,10 +76,8 @@ resource "null_resource" "build_and_deploy_frontend" {
       # Use 'npm ci' to install from the lockfile without modifying it
       npm ci
 
-      # Build the app with the Orchestrator URL and Cognito pool injected
-      export PUBLIC_ORCHESTRATOR_URL="${module.client_ws_gateway.wss_url}"
-      export PUBLIC_COGNITO_IDENTITY_POOL_ID="${aws_cognito_identity_pool.frontend_anon.id}"
-      export PUBLIC_AWS_REGION="${var.aws_region}"
+      # Build the app with the websocket URL injected
+      export PUBLIC_CLIENT_WEBSOCKET_URL="${module.client_ws_gateway.wss_url}"
       npm run build
 
       # Zip the output

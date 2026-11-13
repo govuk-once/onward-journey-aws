@@ -474,39 +474,6 @@ resource "aws_iam_role_policy_attachment" "kb_sync_crm_main" {
   policy_arn = aws_iam_policy.kb_sync_crm_permissions.arn
 }
 
-## UNAUTHENTICATED IDENTITY ROLE
-# The principal here is "cognito-identity.amazonaws.com", scoped to this pool
-# and to the unauthenticated context only.
-
-data "aws_iam_policy_document" "cognito_anon_assume" {
-  statement {
-    sid     = "CognitoUnauthAssumeRole"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    principals {
-      type        = "Federated"
-      identifiers = ["cognito-identity.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "cognito-identity.amazonaws.com:aud"
-      values   = [aws_cognito_identity_pool.frontend_anon.id]
-    }
-
-    condition {
-      test     = "ForAnyValue:StringLike"
-      variable = "cognito-identity.amazonaws.com:amr"
-      values   = ["unauthenticated"]
-    }
-  }
-}
-
-resource "aws_iam_role" "cognito_anon_role" {
-  name               = "${var.environment}-cognito-anon-role"
-  assume_role_policy = data.aws_iam_policy_document.cognito_anon_assume.json
-}
-
 # DELAY TO ALLOW IAM PROPAGATION
 resource "time_sleep" "wait_for_iam_propagation" {
   create_duration = "30s"

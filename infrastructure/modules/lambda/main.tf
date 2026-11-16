@@ -80,6 +80,8 @@ resource "aws_lambda_function" "function" {
   role                           = aws_iam_role.role.arn
   handler                        = var.handler
   runtime                        = var.runtime
+  layers                         = var.layers
+  memory_size                    = var.memory_size
   architectures                  = ["arm64"]
   timeout                        = var.timeout
   reserved_concurrent_executions = var.reserved_concurrent_executions

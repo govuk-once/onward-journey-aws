@@ -63,7 +63,7 @@ module "client_ws_router_lambda" {
     ENVIRONMENT                = var.environment
     AGENT_RUNTIME_ARN          = aws_bedrockagentcore_agent_runtime.orchestrator_runtime.agent_runtime_arn
     SESSIONS_TABLE_NAME        = aws_dynamodb_table.sessions.name
-    CRM_TOOL_LAMBDA_ARN        = aws_lambda_function.crm_tool.arn
+    CRM_TOOL_LAMBDA_ARN        = module.crm_tool.function_arn
     AGENT_RUNTIME_ENDPOINT_URL = "https://${aws_vpc_endpoint.endpoints["bedrock_agentcore"].dns_entry[0].dns_name}"
     LAMBDA_ENDPOINT_URL        = "https://${aws_vpc_endpoint.endpoints["lambda"].dns_entry[0].dns_name}"
   }
@@ -86,7 +86,7 @@ module "client_ws_router_lambda" {
     {
       Effect   = "Allow"
       Action   = ["lambda:InvokeFunction"]
-      Resource = aws_lambda_function.crm_tool.arn
+      Resource = module.crm_tool.function_arn
     }
   ]
 }

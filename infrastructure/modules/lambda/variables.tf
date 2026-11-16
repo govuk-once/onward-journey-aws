@@ -80,3 +80,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "layers" {
+  description = "List of Lambda Layer Version ARNs to attach to the function"
+  type        = list(string)
+  default     = []
+}
+
+variable "memory_size" {
+  description = "Amount of memory in MB allocated to the Lambda function"
+  type        = number
+  default     = 128
+}

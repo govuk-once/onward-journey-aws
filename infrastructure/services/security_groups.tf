@@ -180,10 +180,10 @@ resource "aws_security_group" "client_ws_authorizer" {
 }
 
 # CRM TOOL SECURITY GROUP
-# Group for the CRM Tool Lambda to reach external Storm APIs and internal VPC endpoints.
+# Group for the CRM Tool Lambda to reach external CRM APIs and internal VPC endpoints.
 resource "aws_security_group" "crm_tool_sg" {
   name        = "${var.environment}-crm-tool-sg"
-  description = "Allows CRM Tool to reach Storm APIs, Secrets Manager, and DynamoDB"
+  description = "Allows CRM Tool to reach external CRM APIs and internal VPC endpoints"
   vpc_id      = local.vpc_id
 
   tags = {
@@ -501,7 +501,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_internet_ht
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# Allow CRM Tool to reach external CRM REST APIs (Content Guru Storm) via NAT Gateway
+# Allow CRM Tool to reach external CRM REST APIs via NAT Gateway
 resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_internet_https" {
   description       = "Allow outbound HTTPS traffic from crm_tool to public internet via NAT Gateway"
   security_group_id = aws_security_group.crm_tool_sg.id

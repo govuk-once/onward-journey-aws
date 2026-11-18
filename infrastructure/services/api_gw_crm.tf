@@ -25,6 +25,9 @@ module "crm_wh_router" {
   # Compute Protection: Prevent spikes from exhausting shared account concurrency
   reserved_concurrent_executions = 20
 
+  subnet_ids         = local.private_subnet_ids
+  security_group_ids = [aws_security_group.crm_wh_router_sg.id]
+
   environment_variables = {
     LOG_LEVEL           = "INFO"
     SESSIONS_TABLE_NAME = aws_dynamodb_table.sessions.name

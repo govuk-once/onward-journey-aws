@@ -12,6 +12,16 @@ data "aws_security_group" "shared_endpoints" {
   name   = "shared-endpoints-sg"
 }
 
+# Fetch the official AWS-managed S3 prefix list (Gateway Endpoint)
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
+
+# Fetch the official AWS-managed DynamoDB prefix list (Gateway Endpoint)
+data "aws_prefix_list" "dynamodb" {
+  name = "com.amazonaws.${var.aws_region}.dynamodb"
+}
+
 # ============= SECURITY GROUPS ===================================================
 # ORCHESTRATOR SECURITY GROUP
 # Controls traffic for the Orchestration layer.
@@ -40,11 +50,15 @@ resource "aws_security_group" "vpc_endpoints" {
 }
 
 # SECRETS MANAGER SECURITY GROUP
-# Provides a secure ingress point for RDS Init to access the secrets manager VPC endpoint only
+# Provides a secure ingress point for authorised Lambdas to access the Secrets Manager VPC endpoint
 resource "aws_security_group" "secrets_manager" {
-  name        = "${var.environment}-secrets-manager-sg"
-  description = "Private interface for RDS Init to reach Secrets Manager"
+  name        = "${var.environment}-secrets-manager-sg-v2"
+  description = "Private interface for authorised services to reach Secrets Manager"
   vpc_id      = local.vpc_id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   tags = {
     Name      = "${var.environment}-secrets-manager-sg"
@@ -169,6 +183,19 @@ resource "aws_security_group" "client_ws_authorizer" {
   }
 }
 
+# CRM TOOL SECURITY GROUP
+# Group for the CRM Tool Lambda to reach external CRM APIs and internal VPC endpoints.
+resource "aws_security_group" "crm_tool_sg" {
+  name        = "${var.environment}-crm-tool-sg"
+  description = "Allows CRM Tool to reach external CRM APIs and internal VPC endpoints"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-crm-tool-sg"
+    Component = "crm-tool"
+  }
+}
+
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
@@ -281,6 +308,15 @@ resource "aws_vpc_security_group_ingress_rule" "allow_client_router_to_endpoints
   ip_protocol                  = "tcp"
   security_group_id            = aws_security_group.vpc_endpoints.id
   referenced_security_group_id = aws_security_group.client_ws_router.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_crm_tool_to_secrets_manager" {
+  description                  = "Allow CRM Tool to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.crm_tool_sg.id
 }
 
 # ======================= EGRESS RULES (INTERNAL) ===========================================
@@ -406,15 +442,20 @@ resource "aws_vpc_security_group_egress_rule" "allow_client_router_to_vpc_endpoi
   to_port                      = 443
 }
 
-# ========================= EGRESS RULES (EXTERNAL) ==================================
-
-# Fetch the official AWS-managed S3 prefix list
-data "aws_prefix_list" "s3" {
-  name = "com.amazonaws.${var.aws_region}.s3"
+resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_secrets_manager" {
+  description                  = "Allow outbound traffic from CRM Tool to Secrets Manager"
+  security_group_id            = aws_security_group.crm_tool_sg.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
 }
 
-# Allow external egress from RDS seeder to S3 only, by referencing the AWS-managed S3 prefix list
+# ----- Egress rules to AWS VPC Gateway Endpoints (S3 & DynamoDB via managed prefix lists) -----
+
+# Allow RDS Seeder to reach S3 Gateway Endpoint
 resource "aws_vpc_security_group_egress_rule" "rds_seeder_external_https" {
+  description       = "Allow outbound HTTPS traffic from RDS Seeder to S3 Gateway Endpoint"
   security_group_id = aws_security_group.rds_seeder_sg.id
   ip_protocol       = "tcp"
   from_port         = 443
@@ -432,6 +473,28 @@ resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_s3" {
   prefix_list_id    = data.aws_prefix_list.s3.id
 }
 
+# Allow outbound traffic from Client Router to DynamoDB Gateway Endpoint
+resource "aws_vpc_security_group_egress_rule" "allow_client_router_to_dynamodb" {
+  description       = "Allow outbound HTTPS traffic from Client Router to DynamoDB Gateway Endpoint"
+  security_group_id = aws_security_group.client_ws_router.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+}
+
+# Allow outbound traffic from CRM Tool to DynamoDB Gateway Endpoint
+resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_dynamodb" {
+  description       = "Allow outbound HTTPS traffic from CRM Tool to DynamoDB Gateway Endpoint"
+  security_group_id = aws_security_group.crm_tool_sg.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+}
+
+# ========================= EGRESS RULES (EXTERNAL) ==================================
+
 # Allow Orchestrator to reach public HTTPS endpoints (API Gateway) via NAT Gateway
 resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_internet_https" {
   description       = "Allow outbound HTTPS traffic to public internet via NAT Gateway"
@@ -442,17 +505,35 @@ resource "aws_vpc_security_group_egress_rule" "allow_orchestrator_to_internet_ht
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# Fetch the official AWS-managed DynamoDB prefix list
-data "aws_prefix_list" "dynamodb" {
-  name = "com.amazonaws.${var.aws_region}.dynamodb"
-}
-
-# Allow outbound traffic from Client Router to DynamoDB Gateway Endpoint
-resource "aws_vpc_security_group_egress_rule" "allow_client_router_to_dynamodb" {
-  description       = "Allow outbound HTTPS traffic from Client Router to DynamoDB"
-  security_group_id = aws_security_group.client_ws_router.id
+# Allow CRM Tool to reach external CRM REST APIs via NAT Gateway
+resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_internet_https" {
+  description       = "Allow outbound HTTPS traffic from crm_tool to public internet via NAT Gateway"
+  security_group_id = aws_security_group.crm_tool_sg.id
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
-  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+
+# TODO: Remove these migrations when all dev environments have been updated to use the new module structure.
+# -----------------------------------------------------------------------------
+# TERRAFORM STATE MIGRATIONS
+# -----------------------------------------------------------------------------
+# Migrate the CRM Tool Log Group into the module
+moved {
+  from = aws_cloudwatch_log_group.crm_tool
+  to   = module.crm_tool.aws_cloudwatch_log_group.logs
+}
+
+# Migrate the CRM Tool Lambda Function into the module
+moved {
+  from = aws_lambda_function.crm_tool
+  to   = module.crm_tool.aws_lambda_function.function
+}
+
+# Migrate the CRM Tool IAM Role into the module
+moved {
+  from = aws_iam_role.crm_tool_role
+  to   = module.crm_tool.aws_iam_role.role
 }

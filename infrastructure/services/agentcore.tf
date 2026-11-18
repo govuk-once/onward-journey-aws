@@ -101,7 +101,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_availability" {
   target_configuration {
     mcp {
       lambda {
-        lambda_arn = aws_lambda_function.crm_tool.arn
+        lambda_arn = module.crm_tool.function_arn
         tool_schema {
           inline_payload {
             name        = "check_chat_availability"
@@ -138,7 +138,7 @@ resource "aws_bedrockagentcore_gateway_target" "crm_handoff" {
   target_configuration {
     mcp {
       lambda {
-        lambda_arn = aws_lambda_function.crm_tool.arn
+        lambda_arn = module.crm_tool.function_arn
         tool_schema {
           inline_payload {
             name        = "connect_to_live_chat"

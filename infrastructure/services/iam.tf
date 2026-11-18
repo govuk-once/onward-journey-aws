@@ -61,7 +61,7 @@ resource "aws_iam_role_policy" "agentcore_gateway_invocation" {
         Action = ["lambda:InvokeFunction"]
         Resource = [
           aws_lambda_function.rds_tool.arn,
-          aws_lambda_function.crm_tool.arn
+          module.crm_tool.function_arn
         ]
       }
     ]
@@ -85,7 +85,7 @@ resource "aws_lambda_permission" "allow_bedrock_gateway" {
 resource "aws_lambda_permission" "allow_bedrock_gateway_crm" {
   statement_id  = "AllowBedrockGatewayInvokeCRM"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.crm_tool.function_name
+  function_name = module.crm_tool.function_name
   principal     = "bedrock-agentcore.amazonaws.com"
   source_arn    = aws_bedrockagentcore_gateway.tool_interface.gateway_arn
 }
@@ -143,45 +143,6 @@ resource "aws_iam_role_policy_attachment" "rds_tool_main" {
   policy_arn = aws_iam_policy.rds_tool_permissions.arn
 }
 
-## CRM TOOL SERVICE ROLE
-# Execution role for the MCP Tool Lambda that handles CRM API interactions.
-
-resource "aws_iam_role" "crm_tool_role" {
-  name               = "${var.environment}-crm-tool-role"
-  assume_role_policy = data.aws_iam_policy_document.allow_all_assume_role.json
-}
-
-resource "aws_iam_policy" "crm_tool_permissions" {
-  name        = "${var.environment}-crm-tool-permissions"
-  description = "Allows the CRM Tool to fetch OAuth credentials prefixed with its environment and crm-creds/. Can log to CloudWatch."
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "CloudWatchLogAccess"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:aws:logs:*:*:*"
-      },
-      {
-        Sid      = "CRMSecretAccess"
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.environment}/crm-creds/*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "crm_tool_main" {
-  role       = aws_iam_role.crm_tool_role.name
-  policy_arn = aws_iam_policy.crm_tool_permissions.arn
-}
 
 ## RDS SEEDER SERVICE ROLE
 # Execution role for the Lambda responsible for database initialisation and data loading.
@@ -243,7 +204,7 @@ resource "aws_iam_policy" "rds_seeder_permissions" {
         Sid      = "CrmToolInvocation"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = aws_lambda_function.crm_tool.arn
+        Resource = module.crm_tool.function_arn
       }
     ]
   })

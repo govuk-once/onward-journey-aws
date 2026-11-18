@@ -74,7 +74,7 @@ resource "aws_lambda_function" "rds_seeder" {
       BEDROCK_RUNTIME_ENDPOINT = aws_vpc_endpoint.endpoints["bedrock"].dns_entry[0]["dns_name"]
       LAMBDA_ENDPOINT_URL      = aws_vpc_endpoint.endpoints["lambda"].dns_entry[0]["dns_name"]
       BUCKET_NAME              = aws_s3_bucket.dataset_storage.id
-      CRM_TOOL_LAMBDA_ARN      = aws_lambda_function.crm_tool.arn
+      CRM_TOOL_LAMBDA_ARN      = module.crm_tool.function_arn
     }
   }
 
@@ -124,35 +124,48 @@ resource "aws_lambda_function" "rds_tool" {
 }
 
 ## TOOL LAYER: CRM CONTACT TOOL (MCP SERVER)
-# Configured as a "Public" Lambda (outside VPC) to allow external API access for testing. ??
-resource "aws_cloudwatch_log_group" "crm_tool" {
-  name              = "/aws/lambda/${var.environment}-crm-tool"
-  retention_in_days = 14
-}
+module "crm_tool" {
+  source = "../modules/lambda"
 
-resource "aws_lambda_function" "crm_tool" {
-  filename         = data.archive_file.crm_tool_zip.output_path
-  source_code_hash = data.archive_file.crm_tool_zip.output_base64sha256
-  function_name    = "${var.environment}-crm-tool"
-  role             = aws_iam_role.crm_tool_role.arn
-  handler          = "handler.lambda_handler"
-  runtime          = local.lambda_runtime
-  layers           = [aws_lambda_layer_version.shared_layers["core"].arn, aws_lambda_layer_version.shared_layers["integrations"].arn]
-  memory_size      = 512
-  timeout          = 30
-  architectures    = ["arm64"]
+  environment   = var.environment
+  function_name = "crm-tool"
+  description   = "MCP Tool Lambda handling CRM availability checks, live-chat handoffs, and message forwarding"
+  source_dir    = "crm_tool"
+  runtime       = local.lambda_runtime
+  memory_size   = 512
+  timeout       = 30
 
-  logging_config {
-    log_format = "JSON"
+  layers = [
+    aws_lambda_layer_version.shared_layers["core"].arn,
+    aws_lambda_layer_version.shared_layers["integrations"].arn,
+  ]
+
+  subnet_ids         = local.private_subnet_ids
+  security_group_ids = [aws_security_group.crm_tool_sg.id]
+
+  environment_variables = {
+    ENV_PREFIX           = var.environment
+    SESSIONS_TABLE_NAME  = aws_dynamodb_table.sessions.name
+    SECRETS_ENDPOINT_URL = aws_vpc_endpoint.endpoints["secrets"].dns_entry[0].dns_name
   }
 
-  environment {
-    variables = {
-      ENV_PREFIX = var.environment
+  policy_statements = [
+    {
+      Sid      = "CRMSecretAccess"
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:${var.environment}/crm-creds/*"
+    },
+    {
+      Sid    = "DynamoDBSessionAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem"
+      ]
+      Resource = aws_dynamodb_table.sessions.arn
     }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.crm_tool]
+  ]
 }
 
 ## RDS INIT

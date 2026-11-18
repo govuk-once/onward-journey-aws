@@ -219,16 +219,6 @@ data "archive_file" "rds_tool_zip" {
   }
 }
 
-# CRM TOOL
-data "archive_file" "crm_tool_zip" {
-  type        = "zip"
-  output_path = "${path.module}/../../dist/crm_tool_payload.zip"
-  source {
-    content  = file("${path.module}/../../app/lambdas/crm_tool/handler.py")
-    filename = "handler.py"
-  }
-}
-
 # KB SYNC: CHECK KB METADATA
 data "archive_file" "kb_sync_check_kb_meta_zip" {
   type        = "zip"

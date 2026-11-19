@@ -61,30 +61,24 @@ def mock_log_metric():
 
 class TestAuditLogPIISanitisation:
 
-    def test_strips_user_message_text_and_records_length_metric(
+    def test_followup_message_payload_strips_message_and_omits_summary_and_reason_lengths(
         self, base_crm_event, payload_guard
     ):
         payload_guard.watch(base_crm_event)
-        result = json.loads(create_audit_json(base_crm_event))
+        raw_json = create_audit_json(base_crm_event)
+        result = json.loads(raw_json)
 
         assert "message" not in result
-        assert "Jane Doe" not in json.dumps(result)
+        assert "Jane Doe" not in raw_json
         assert result["message_length"] == 59
+        assert "summary" not in result
+        assert "summary_length" not in result
+        assert "reason" not in result
+        assert "reason_length" not in result
         assert result["method"] == "forward_user_message_to_crm"
         assert result["thread_id"] == TEST_THREAD_ID
 
-    def test_payload_without_message_key_omits_length_field(
-        self, base_crm_event, payload_guard
-    ):
-        del base_crm_event["message"]
-        payload_guard.watch(base_crm_event)
-
-        result = json.loads(create_audit_json(base_crm_event))
-
-        assert "message" not in result
-        assert "message_length" not in result
-
-    def test_none_message_value_records_zero_length(
+    def test_followup_message_payload_with_none_message_records_zero_length(
         self, base_crm_event, payload_guard
     ):
         base_crm_event["message"] = None
@@ -94,6 +88,98 @@ class TestAuditLogPIISanitisation:
 
         assert "message" not in result
         assert result["message_length"] == 0
+        assert "summary_length" not in result
+        assert "reason_length" not in result
+
+    def test_handoff_payload_strips_summary_and_reason_and_omits_message_length(
+        self, payload_guard
+    ):
+        event = {
+            "method": "connect_to_live_chat",
+            "thread_id": TEST_THREAD_ID,
+            "live_chat_identifier": "ho-visa-005",
+            "actor_id": "tester-123",
+            "summary": "User is requesting human support for a visa-related query.",
+            "reason": "User needs to speak to someone about their visa application",
+        }
+        payload_guard.watch(event)
+
+        raw_json = create_audit_json(event)
+        result = json.loads(raw_json)
+
+        assert "summary" not in result
+        assert "reason" not in result
+        assert "visa-related query" not in raw_json
+        assert "visa application" not in raw_json
+        assert result["summary_length"] == len(event["summary"])
+        assert result["reason_length"] == len(event["reason"])
+        assert "message" not in result
+        assert "message_length" not in result
+
+    def test_handoff_payload_with_none_summary_and_reason_records_zero_lengths(
+        self, payload_guard
+    ):
+        event = {
+            "method": "connect_to_live_chat",
+            "thread_id": TEST_THREAD_ID,
+            "summary": None,
+            "reason": None,
+        }
+        payload_guard.watch(event)
+
+        result = json.loads(create_audit_json(event))
+
+        assert "summary" not in result
+        assert "reason" not in result
+        assert result["summary_length"] == 0
+        assert result["reason_length"] == 0
+        assert "message_length" not in result
+
+    def test_payload_without_sensitive_fields_omits_all_length_fields(
+        self, payload_guard
+    ):
+        event = {
+            "method": "check_chat_availability",
+            "thread_id": TEST_THREAD_ID,
+            "live_chat_identifier": "ho-visa-005",
+        }
+        payload_guard.watch(event)
+
+        result = json.loads(create_audit_json(event))
+
+        for field in (
+            "message",
+            "message_length",
+            "summary",
+            "summary_length",
+            "reason",
+            "reason_length",
+        ):
+            assert field not in result
+
+    def test_lambda_handler_logs_sanitised_handoff_lengths_without_free_text(
+        self, mock_crm_adapter, caplog
+    ):
+        mock_crm_adapter.generate_handoff_signal.return_value = {
+            "handoff": "initiated",
+            "crm_chat_id": "crm-chat-999",
+        }
+        event = {
+            "method": "connect_to_live_chat",
+            "thread_id": TEST_THREAD_ID,
+            "live_chat_identifier": "ho-visa-005",
+            "summary": "Sensitive user context summary",
+            "reason": "Sensitive handoff reason",
+        }
+
+        with caplog.at_level("INFO"):
+            lambda_handler(event, None)
+
+        assert "Sensitive user context summary" not in caplog.text
+        assert "Sensitive handoff reason" not in caplog.text
+        assert '"summary_length": 30' in caplog.text
+        assert '"reason_length": 24' in caplog.text
+        assert "message_length" not in caplog.text
 
 
 class TestMandatoryPayloadValidation:

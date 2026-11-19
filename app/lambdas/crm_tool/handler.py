@@ -15,7 +15,7 @@ Supported Methods:
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from integrations.factory import Capability, ProviderFactory
 from integrations.tooling import log_metric
 
@@ -28,15 +28,23 @@ SUPPORTED_METHODS = {
     "connect_to_live_chat",
 }
 
+SENSITIVE_AUDIT_FIELDS: Tuple[str, ...] = ("message", "summary", "reason")
 
-def create_audit_json(event: Dict[str, Any]) -> str:
+
+def create_audit_json(
+    event: Dict[str, Any],
+    scrub_fields: Tuple[str, ...] = SENSITIVE_AUDIT_FIELDS,
+) -> str:
     """
-    Scrubs the raw user message from the event payload and computes
-    message_length for safe CloudWatch audit logging.
+    Scrubs sensitive free-text fields (message, summary, reason) from the event
+    payload and computes `<field>_length` for safe CloudWatch audit logging.
     """
-    audit_event = {k: v for k, v in event.items() if k != "message"}
-    if "message" in event:
-        audit_event["message_length"] = len(event.get("message") or "")
+    scrub_set = set(scrub_fields)
+    audit_event = {k: v for k, v in event.items() if k not in scrub_set}
+    for field in scrub_fields:
+        if field in event:
+            val = event.get(field)
+            audit_event[f"{field}_length"] = len(str(val)) if val is not None else 0
     return json.dumps(audit_event)
 
 

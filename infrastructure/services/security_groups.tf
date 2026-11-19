@@ -547,26 +547,3 @@ resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_router_to_internet_h
   to_port           = 443
   cidr_ipv4         = "0.0.0.0/0"
 }
-
-
-# TODO: Remove these migrations when all dev environments have been updated to use the new module structure.
-# -----------------------------------------------------------------------------
-# TERRAFORM STATE MIGRATIONS
-# -----------------------------------------------------------------------------
-# Migrate the CRM Tool Log Group into the module
-moved {
-  from = aws_cloudwatch_log_group.crm_tool
-  to   = module.crm_tool.aws_cloudwatch_log_group.logs
-}
-
-# Migrate the CRM Tool Lambda Function into the module
-moved {
-  from = aws_lambda_function.crm_tool
-  to   = module.crm_tool.aws_lambda_function.function
-}
-
-# Migrate the CRM Tool IAM Role into the module
-moved {
-  from = aws_iam_role.crm_tool_role
-  to   = module.crm_tool.aws_iam_role.role
-}

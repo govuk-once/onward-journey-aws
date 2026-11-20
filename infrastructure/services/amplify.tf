@@ -223,23 +223,3 @@ resource "aws_wafv2_web_acl_association" "amplify_waf" {
   resource_arn = aws_amplify_app.frontend.arn
   web_acl_arn  = aws_wafv2_web_acl.amplify_uk_only.arn
 }
-
-# -----------------------------------------------------------------------------
-# Tester Credentials in Secrets Manager
-# -----------------------------------------------------------------------------
-
-resource "aws_secretsmanager_secret" "tester_credentials" {
-  name        = "${var.environment}/frontend/tester-credentials"
-  description = "Basic Auth credentials for frontend user testing"
-}
-
-resource "aws_secretsmanager_secret_version" "tester_credentials_val" {
-  secret_id = aws_secretsmanager_secret.tester_credentials.id
-
-  secret_string = jsonencode({
-    for idx in local.tester_indices : "Tester ${idx}" => {
-      username = random_pet.tester_usernames[idx].id
-      password = random_password.tester_passwords[idx].result
-    }
-  })
-}

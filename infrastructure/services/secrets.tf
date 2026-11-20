@@ -102,3 +102,23 @@ resource "aws_secretsmanager_secret_version" "ws_auth_tokens_val" {
     random_uuid.ws_tokens[idx].result => random_uuid.actor_ids[idx].result
   })
 }
+
+# -----------------------------------------------------------------------------
+# Tester Credentials
+# -----------------------------------------------------------------------------
+
+resource "aws_secretsmanager_secret" "tester_credentials" {
+  name        = "${var.environment}/frontend/tester-credentials"
+  description = "Basic Auth credentials for frontend user testing"
+}
+
+resource "aws_secretsmanager_secret_version" "tester_credentials_val" {
+  secret_id = aws_secretsmanager_secret.tester_credentials.id
+
+  secret_string = jsonencode({
+    for idx in local.tester_indices : "Tester ${idx}" => {
+      username = random_pet.tester_usernames[idx].id
+      password = random_password.tester_passwords[idx].result
+    }
+  })
+}

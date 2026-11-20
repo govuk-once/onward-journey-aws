@@ -196,6 +196,19 @@ resource "aws_security_group" "crm_tool_sg" {
   }
 }
 
+# CRM WEBHOOK ROUTER SECURITY GROUP
+# Group for the CRM Webhook Router Lambda to reach DynamoDB and external WebSocket management APIs.
+resource "aws_security_group" "crm_wh_router_sg" {
+  name        = "${var.environment}-crm-wh-router-sg"
+  description = "Allows CRM Webhook Router to reach DynamoDB and external WebSocket management APIs"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-crm-wh-router-sg"
+    Component = "crm-integration"
+  }
+}
+
 # ============ INGRESS RULES ======================================================
 
 # Ingress rule allowing HTTPS traffic from the Orchestrator to VPC Endpoints.
@@ -493,6 +506,16 @@ resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_dynamodb" {
   prefix_list_id    = data.aws_prefix_list.dynamodb.id
 }
 
+# Allow outbound traffic from CRM Webhook Router to DynamoDB Gateway Endpoint
+resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_router_to_dynamodb" {
+  description       = "Allow outbound HTTPS traffic from CRM Webhook Router to DynamoDB Gateway Endpoint"
+  security_group_id = aws_security_group.crm_wh_router_sg.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+}
+
 # ========================= EGRESS RULES (EXTERNAL) ==================================
 
 # Allow Orchestrator to reach public HTTPS endpoints (API Gateway) via NAT Gateway
@@ -515,25 +538,12 @@ resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_internet_https"
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-
-# TODO: Remove these migrations when all dev environments have been updated to use the new module structure.
-# -----------------------------------------------------------------------------
-# TERRAFORM STATE MIGRATIONS
-# -----------------------------------------------------------------------------
-# Migrate the CRM Tool Log Group into the module
-moved {
-  from = aws_cloudwatch_log_group.crm_tool
-  to   = module.crm_tool.aws_cloudwatch_log_group.logs
-}
-
-# Migrate the CRM Tool Lambda Function into the module
-moved {
-  from = aws_lambda_function.crm_tool
-  to   = module.crm_tool.aws_lambda_function.function
-}
-
-# Migrate the CRM Tool IAM Role into the module
-moved {
-  from = aws_iam_role.crm_tool_role
-  to   = module.crm_tool.aws_iam_role.role
+# Allow CRM Webhook Router to reach WebSocket API Gateway management endpoint via NAT Gateway
+resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_router_to_internet_https" {
+  description       = "Allow outbound HTTPS traffic from CRM Webhook Router to public internet via NAT Gateway"
+  security_group_id = aws_security_group.crm_wh_router_sg.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_ipv4         = "0.0.0.0/0"
 }

@@ -1,28 +1,59 @@
-variable "frontend_basic_auth_username" {
-  type        = string
-  description = "Username for basic auth on the frontend"
+locals {
+  # 10 branches on 'ux', 2 on any other environment
+  tester_count   = var.environment == "ux" ? 10 : 2
+  tester_indices = toset([for i in range(1, local.tester_count + 1) : tostring(i)])
 }
 
-variable "frontend_basic_auth_password" {
-  type        = string
-  description = "Password for basic auth on the frontend"
-  sensitive   = true
+# 1. Random suffix for branch names to prevent predictable URLs in code
+resource "random_id" "tester_branch_suffix" {
+  for_each    = local.tester_indices
+  byte_length = 3 # Generates 6 hex characters, e.g. "a3f9c2"
 }
+
+# 2. Usernames for Basic Auth
+resource "random_pet" "tester_usernames" {
+  for_each  = local.tester_indices
+  length    = 3
+  separator = "-"
+}
+
+# 3. Random passwords for Amplify Basic Auth
+resource "random_password" "tester_passwords" {
+  for_each = local.tester_indices
+  length   = 10
+  special  = false
+  upper    = false
+}
+
+# 4. UUIDs for WebSocket handshake tokens
+resource "random_uuid" "ws_tokens" {
+  for_each = local.tester_indices
+}
+
+# 5. UUIDs for Bedrock AgentCore & DynamoDB session memory
+resource "random_uuid" "actor_ids" {
+  for_each = local.tester_indices
+}
+
+# -----------------------------------------------------------------------------
+# Amplify Frontend
+# -----------------------------------------------------------------------------
 
 # 1. Create the Amplify App
 resource "aws_amplify_app" "frontend" {
   name = "${var.environment}-onward-journey-frontend"
-
   # Note: No repository configuration. Deployments are pushed manually via null_resource.
 }
 
-# 2. Create the Branch
-resource "aws_amplify_branch" "main" {
+# 2. Create the Multi-Tester Branches
+resource "aws_amplify_branch" "testers" {
+  for_each = local.tester_indices
+
   app_id      = aws_amplify_app.frontend.id
-  branch_name = "main"
+  branch_name = "tester-${each.key}-${random_id.tester_branch_suffix[each.key].hex}"
 
   enable_basic_auth      = true
-  basic_auth_credentials = base64encode("${var.frontend_basic_auth_username}:${var.frontend_basic_auth_password}")
+  basic_auth_credentials = base64encode("${random_pet.tester_usernames[each.key].id}:${random_password.tester_passwords[each.key].result}")
 
   lifecycle {
     ignore_changes = [basic_auth_credentials]
@@ -35,18 +66,15 @@ locals {
 
   # Hash only hand-authored source files.
   frontend_src_hash = sha1(join("", [
-    for f in fileset(local.frontend_dir, "src/**/*") :
-    filemd5("${local.frontend_dir}/${f}")
+    for f in fileset(local.frontend_dir, "src/**/*") : filemd5("${local.frontend_dir}/${f}")
   ]))
 
   # Hash hand-authored static files (robots.txt etc.) but not the auto-generated assets/ subdir
   frontend_static_hash = sha1(join("", [
-    for f in fileset(local.frontend_dir, "static/*") :
-    filemd5("${local.frontend_dir}/${f}")
+    for f in fileset(local.frontend_dir, "static/*") : filemd5("${local.frontend_dir}/${f}")
   ]))
 
   # Separately hash dependency manifests and build-affecting config files
-  # so that dependency or tooling changes also trigger a redeploy.
   frontend_config_hash = sha1(join("", [
     filemd5("${local.frontend_dir}/package.json"),
     filemd5("${local.frontend_dir}/package-lock.json"),
@@ -56,57 +84,84 @@ locals {
 
 resource "null_resource" "build_and_deploy_frontend" {
   triggers = {
-    # Re-run if frontend source files (src/) change
-    frontend_src_hash = local.frontend_src_hash
-    # Re-run if hand-authored static files change (excludes auto-copied static/assets/)
+    # 1. Trigger rebuild if the number of testers changes (e.g., dev vs ux workspace)
+    tester_count = local.tester_count
+
+    # 2. Trigger rebuild if any frontend files or backend config changes
+    frontend_src_hash    = local.frontend_src_hash
     frontend_static_hash = local.frontend_static_hash
-    # Re-run if dependencies or build tooling config change
     frontend_config_hash = local.frontend_config_hash
-    # Re-run if the WebSocket URL changes
-    backend_url = module.client_ws_gateway.wss_url
+    backend_url          = module.client_ws_gateway.wss_url
+
+    # 3. Trigger rebuild if the generated tokens change
+    tokens_hash = sha256(jsonencode({
+      for idx in local.tester_indices :
+      random_uuid.ws_tokens[idx].result => random_uuid.actor_ids[idx].result
+    }))
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       set -e
-      echo "Building frontend..."
+
+      export AWS_DEFAULT_REGION="${var.aws_region}"
+
       FRONTEND_DIR="${local.frontend_dir}"
       cd "$FRONTEND_DIR"
 
-      # Use 'npm ci' to install from the lockfile without modifying it
       npm ci
 
-      # Build the app with the websocket URL injected
+      SECRET_JSON=$(aws secretsmanager get-secret-value \
+        --secret-id "${aws_secretsmanager_secret.ws_auth_tokens.id}" \
+        --query SecretString \
+        --output text)
+
+      %{for idx in local.tester_indices~}
+
+      BRANCH_NAME="${aws_amplify_branch.testers[idx].branch_name}"
+      echo "=== Building bundle for branch: $BRANCH_NAME ==="
+
+      # Force cache clearing to prevent Vite/SvelteKit contamination
+      rm -rf .svelte-kit build
+
+      # Extract the token dynamically using Python to prevent Terraform leakage
+      export PUBLIC_WEBSOCKET_AUTH_TOKEN=$(echo "$SECRET_JSON" | python3 -c "import sys, json; print(list(json.load(sys.stdin).keys())[${idx} - 1])")
+
       export PUBLIC_CLIENT_WEBSOCKET_URL="${module.client_ws_gateway.wss_url}"
+
       npm run build
 
-      # Zip the output
       cd build
-      zip -r ../frontend_payload.zip ./* > /dev/null
+      zip -q -r "../frontend_${idx}.zip" ./*
       cd ..
 
       # Deploy to Amplify
-      echo "Deploying to Amplify..."
-      APP_ID="${aws_amplify_app.frontend.id}"
-      BRANCH="main"
+      RES=$(aws amplify create-deployment \
+        --app-id "${aws_amplify_app.frontend.id}" \
+        --branch-name "$BRANCH_NAME" \
+        --output json)
 
-      # Create deployment and extract URLs using python to parse JSON
-      RES=$(aws amplify create-deployment --app-id $APP_ID --branch-name $BRANCH --output json)
       JOB_ID=$(echo "$RES" | python3 -c "import sys, json; print(json.load(sys.stdin)['jobId'])")
       UPLOAD_URL=$(echo "$RES" | python3 -c "import sys, json; print(json.load(sys.stdin)['zipUploadUrl'])")
 
-      # Upload zip securely (using quotes around the URL)
-      curl -s -T frontend_payload.zip "$UPLOAD_URL"
+      curl -s -T "frontend_${idx}.zip" "$UPLOAD_URL"
 
-      # Start deployment
-      aws amplify start-deployment --app-id $APP_ID --branch-name $BRANCH --job-id $JOB_ID
+      aws amplify start-deployment \
+        --app-id "${aws_amplify_app.frontend.id}" \
+        --branch-name "$BRANCH_NAME" \
+        --job-id "$JOB_ID"
 
-      echo "Frontend deployment triggered successfully!"
+      rm "frontend_${idx}.zip"
+
+      %{endfor~}
+
+      echo "All tester branches built and deployed successfully."
     EOT
   }
 
   depends_on = [
-    aws_amplify_branch.main
+    aws_amplify_branch.testers,
+    aws_secretsmanager_secret_version.ws_auth_tokens_val
   ]
 }
 
@@ -114,9 +169,9 @@ output "amplify_app_id" {
   value = aws_amplify_app.frontend.id
 }
 
-output "amplify_main_branch_url" {
-  value = "https://main.${aws_amplify_app.frontend.id}.amplifyapp.com"
-}
+# -----------------------------------------------------------------------------
+# WAF & Edge Protections
+# -----------------------------------------------------------------------------
 
 # Note: region acts as the "control plane" for global services.
 # The data stored in the US is purely configuration metadata
@@ -167,4 +222,24 @@ resource "aws_wafv2_web_acl_association" "amplify_waf" {
   provider     = aws.us_east_1
   resource_arn = aws_amplify_app.frontend.arn
   web_acl_arn  = aws_wafv2_web_acl.amplify_uk_only.arn
+}
+
+# -----------------------------------------------------------------------------
+# Tester Credentials in Secrets Manager
+# -----------------------------------------------------------------------------
+
+resource "aws_secretsmanager_secret" "tester_credentials" {
+  name        = "${var.environment}/frontend/tester-credentials"
+  description = "Basic Auth credentials for frontend user testing"
+}
+
+resource "aws_secretsmanager_secret_version" "tester_credentials_val" {
+  secret_id = aws_secretsmanager_secret.tester_credentials.id
+
+  secret_string = jsonencode({
+    for idx in local.tester_indices : "Tester ${idx}" => {
+      username = random_pet.tester_usernames[idx].id
+      password = random_password.tester_passwords[idx].result
+    }
+  })
 }

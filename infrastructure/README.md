@@ -73,7 +73,6 @@ We use a configuration-driven pipeline to manage the database schema and the ing
 The `rds_tool` Lambda is strictly restricted to read-only access using a dedicated SQL user called `rds_readonly_dept_contacts`.
 
 This uses AWS IAM Database Authentication. The Lambda does not use a static password or access Secrets Manager for database connectivity. Instead, it generates a short-lived AWS IAM token at runtime to authenticate. Local permissions within PostgreSQL are restricted to SELECT operations only, ensuring a zero-leak state configuration.
-    ```
 
 ---
 
@@ -149,18 +148,11 @@ The query should be successful, but check the details - if the result content on
 
   Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
 
-#### Rotating Frontend Basic Auth Credentials
-
-The `aws_amplify_branch` resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to suppress a perpetual diff caused by the AWS Amplify API not returning credentials after they are written (a known provider limitation).
-
-This means **updating `frontend_basic_auth_username` or `frontend_basic_auth_password` in your `local.auto.tfvars` will not automatically push the new credentials to AWS.** To rotate them, force a replacement of the branch resource:
-
-```bash
-terraform apply -replace='aws_amplify_branch.main'
-```
-
-This will destroy and recreate the branch (no downtime — the Amplify app itself is unaffected), picking up the new credentials from your tfvars.
-
+#### Frontend Tester Branches & Credentials
+The Amplify frontend automatically scales the number of isolated branches based on your environment (`ux` workspace deploys 10 branches; all others deploy 2).
+- **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
+- **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
+- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).
 ---
 
 #### Manual Build/Rebuild (Lambda Packaging)

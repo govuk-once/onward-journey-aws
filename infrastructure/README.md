@@ -149,7 +149,9 @@ The query should be successful, but check the details - if the result content on
   Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
 
 #### Frontend Tester Branches & Credentials
-The Amplify frontend automatically scales the number of isolated branches based on your environment (`ux` workspace deploys 10 branches; all others deploy 2).
+The Amplify frontend automatically scales the number of isolated branches based on your environment. Each branch has a distinct URL and login credentials.
+`ux` workspace is set to deploy to 10 branches - it can be edited to deploy the number required for testing (if more or less than 10 branches are required).
+All others deploy 2 branches so developers can check that the multibranch feature works while implementing changes.
 - **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
 - **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
 - **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).

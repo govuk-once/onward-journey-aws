@@ -14,6 +14,8 @@ module "client_ws_authorizer_lambda" {
     ENVIRONMENT          = var.environment
     SECRET_ARN           = aws_secretsmanager_secret.ws_auth_tokens.arn
     SECRETS_ENDPOINT_URL = "https://${aws_vpc_endpoint.endpoints["secrets"].dns_entry[0].dns_name}"
+    TOKEN_QUERY_PARAM    = "auth_token"
+    CONTEXT_KEY          = "actor_id"
   }
 
   policy_statements = [

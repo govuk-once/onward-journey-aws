@@ -246,3 +246,6 @@ tests/test_event.json
 
 #SvelteKit exceptions
 !frontend/src/lib/
+
+# Script target files
+password-rotation-targets.json

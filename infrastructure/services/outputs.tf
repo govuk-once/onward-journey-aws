@@ -58,3 +58,9 @@ output "dynamodb_sessions_crm_chat_id_index" {
   description = "Name of the GSI used to look up sessions by Storm CRM chat ID"
   value       = "crm_chat_id-index"
 }
+
+## SECRETS MANAGER
+output "tester_credentials_secret_id" {
+  description = "Secrets Manager ID for the consolidated tester credentials"
+  value       = aws_secretsmanager_secret.tester_credentials.id
+}

@@ -154,7 +154,7 @@ The Amplify frontend automatically scales the number of isolated branches based 
 All others deploy 2 branches so developers can check that the multibranch feature works while implementing changes.
 - **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
 - **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
-- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).
+- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. As a result, standard `terraform apply` runs will not update passwords. To rotate specific branches without destroying them or triggering a frontend rebuild, list the target branches in `infrastructure/services/password-rotation-targets.json` (e.g. `["tester-1", "tester-2"]`) and run `./password-rotate.sh` from `infrastructure/services/`.
 ---
 
 #### Manual Build/Rebuild (Lambda Packaging)

@@ -9,7 +9,7 @@
     responderName?: string
   }
 
-  let { messages, showTypingIndicator, responderName = "GOV.UK AI" }: Props = $props();
+  let { messages, showTypingIndicator, responderName = "GOV.UK Chat" }: Props = $props();
   let container: HTMLDivElement | undefined = $state();
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {

@@ -232,3 +232,10 @@ $message-container-spacing-mobile: 40px;
     opacity: 1;
   }
 }
+
+.app-c-conversation-message__footer {
+  margin-top: govuk-spacing(1);
+  padding-top: govuk-spacing(1);
+  color: govuk-colour("dark-grey");
+  margin-bottom: 0;
+}

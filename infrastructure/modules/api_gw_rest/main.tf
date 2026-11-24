@@ -66,7 +66,7 @@ resource "aws_api_gateway_authorizer" "authorizer" {
   rest_api_id                      = aws_api_gateway_rest_api.api.id
   authorizer_uri                   = var.authorizer_lambda_invoke_arn
   authorizer_credentials           = ""
-  identity_source                  = "method.request.header.X-Storm-Signature"
+  identity_source                  = "method.request.querystring.token"
   type                             = "REQUEST"
   authorizer_result_ttl_in_seconds = 0
 }

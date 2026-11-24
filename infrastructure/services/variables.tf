@@ -18,3 +18,11 @@ variable "aws_region" {
   description = "The AWS region to deploy resources into (e.g. eu-west-2)."
   default     = "eu-west-2"
 }
+
+# TODO: Uncomment the following variable when the credentials are required by the crm_tool in future DVLA Storm integration work.
+# Currently commented out as it will flag as a tflint error whilst not being used in any resources or outputs.
+# variable "dvla_storm_secret_name" {
+#   type        = string
+#   description = "Secrets Manager secret name containing DVLA Content Guru Storm API credentials"
+#   default     = "shared/crm-creds/dvla-storm-dev"
+# }

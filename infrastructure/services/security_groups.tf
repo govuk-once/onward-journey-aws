@@ -144,15 +144,15 @@ resource "aws_security_group" "kb_sync_sg" {
   }
 }
 
-# CONTENT GURU AUTHORISER SECURITY GROUP
-# Group for the Content Guru webhook authoriser Lambda.
-resource "aws_security_group" "crm_contentguru_wh_authorizer" {
-  name        = "${var.environment}-crm-contentguru-wh-authorizer-sg"
-  description = "Security group for Content Guru webhook authoriser Lambda"
+# CRM WEBHOOK TOKEN AUTHORIZER SECURITY GROUP
+# Group for the CRM webhook token authoriser Lambda.
+resource "aws_security_group" "crm_wh_token_authorizer" {
+  name        = "${var.environment}-crm-wh-token-authorizer-sg"
+  description = "Security group for CRM webhook token authoriser Lambda"
   vpc_id      = local.vpc_id
 
   tags = {
-    Name      = "${var.environment}-crm-contentguru-wh-authorizer-sg"
+    Name      = "${var.environment}-crm-wh-token-authorizer-sg"
     Component = "crm-integration"
   }
 }
@@ -296,13 +296,13 @@ resource "aws_vpc_security_group_ingress_rule" "allow_kb_sync_to_endpoints" {
   referenced_security_group_id = aws_security_group.kb_sync_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow Content Guru authorizer to reach SecretsManager endpoint"
+resource "aws_vpc_security_group_ingress_rule" "allow_crm_wh_token_authorizer_to_secrets_manager" {
+  description                  = "Allow CRM webhook token authorizer to reach SecretsManager endpoint"
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
   security_group_id            = aws_security_group.secrets_manager.id
-  referenced_security_group_id = aws_security_group.crm_contentguru_wh_authorizer.id
+  referenced_security_group_id = aws_security_group.crm_wh_token_authorizer.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_client_authorizer_to_secrets_manager" {
@@ -428,9 +428,9 @@ resource "aws_vpc_security_group_egress_rule" "allow_kb_sync_lambdas_to_bedrock"
   to_port                      = 443
 }
 
-resource "aws_vpc_security_group_egress_rule" "allow_crm_authorizer_to_secrets_manager" {
-  description                  = "Allow outbound traffic from Content Guru authorizer to Secrets Manager"
-  security_group_id            = aws_security_group.crm_contentguru_wh_authorizer.id
+resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_token_authorizer_to_secrets_manager" {
+  description                  = "Allow outbound traffic from CRM webhook token authorizer to Secrets Manager"
+  security_group_id            = aws_security_group.crm_wh_token_authorizer.id
   referenced_security_group_id = aws_security_group.secrets_manager.id
   ip_protocol                  = "tcp"
   from_port                    = 443

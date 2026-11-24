@@ -10,7 +10,7 @@ locals {
     aws_cloudwatch_log_group.rds_init.name,
     aws_cloudwatch_log_group.rds_seeder.name,
     aws_cloudwatch_log_group.rds_tool.name,
-    module.crm_contentguru_wh_authorizer.log_group_name,
+    module.crm_wh_token_authorizer.log_group_name,
     module.crm_tool.log_group_name,
     module.crm_wh_router.log_group_name,
     module.client_ws_authorizer_lambda.log_group_name,

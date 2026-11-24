@@ -35,7 +35,7 @@ workspace=$(terraform -chdir="$SCRIPT_DIR/../infrastructure/services" workspace 
 # 'stateless_lambdas' in this context are Lambdas that safely reject the current dummy payload.
 stateless_lambdas=(
   "${workspace}-client-ws-router"
-  "${workspace}-crm-contentguru-wh-authorizer"
+  "${workspace}-crm-wh-token-authorizer"
   "${workspace}-kb-sync-check-kb-meta"
   "${workspace}-kb-sync-check-sync-meta"
   "${workspace}-kb-sync-fetch-articles"

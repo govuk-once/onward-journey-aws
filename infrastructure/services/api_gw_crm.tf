@@ -1,14 +1,30 @@
 # -----------------------------------------------------------------------------
-# LAMBDA: WEBHOOK AUTHORIZER
+# LAMBDA: WEBHOOK TOKEN AUTHORIZER
 # -----------------------------------------------------------------------------
-module "crm_contentguru_wh_authorizer" {
-  source          = "../modules/api_gw_authorizer_signature"
-  environment     = var.environment
-  authorizer_name = "crm-contentguru-wh"
+module "crm_wh_token_authorizer" {
+  source        = "../modules/lambda"
+  environment   = var.environment
+  function_name = "crm-wh-token-authorizer"
+  description   = "Validates inbound CRM webhook URL query tokens"
+  source_dir    = "api_gw_authorizer_token"
 
-  subnet_ids                  = local.private_subnet_ids
-  security_group_ids          = [aws_security_group.crm_contentguru_wh_authorizer.id]
-  secretsmanager_endpoint_url = "https://${aws_vpc_endpoint.endpoints["secrets"].dns_entry[0].dns_name}"
+  subnet_ids         = local.private_subnet_ids
+  security_group_ids = [aws_security_group.crm_wh_token_authorizer.id]
+
+  environment_variables = {
+    LOG_LEVEL            = "INFO"
+    SECRET_ARN           = aws_secretsmanager_secret.dvla_storm_inbound_webhook_url_token.arn
+    SECRETS_ENDPOINT_URL = "https://${aws_vpc_endpoint.endpoints["secrets"].dns_entry[0].dns_name}"
+    TOKEN_QUERY_PARAM    = "token"
+  }
+
+  policy_statements = [
+    {
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.dvla_storm_inbound_webhook_url_token.arn
+    }
+  ]
 }
 
 # -----------------------------------------------------------------------------
@@ -71,15 +87,15 @@ module "crm_contentguru_wh_gateway" {
   api_description = "Inbound REST API Gateway for Content Guru Storm webhooks"
   path_parts      = ["contentguru", "webhook"]
 
-  authorizer_lambda_invoke_arn    = module.crm_contentguru_wh_authorizer.invoke_arn
-  authorizer_lambda_function_name = module.crm_contentguru_wh_authorizer.function_name
+  authorizer_lambda_invoke_arn    = module.crm_wh_token_authorizer.invoke_arn
+  authorizer_lambda_function_name = module.crm_wh_token_authorizer.function_name
 
   crm_wh_router_invoke_arn    = module.crm_wh_router.invoke_arn
   crm_wh_router_function_name = module.crm_wh_router.function_name
 
   # WAF rate limits fall back to module defaults (100 req / 300 sec) in variables.tf
   # unless explicitly overridden here.
-  # TODO(JOUR-298): Recalibrate WAF rate limit threshold prior to user testing.
+  # TODO(JOUR-298): Recalibrate WAF rate limit threshold prior to user testing (if required).
   # TODO(JOUR-299): Recalibrate WAF rate limit threshold prior to production release.
 }
 

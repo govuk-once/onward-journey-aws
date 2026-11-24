@@ -17,7 +17,7 @@ jobs:
     uses: ./.github/workflows/dependency-review.yml
 
   all-checks-passed:
-    name: "All CI Checks Passed"
+    name: "CI checks"
     needs: [run-frontend, run-infrastructure, run-backend, run-dependency-review]
     if: always()
     runs-on: ubuntu-latest

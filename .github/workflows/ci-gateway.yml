@@ -8,7 +8,7 @@ jobs:
     uses: ./.github/workflows/frontend-checks.yml
 
   run-infrastructure:
-    uses: ./.github/workflows/terraform-checks.yml
+    uses: ./.github/workflows/infrastructure-checks.yml
 
   run-backend:
     uses: ./.github/workflows/backend-unit-tests.yml
@@ -30,7 +30,7 @@ jobs:
           fi
 
           if [ "${{ needs.run-infrastructure.result }}" != "success" ]; then
-            echo "Terraform checks failed!"
+            echo "Infrastructure checks failed!"
             exit 1
           fi
 

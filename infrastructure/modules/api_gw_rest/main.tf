@@ -39,7 +39,7 @@ resource "aws_api_gateway_method" "post_method" {
 }
 
 # -----------------------------------------------------------------------------
-# CRM WEBSOCKET ROUTER LAMBDA INTEGRATION (AWS_PROXY)
+# POST LAMBDA INTEGRATION (AWS_PROXY)
 # -----------------------------------------------------------------------------
 resource "aws_api_gateway_integration" "post_integration" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
@@ -47,13 +47,13 @@ resource "aws_api_gateway_integration" "post_integration" {
   http_method             = aws_api_gateway_method.post_method.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.crm_wh_router_invoke_arn
+  uri                     = var.integration_lambda_invoke_arn
 }
 
-resource "aws_lambda_permission" "crm_wh_router_invoke" {
-  statement_id  = "AllowAPIGatewayInvokeRouter-${var.api_name}"
+resource "aws_lambda_permission" "integration_lambda_invoke" {
+  statement_id  = "AllowAPIGatewayInvokeIntegration-${var.api_name}"
   action        = "lambda:InvokeFunction"
-  function_name = var.crm_wh_router_function_name
+  function_name = var.integration_lambda_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }

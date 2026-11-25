@@ -144,19 +144,6 @@ resource "aws_security_group" "kb_sync_sg" {
   }
 }
 
-# CRM WEBHOOK TOKEN AUTHORIZER SECURITY GROUP
-# Group for the CRM webhook token authoriser Lambda.
-resource "aws_security_group" "crm_wh_token_authorizer" {
-  name        = "${var.environment}-crm-wh-token-authorizer-sg"
-  description = "Security group for CRM webhook token authoriser Lambda"
-  vpc_id      = local.vpc_id
-
-  tags = {
-    Name      = "${var.environment}-crm-wh-token-authorizer-sg"
-    Component = "crm-integration"
-  }
-}
-
 # CLIENT WEBSOCKET ROUTER SECURITY GROUP
 # Group for the client WebSocket router Lambda.
 resource "aws_security_group" "client_ws_router" {
@@ -205,6 +192,32 @@ resource "aws_security_group" "crm_wh_router_sg" {
 
   tags = {
     Name      = "${var.environment}-crm-wh-router-sg"
+    Component = "crm-integration"
+  }
+}
+
+# CRM WEBHOOK TOKEN AUTHORIZER SECURITY GROUP
+# Group for the CRM webhook token authoriser Lambda.
+resource "aws_security_group" "crm_wh_token_authorizer" {
+  name        = "${var.environment}-crm-wh-token-authorizer-sg"
+  description = "Security group for CRM webhook token authoriser Lambda"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-crm-wh-token-authorizer-sg"
+    Component = "crm-integration"
+  }
+}
+
+# CRM WEBHOOK VALIDATOR (CONTENT GURU STORM) SECURITY GROUP
+# Restricts inbound webhook validation to Secrets Manager and Lambda VPC endpoints with no internet egress.
+resource "aws_security_group" "crm_wh_validator_cgstorm_sg" {
+  name        = "${var.environment}-crm-wh-validator-cgstorm-sg"
+  description = "Allows Content Guru Storm webhook validator to reach Secrets Manager and Lambda endpoints"
+  vpc_id      = local.vpc_id
+
+  tags = {
+    Name      = "${var.environment}-crm-wh-validator-cgstorm-sg"
     Component = "crm-integration"
   }
 }
@@ -330,6 +343,24 @@ resource "aws_vpc_security_group_ingress_rule" "allow_crm_tool_to_secrets_manage
   ip_protocol                  = "tcp"
   security_group_id            = aws_security_group.secrets_manager.id
   referenced_security_group_id = aws_security_group.crm_tool_sg.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_crm_wh_validator_cgstorm_to_secrets_manager" {
+  description                  = "Allow Storm webhook validator to reach SecretsManager endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.secrets_manager.id
+  referenced_security_group_id = aws_security_group.crm_wh_validator_cgstorm_sg.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_crm_wh_validator_cgstorm_to_endpoints" {
+  description                  = "Allow Storm webhook validator to reach Lambda VPC endpoint"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.crm_wh_validator_cgstorm_sg.id
 }
 
 # ======================= EGRESS RULES (INTERNAL) ===========================================
@@ -459,6 +490,24 @@ resource "aws_vpc_security_group_egress_rule" "allow_crm_tool_to_secrets_manager
   description                  = "Allow outbound traffic from CRM Tool to Secrets Manager"
   security_group_id            = aws_security_group.crm_tool_sg.id
   referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_validator_cgstorm_to_secrets_manager" {
+  description                  = "Allow outbound HTTPS traffic from Storm webhook validator to Secrets Manager"
+  security_group_id            = aws_security_group.crm_wh_validator_cgstorm_sg.id
+  referenced_security_group_id = aws_security_group.secrets_manager.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_crm_wh_validator_cgstorm_to_vpc_endpoints" {
+  description                  = "Allow outbound HTTPS traffic from Storm webhook validator to Lambda VPC endpoint"
+  security_group_id            = aws_security_group.crm_wh_validator_cgstorm_sg.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443

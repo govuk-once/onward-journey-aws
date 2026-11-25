@@ -62,12 +62,10 @@ resource "aws_secretsmanager_secret_version" "ho_crm_val" {
 # DVLA CRM (Content Guru Storm)
 # -----------------------------------------------------------------------------
 
-# TODO: Uncomment the following data source when the credentials are required by the crm_tool in future DVLA Storm integration work.
-# Currently commented out as it will flag as a tflint error whilst not being used in any resources or outputs.
 # # Read-only lookup for the shared Storm API credentials managed in infrastructure/shared/secrets.tf
-# data "aws_secretsmanager_secret" "dvla_storm_credentials" {
-#   name = var.dvla_storm_secret_name
-# }
+data "aws_secretsmanager_secret" "dvla_storm_credentials" {
+  name = var.dvla_storm_secret_name
+}
 
 # Initial random UUID used as the query-string token (?token=<uuid>) on inbound Storm webhooks
 resource "random_uuid" "dvla_storm_inbound_webhook_url_token" {}

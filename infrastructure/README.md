@@ -2,7 +2,7 @@
 
 This directory contains the terraform code to deploy an instance of the onwards journey application and supporting services.
 
-### The "Shared VPC, Isolated Stack" Model
+## The "Shared VPC, Isolated Stack" Model
 
 We utilise a model where foundational networking is **shared** across the account, while application resources are **isolated** per developer environment.
 
@@ -10,6 +10,8 @@ We utilise a model where foundational networking is **shared** across the accoun
 - **Why:** This approach avoids hitting AWS VPC limits and reduces deployment times by reusing the heavy networking infrastructure. It ensures a consistent network configuration across the team while maintaining total security and data isolation for each developer.
 
 ---
+
+## Architecture & Deployment
 
 ### 1. The Shared VPC & Subnets
 
@@ -60,13 +62,11 @@ We use a configuration-driven pipeline to manage the database schema and the ing
 - **Database Initialisation (`rds_init`):** Managed via `infrastructure/services/kb_config.yaml`. This ensures that the database environment is correctly provisioned:
   - **Extensions:** Installs `pgvector`.
   - **Users:** Idempotently creates the `rds_readonly_dept_contacts` SQL user used by the Search Tool.
-  - **Security:** Security: Enables AWS IAM token authentication for the rds_readonly_dept_contacts user.
+  - **Security:** Enables AWS IAM token authentication for the rds_readonly_dept_contacts user.
   - **Tables:** Ensures tables used for KB syncs exist without risking data loss. It uses `CREATE TABLE IF NOT EXISTS`.
 - **Flexible Primary Keys:** By default, tables are created with a `SERIAL PRIMARY KEY` called `id`. However, you can define your own natural primary key (e.g., `kb_identifier`) in the column list to ensure idempotency and prevent duplicates.
 - **Automatic Vectorisation:** If a table defines an `embedding` column and `embedding_source_cols`, the respective Lambda will automatically call Bedrock Titan v2 to generate vectors (for the seeder) or provision the correct vector types (for RDS init).
 - **Automatic Triggers:** Terraform monitors YAML configs, Lambda code, and mock CSV files. Any change will automatically trigger the appropriate Lambda (`rds_seeder` for mock data, `rds_init` for RDS infra and user sync).
-
----
 
 ### 6. Managing the Read-Only User
 
@@ -74,37 +74,83 @@ The `rds_tool` Lambda is strictly restricted to read-only access using a dedicat
 
 This uses AWS IAM Database Authentication. The Lambda does not use a static password or access Secrets Manager for database connectivity. Instead, it generates a short-lived AWS IAM token at runtime to authenticate. Local permissions within PostgreSQL are restricted to SELECT operations only, ensuring a zero-leak state configuration.
 
----
-
 ### 7. Knowledge Base ETL Sync Pipeline (Step Functions)
 
 In addition to the static seeder, we have a dynamic **Knowledge Base Sync Pipeline** designed to fetch and vectorise articles from remote CRM platforms (e.g., Genesys Cloud) on a schedule.
 
 - **Orchestration:** Managed via an AWS Step Function (`kb-sync-machine`).
 - **Workflow Steps:**
-    1.  **CheckKBMeta:** Polls the remote CRM to get the `dateModified` of the target Knowledge Base.
-    2.  **CheckSyncMeta:** Compares the remote timestamp with the `last_modified` date stored in the local `sync_kb_metadata` table.
-    3.  **Choice (IsSyncRequired):** If the dates match, the execution ends. If they differ, the sync proceeds.
-    4.  **FetchArticles:** Downloads all articles from the remote CRM.
-    5.  **ProcessAndEmbedArticles (Map State):** Iterates through each article in parallel, calling Bedrock Titan v2 to generate embeddings and upserting the results into the `knowledge_base_articles` table.
+  1.  **CheckKBMeta:** Polls the remote CRM to get the `dateModified` of the target Knowledge Base.
+  2.  **CheckSyncMeta:** Compares the remote timestamp with the `last_modified` date stored in the local `sync_kb_metadata` table.
+  3.  **Choice (IsSyncRequired):** If the dates match, the execution ends. If they differ, the sync proceeds.
+  4.  **FetchArticles:** Downloads all articles from the remote CRM.
+  5.  **ProcessAndEmbedArticles (Map State):** Iterates through each article in parallel, calling Bedrock Titan v2 to generate embeddings and upserting the results into the `knowledge_base_articles` table.
 - **Scheduling:** EventBridge rules are dynamically created based on the `active_pipelines` configuration in the Terraform locals.
 - **Observability:** Logs for each step are available in CloudWatch under `/aws/lambda/[initials]-kb-sync-*` and the Step Function execution history.
 
+### 8. Frontend Tester Branches & Credentials
+
+The Amplify frontend automatically scales the number of isolated branches based on your environment. Each branch has a distinct URL and login credentials.
+`ux` workspace is set to deploy to 10 branches - it can be edited to deploy the number required for testing (if more or less than 10 branches are required).
+All others deploy 2 branches so developers can check that the multibranch feature works while implementing changes.
+- **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
+- **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
+- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).
+
+### 9. Content Guru Storm Webhook Registration
+
+`infrastructure/scripts/register_storm_webhook.py` manages the inbound Content Guru Storm Web Chat webhook subscription (`POST`, `GET`, and `DELETE /api/v1/webhooks`). It resolves the target API Gateway endpoint and AWS Secrets Manager secret names directly from Terraform outputs.
+
+#### Prerequisites
+
+- AWS credentials configured for the target account (`AWS_PROFILE` or `AWS_REGION`).
+- Terraform initialised in `infrastructure/shared` and `infrastructure/services`.
+- `uv` installed (dependencies are declared inline via PEP 723 and resolved automatically).
+
+#### Usage
+
+Run all commands from the repository root (`onward-journey-aws`):
+
+```bash
+# Preview resolved configuration and masked webhook URI without calling Storm
+uv run infrastructure/scripts/register_storm_webhook.py -e <environment> --dry-run
+
+# Register the webhook for the target workspace (or omit -e to use the active Terraform workspace)
+uv run infrastructure/scripts/register_storm_webhook.py -e <environment>
+
+# Inspect the currently registered webhook URL (token redacted)
+uv run infrastructure/scripts/register_storm_webhook.py --get
+
+# Replace an existing webhook subscription (prompts for 'yes' confirmation)
+uv run infrastructure/scripts/register_storm_webhook.py -e <environment> --replace
+
+# Delete the active webhook subscription (prompts for 'yes' confirmation)
+uv run infrastructure/scripts/register_storm_webhook.py --delete
+```
+
+#### Running Unit Tests
+
+```bash
+uv run --project app pytest -c app/pyproject.toml infrastructure/scripts/tests
+```
+
 ---
 
-### Troubleshooting & Maintenance
+## Troubleshooting & Maintenance
 
-#### When the Seeder or Init Fails
+### If the Seeder or Init Fails
+
 If your tables or data aren't appearing in RDS after an apply, check the following:
 
 1.  **CloudWatch Logs:**
     Look for "Connection Timeout" or Bedrock "Access Denied" errors:
-    *   Mock Data: `/aws/lambda/[initials]-rds-seeder`
-    *   RDS Infrastructure: `/aws/lambda/[initials]-rds-init`
+-   Mock Data: `/aws/lambda/[initials]-rds-seeder`
+-   RDS Infrastructure: `/aws/lambda/[initials]-rds-init`
 2.  **VPC Routing:** Ensure the S3 Gateway Endpoint is associated with the private route table in the VPC layer.
 3.  **Secrets Format:** Ensure the DB password in Secrets Manager is saved as a **Plaintext** string, not a JSON key-pair.
 
-#### Manual Refresh
+### Manual Refresh
+
 To force-rebuild a mock table or re-run the RDS initialisation:
 
 ```bash
@@ -115,7 +161,7 @@ terraform apply -replace='terraform_data.rds_sync_trigger["mock_rag_data_<versio
 terraform apply -replace='terraform_data.rds_init_trigger'
 ```
 
-#### Manual Knowledge Base sync
+### Manual Knowledge Base Sync
 
 The Knowledge Bases may require manual syncing after applying terraform - to check if this is the case, go to the `rds-tool` lambda in AWS console and run a test command for each `kb_identifier` (currently `ho-visa-005`), for example:
 
@@ -148,16 +194,8 @@ The query should be successful, but check the details - if the result content on
 
   Now go to `rds-tool` lambda and run a `query_knowledge_base` test for each `kb_identifier` - you should now see the correct information in the result content.
 
-#### Frontend Tester Branches & Credentials
-The Amplify frontend automatically scales the number of isolated branches based on your environment. Each branch has a distinct URL and login credentials.
-`ux` workspace is set to deploy to 10 branches - it can be edited to deploy the number required for testing (if more or less than 10 branches are required).
-All others deploy 2 branches so developers can check that the multibranch feature works while implementing changes.
-- **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
-- **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
-- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).
----
+### Manual Build/Rebuild (Lambda Packaging)
 
-#### Manual Build/Rebuild (Lambda Packaging)
 If a Lambda build is unsuccessful or staging folders are corrupted, use the `taint` command.
 
 ```bash
@@ -175,6 +213,8 @@ terraform apply \
   -replace="null_resource.install_crm_tool_deps"
 ```
 
-#### Terraform Destroy
+---
+
+## Terraform Destroy
 
 A guide to destroying infrastructure in a workspace is available [here](https://gdsgovukagents.atlassian.net/wiki/spaces/GAOJ/pages/153190436/Terraform+destroy+guide).

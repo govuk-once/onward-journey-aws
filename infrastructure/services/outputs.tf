@@ -58,3 +58,14 @@ output "dynamodb_sessions_crm_chat_id_index" {
   description = "Name of the GSI used to look up sessions by Storm CRM chat ID"
   value       = "crm_chat_id-index"
 }
+
+## CONTENT GURU STORM WEBHOOK
+output "crm_contentguru_wh_url" {
+  description = "The target URL to register in Content Guru Storm Integrate (CRM management)"
+  value       = module.crm_contentguru_wh_gateway.webhook_endpoint_url
+}
+
+output "dvla_storm_inbound_webhook_token_secret_name" {
+  description = "Secrets Manager secret name for the inbound DVLA Content Guru Storm webhook URL token registry"
+  value       = aws_secretsmanager_secret.dvla_storm_inbound_webhook_url_token.name
+}

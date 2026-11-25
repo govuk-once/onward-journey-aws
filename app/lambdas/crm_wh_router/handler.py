@@ -1,6 +1,7 @@
 """CRM Webhook Router Lambda Function.
 
-Ingests authenticated inbound webhooks from Content Guru Storm via API Gateway.
+Ingests authenticated inbound webhooks from Content Guru Storm via API Gateway
+(dispatched asynchronously by crm_wh_validator_cgstorm).
 Maps incoming CRM chat IDs to active user sessions by querying the DynamoDB
 sessions table via the crm_chat_id Global Secondary Index (GSI), and relays
 adviser events (messages, typing indicators) to the client's open WebSocket connection.
@@ -55,7 +56,7 @@ def _parse_storm_payload(payload: Any) -> Tuple[Optional[str], str, Dict[str, An
 
     Storm webhook payloads use inconsistent schemas across event types:
     - 'Message' events store the chat interaction ID at Body.ConversationId
-    - 'Status' and 'Typing' events store the chat interaction ID at Body.To.Id
+    - 'Status' / 'InteractionStatus' and 'Typing' events store the chat interaction ID at Body.To.Id
 
     Returns:
         A tuple of (crm_chat_id, event_type, event_body).
@@ -294,8 +295,13 @@ def lambda_handler(event: Dict[str, Any], lambda_context: object) -> Dict[str, A
         )
 
     # 4. Handle chat termination or in-flight adviser events
-    # Content Guru emits 'Status' events with Status 'Ended' when an interaction closes
-    is_chat_ended = event_type == "Status" and event_body.get("Status") == "Ended"
+    # Storm's OpenAPI/Swagger spec defines the event type as 'InteractionStatus', while live/legacy
+    # payloads may emit 'Status'; checking both ensures adviser disconnects (Status: Ended)
+    # reliably revert the session to AI_CHAT regardless of which variant Storm sends.
+    is_chat_ended = (
+        event_type in ("Status", "InteractionStatus")
+        and event_body.get("Status") == "Ended"
+    )
 
     if is_chat_ended:
         _revert_state_to_ai_chat(session_id, request_id)

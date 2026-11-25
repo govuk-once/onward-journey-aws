@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 SERVICES_DIR = Path(__file__).resolve().parent.parent / "services"
 TARGET_PATTERN = re.compile(r"tester-([1-9][0-9]*)")
@@ -120,6 +121,8 @@ def sync_branch_credentials(
     credentials_map = json.loads(secret_value)
     all_branches = list_all_branches(amplify_client, app_id)
 
+    # Validate all branches and secrets upfront before mutating any branch
+    pending_updates: list[tuple[str, str, str]] = []
     for idx in indices:
         branch_name = find_branch_name(all_branches, idx)
         entry = credentials_map.get(f"Tester {idx}")
@@ -128,7 +131,9 @@ def sync_branch_credentials(
 
         raw_creds = f"{entry['username']}:{entry['password']}".encode("utf-8")
         creds_b64 = base64.b64encode(raw_creds).decode("utf-8")
+        pending_updates.append((idx, branch_name, creds_b64))
 
+    for idx, branch_name, creds_b64 in pending_updates:
         amplify_client.update_branch(
             appId=app_id,
             branchName=branch_name,
@@ -142,15 +147,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Rotate Basic Auth passwords for specific Amplify tester branches."
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "targets",
         nargs="*",
+        default=[],
         help='Target branches to rotate (e.g. "tester-1" "tester-4").',
     )
-    parser.add_argument(
+    group.add_argument(
         "--targets-file",
         type=Path,
         help="Path to a JSON file containing an array of target branch names.",
+    )
+    parser.add_argument(
+        "--sync-only",
+        action="store_true",
+        help="Skip Terraform rotation and only sync existing Secrets Manager credentials to Amplify.",
     )
     return parser
 
@@ -159,31 +171,40 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.targets and args.targets_file:
-        parser.error("Provide either positional targets or --targets-file, not both.")
-
     try:
         if args.targets_file:
             indices = load_targets_from_file(args.targets_file)
-        elif args.targets:
-            indices = parse_targets(args.targets)
         else:
-            parser.print_help()
-            return 1
+            indices = parse_targets(args.targets)
 
         if not indices:
             print("No targets specified. Nothing to rotate.")
             return 0
 
-        check_for_drift(SERVICES_DIR)
-        rotate_in_terraform(SERVICES_DIR, indices)
-
         app_id = get_terraform_output(SERVICES_DIR, "amplify_app_id")
         secret_id = get_terraform_output(SERVICES_DIR, "tester_credentials_secret_id")
 
-        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or DEFAULT_REGION
+        region = (
+            os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or DEFAULT_REGION
+        )
         amplify_client = boto3.client("amplify", region_name=region)
         secrets_client = boto3.client("secretsmanager", region_name=region)
+
+        if args.sync_only:
+            targets_summary = ", ".join(f"tester-{idx}" for idx in indices)
+            print(f"--sync-only specified: skipping Terraform rotation for {targets_summary}.")
+        else:
+            # Fail fast on bad targets before rotating in Terraform
+            all_branches = list_all_branches(amplify_client, app_id)
+            for idx in indices:
+                find_branch_name(all_branches, idx)
+
+            check_for_drift(SERVICES_DIR)
+            targets_summary = ", ".join(f"tester-{idx}" for idx in indices)
+            print(f"Targets to rotate: {targets_summary}")
+            rotate_in_terraform(SERVICES_DIR, indices)
 
         sync_branch_credentials(
             amplify_client=amplify_client,
@@ -192,11 +213,21 @@ def main(argv: list[str] | None = None) -> int:
             secret_id=secret_id,
             indices=indices,
         )
-    except (ValueError, FileNotFoundError, LookupError, RuntimeError) as exc:
+    except (
+        ValueError,
+        FileNotFoundError,
+        LookupError,
+        RuntimeError,
+        BotoCoreError,
+        ClientError,
+    ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as exc:
-        print(f"Error: Terraform command failed (exit {exc.returncode}).", file=sys.stderr)
+        print(
+            f"Error: Terraform command failed (exit {exc.returncode}).",
+            file=sys.stderr,
+        )
         return exc.returncode
 
     print("Password rotation complete. Secrets Manager and Amplify are in sync.")

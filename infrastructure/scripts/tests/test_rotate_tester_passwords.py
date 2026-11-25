@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from botocore.exceptions import ClientError, NoCredentialsError
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -90,6 +91,26 @@ class TestMultipleTargets:
             for call in mock_amplify.update_branch.call_args_list
         ]
         assert updated_branches == ["tester-1-aaa", "tester-4-ccc"]
+
+    @patch("rotate_tester_passwords.sync_branch_credentials")
+    @patch("rotate_tester_passwords.rotate_in_terraform")
+    @patch("rotate_tester_passwords.check_for_drift")
+    @patch("rotate_tester_passwords.list_all_branches", return_value=["tester-1-aaa", "tester-4-ccc"])
+    @patch("rotate_tester_passwords.boto3.client")
+    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    def test_prints_deduplicated_target_summary_before_apply(
+        self,
+        mock_output,
+        mock_boto,
+        mock_list,
+        mock_drift,
+        mock_rotate,
+        mock_sync,
+        capsys,
+    ):
+        assert rot.main(["tester-4", "tester-1", "tester-4"]) == 0
+        stdout = capsys.readouterr().out
+        assert "Targets to rotate: tester-4, tester-1" in stdout
 
 
 class TestLoadTargetsFromFile:
@@ -207,3 +228,143 @@ class TestSyncBranchCredentials:
                 secret_id="dev/frontend/tester-credentials",
                 indices=["1"],
             )
+
+
+class TestRecoveryAndPreValidation:
+    def test_sync_does_not_update_any_branch_if_one_target_is_missing(self):
+        mock_amplify = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"branches": [{"branchName": "tester-1-aaa"}]}
+        ]
+        mock_amplify.get_paginator.return_value = mock_paginator
+
+        mock_secrets = MagicMock()
+        mock_secrets.get_secret_value.return_value = {
+            "SecretString": json.dumps(
+                {"Tester 1": {"username": "u1", "password": "p1"}}
+            )
+        }
+
+        with pytest.raises(LookupError, match="tester-99"):
+            rot.sync_branch_credentials(
+                amplify_client=mock_amplify,
+                secrets_client=mock_secrets,
+                app_id="app-123",
+                secret_id="dev/frontend/tester-credentials",
+                indices=["1", "99"],
+            )
+
+        mock_amplify.update_branch.assert_not_called()
+
+    def test_sync_does_not_update_any_branch_if_one_secret_is_missing(self):
+        mock_amplify = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "branches": [
+                    {"branchName": "tester-1-aaa"},
+                    {"branchName": "tester-2-bbb"},
+                ]
+            }
+        ]
+        mock_amplify.get_paginator.return_value = mock_paginator
+
+        mock_secrets = MagicMock()
+        mock_secrets.get_secret_value.return_value = {
+            "SecretString": json.dumps(
+                {"Tester 1": {"username": "u1", "password": "p1"}}
+            )
+        }
+
+        with pytest.raises(LookupError, match="Tester 2"):
+            rot.sync_branch_credentials(
+                amplify_client=mock_amplify,
+                secrets_client=mock_secrets,
+                app_id="app-123",
+                secret_id="dev/frontend/tester-credentials",
+                indices=["1", "2"],
+            )
+
+        mock_amplify.update_branch.assert_not_called()
+
+    @patch("rotate_tester_passwords.sync_branch_credentials")
+    @patch("rotate_tester_passwords.rotate_in_terraform")
+    @patch("rotate_tester_passwords.check_for_drift")
+    @patch("rotate_tester_passwords.list_all_branches", return_value=["tester-1-aaa"])
+    @patch("rotate_tester_passwords.boto3.client")
+    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    def test_main_aborts_before_terraform_if_target_branch_is_missing(
+        self,
+        mock_output,
+        mock_boto,
+        mock_list,
+        mock_drift,
+        mock_rotate,
+        mock_sync,
+        capsys,
+    ):
+        assert rot.main(["tester-1", "tester-99"]) == 1
+        mock_drift.assert_not_called()
+        mock_rotate.assert_not_called()
+        mock_sync.assert_not_called()
+        assert "tester-99" in capsys.readouterr().err
+
+    @patch("rotate_tester_passwords.sync_branch_credentials")
+    @patch("rotate_tester_passwords.rotate_in_terraform")
+    @patch("rotate_tester_passwords.check_for_drift")
+    @patch("rotate_tester_passwords.boto3.client")
+    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    def test_sync_only_skips_drift_check_and_terraform_apply(
+        self,
+        mock_output,
+        mock_boto,
+        mock_drift,
+        mock_rotate,
+        mock_sync,
+    ):
+        assert rot.main(["--sync-only", "tester-1"]) == 0
+        mock_drift.assert_not_called()
+        mock_rotate.assert_not_called()
+        mock_sync.assert_called_once()
+
+
+class TestAwsErrorHandling:
+    @patch("rotate_tester_passwords.list_all_branches")
+    @patch("rotate_tester_passwords.boto3.client")
+    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    def test_client_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
+        mock_list.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}},
+            "ListBranches",
+        )
+
+        assert rot.main(["tester-1"]) == 1
+        stderr = capsys.readouterr().err
+        assert "Error:" in stderr
+        assert "AccessDeniedException" in stderr
+
+    @patch("rotate_tester_passwords.list_all_branches")
+    @patch("rotate_tester_passwords.boto3.client")
+    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    def test_botocore_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
+        mock_list.side_effect = NoCredentialsError()
+
+        assert rot.main(["tester-1"]) == 1
+        stderr = capsys.readouterr().err
+        assert "Error:" in stderr
+        assert "Unable to locate credentials" in stderr
+
+
+class TestCliArguments:
+    def test_requires_targets_or_file(self):
+        with pytest.raises(SystemExit) as exc:
+            rot.main([])
+        assert exc.value.code == 2
+
+    def test_rejects_both_targets_and_file(self, tmp_path):
+        f = tmp_path / "targets.json"
+        f.write_text('["tester-1"]', encoding="utf-8")
+        with pytest.raises(SystemExit) as exc:
+            rot.main(["tester-1", "--targets-file", str(f)])
+        assert exc.value.code == 2

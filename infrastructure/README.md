@@ -167,6 +167,11 @@ All others deploy 2 branches so developers can check that the multibranch featur
   uv run --project app python infrastructure/scripts/rotate_tester_passwords.py --targets-file infrastructure/scripts/password-rotation-targets.json
   ```
 
+  **Recovering from a failed sync (without re-rotating passwords):**
+  ```bash
+  uv run --project app python infrastructure/scripts/rotate_tester_passwords.py --sync-only tester-1 tester-2
+  ```
+
 - **Testing the Rotation Script:** Unit tests live in `infrastructure/scripts/tests/` and run locally without AWS credentials or Terraform state:
   ```bash
   uv run --project app pytest infrastructure/scripts/tests/

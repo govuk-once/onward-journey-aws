@@ -31,9 +31,9 @@ The application is structured to support efficient AWS Lambda deployments using 
 ### Deployment via Terraform
 Follow the [instructions here to deploy terraform](../README.md#deploying-infrastructure) in the root README.md file.
 
-The build process (defined in `infrastructure/build.tf`) automatically:
+The build process (defined in `infrastructure/services/build.tf`) automatically:
 *   Creates the AgentCore Runtime using Direct Code Deployment
-*   Creates a **Shared Layer** containing all dependencies (from `pyproject.toml`) and the `shared/utils/` code.
+*   Creates a **Shared Layer** containing all dependencies (from the root `pyproject.toml`) and the `shared/utils/` code.
 *   Packages each Lambda function into a "thin" zip file containing only its specific handler.
 
 ### Shared Logic & Utilities
@@ -54,7 +54,7 @@ Unit tests run entirely offline and execute quickly without requiring AWS creden
 
 To run all unit tests:
 ```bash
-# From the app/ directory
+# From the repository root (or any subdirectory)
 uv run pytest
 ```
 
@@ -64,7 +64,7 @@ uv run pytest
 Integration tests test the routing, tool calling, and output behavior of Lambdas and workflows against AWS services (such as Bedrock LLM judges).
 
 #### Prerequisite
-To run integration tests, you must be logged into an authenticated GDS AWS shell from the `app/` directory:
+To run integration tests, you must be logged into an authenticated GDS AWS shell:
 
 ```bash
 gds aws <role-name> -- $SHELL
@@ -74,28 +74,28 @@ gds aws <role-name> -- $SHELL
 Pytest provides minimal logging, displaying detailed output and judge reasoning only on test failures:
 
 ```bash
-# Run ALL integration tests
-uv run pytest tests/integration
+# Run ALL integration tests (from the repository root)
+uv run pytest app/tests/integration
 
 # Run a specific integration test suite (e.g., orchestrator)
-uv run pytest tests/integration/orchestrator
+uv run pytest app/tests/integration/orchestrator
 
 # Run a single test function
-uv run pytest tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+uv run pytest app/tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
 ```
 
 #### DeepEval
 DeepEval provides rich terminal output, summarising LLM judge scores and evaluation metrics for both passing and failing tests:
 
 ```bash
-# Run ALL integration tests with DeepEval
-uv run deepeval test run tests/integration
+# Run ALL integration tests with DeepEval (from the repository root)
+uv run deepeval test run app/tests/integration
 
 # Run a specific integration test suite (e.g., orchestrator)
-uv run deepeval test run tests/integration/orchestrator
+uv run deepeval test run app/tests/integration/orchestrator
 
 # Run a single test function
-uv run deepeval test run tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
+uv run deepeval test run app/tests/integration/orchestrator/test_orchestrator.py::test_kb_not_relevant_routes_to_crm_no_live_chat
 ```
 
 ---

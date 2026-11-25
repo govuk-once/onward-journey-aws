@@ -13,7 +13,6 @@ os.environ.setdefault("LOG_LEVEL", "INFO")
 # =====================================================================
 integration_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Go up 3 levels: integration -> tests -> app -> root
 project_root = os.path.abspath(os.path.join(integration_dir, "../../../"))
 orchestrator_root = os.path.join(project_root, "app", "agentcore", "orchestrator")
 

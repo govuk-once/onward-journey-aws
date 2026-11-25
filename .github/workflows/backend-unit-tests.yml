@@ -7,6 +7,9 @@ on:
       - main
     paths:
       - 'app/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'conftest.py'
       - '.github/workflows/backend-unit-tests.yml'
 
 jobs:
@@ -24,8 +27,6 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        working-directory: app
         run: uv sync --frozen --all-extras
       - name: Run unit tests
-        working-directory: app
         run: uv run pytest

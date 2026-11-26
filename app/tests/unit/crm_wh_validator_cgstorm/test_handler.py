@@ -96,6 +96,13 @@ class FakeRouterLambda:
         return {"StatusCode": self.status_code}
 
 
+@pytest.fixture(autouse=True)
+def override_secrets_endpoint_url(monkeypatch):
+    monkeypatch.setenv(
+        "SECRETS_ENDPOINT_URL", "https://secretsmanager.eu-west-2.amazonaws.com"
+    )
+
+
 @pytest.fixture
 def lambda_context():
     return SimpleNamespace(aws_request_id=SAMPLE_REQUEST_ID)
@@ -345,6 +352,7 @@ class TestWebhookRegistrationHandshake:
         ).hexdigest()
         assert response["statusCode"] == 200
         assert json.loads(response["body"]) == {"Response": expected_hash}
+        assert mock_router_lambda.invocations == []
 
     @pytest.mark.parametrize(
         "malformed_verify_payload",
@@ -419,29 +427,32 @@ class TestInboundChatEventForwarding:
 
 class TestUnhandledInfrastructureFaults:
     @pytest.mark.parametrize(
-        "malformed_event",
+        ("malformed_event", "expected_type_name"),
         [
-            {"headers": {}, "body": {"already": "parsed"}},
-            {
-                "headers": ["not-a-dict"],
-                "body": json.dumps({"Event": {"Type": "Message"}}),
-            },
+            ({"headers": {}, "body": {"already": "parsed"}}, "dict"),
+            (
+                {
+                    "headers": ["not-a-dict"],
+                    "body": json.dumps({"Event": {"Type": "Message"}}),
+                },
+                "list",
+            ),
         ],
         ids=["non-string-body", "non-dict-headers"],
     )
     def test_invalid_api_gateway_event_shape_raises_unhandled_type_error(
-        self, lambda_context, mock_secrets_manager, malformed_event
+        self, lambda_context, mock_secrets_manager, malformed_event, expected_type_name
     ):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match=expected_type_name):
             validator.lambda_handler(malformed_event, lambda_context)
 
     @pytest.mark.parametrize(
-        "corrupt_secret_string",
+        ("corrupt_secret_string", "expected_error", "match_pattern"),
         [
-            json.dumps({}),
-            json.dumps({"api_secret": ""}),
-            json.dumps({"api_secret": 12345}),
-            "not-json",
+            (json.dumps({}), KeyError, "api_secret"),
+            (json.dumps({"api_secret": ""}), ValueError, "non-empty string"),
+            (json.dumps({"api_secret": 12345}), ValueError, "non-empty string"),
+            ("not-json", json.JSONDecodeError, "Expecting value"),
         ],
         ids=[
             "missing-api-secret",
@@ -451,12 +462,17 @@ class TestUnhandledInfrastructureFaults:
         ],
     )
     def test_corrupt_secret_payload_raises_unhandled_error(
-        self, lambda_context, mock_secrets_manager, corrupt_secret_string
+        self,
+        lambda_context,
+        mock_secrets_manager,
+        corrupt_secret_string,
+        expected_error,
+        match_pattern,
     ):
         mock_secrets_manager.secret_string = corrupt_secret_string
         event = _build_api_gateway_event(json.dumps({"Event": {"Type": "Message"}}))
 
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(expected_error, match=match_pattern):
             validator.lambda_handler(event, lambda_context)
 
     def test_secrets_manager_failure_raises_unhandled_error(

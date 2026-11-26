@@ -26,9 +26,6 @@ agentcore = [
     "httpx>=0.28.1",
 ]
 
-[tool.setuptools]
-packages = ["app.shared", "app.lambdas", "app.agentcore"]
-
 [dependency-groups]
 dev = [
     "boto3>=1.42.5",         # Pre-installed in Lambda, keep here for local IDE/Linting

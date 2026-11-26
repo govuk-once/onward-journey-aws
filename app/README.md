@@ -52,11 +52,12 @@ The test suite is split into fast, offline **Unit Tests** and AWS-dependent **In
 ### Unit Tests
 Unit tests run entirely offline and execute quickly without requiring AWS credentials.
 
-To run all unit tests:
+To run the `app/` unit tests (from the repository root):
 ```bash
-# From the repository root (or any subdirectory)
-uv run pytest
+uv run pytest app/tests/unit
 ```
+
+*(To run all unit tests across the entire repository, run `uv run pytest` from the repository root.)*
 
 ---
 

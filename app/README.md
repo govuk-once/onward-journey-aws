@@ -29,7 +29,7 @@ The application is structured to support efficient AWS Lambda deployments using 
 **Important:** There is currently no local "interactive" mode or server in this directory. The system is designed to run exclusively within the AWS environment.
 
 ### Deployment via Terraform
-Follow the [instructions here to deploy terraform](../README.md#deploying-infrastructure) in the root README.md file.
+Follow the [instructions here to deploy terraform](../README.md#2-deploying-infrastructure) in the root README.md file.
 
 The build process (defined in `infrastructure/services/build.tf`) automatically:
 *   Creates the AgentCore Runtime using Direct Code Deployment

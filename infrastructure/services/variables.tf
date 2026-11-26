@@ -18,3 +18,9 @@ variable "aws_region" {
   description = "The AWS region to deploy resources into (e.g. eu-west-2)."
   default     = "eu-west-2"
 }
+
+variable "dvla_storm_secret_name" {
+  type        = string
+  description = "Secrets Manager secret name containing DVLA Content Guru Storm API credentials"
+  default     = "shared/crm-creds/dvla-storm-dev"
+}

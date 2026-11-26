@@ -62,24 +62,28 @@ resource "aws_secretsmanager_secret_version" "ho_crm_val" {
 # DVLA CRM (Content Guru Storm)
 # -----------------------------------------------------------------------------
 
-# Metadata container for DVLA Content Guru API credentials and endpoint config
-resource "aws_secretsmanager_secret" "dvla_storm_credentials" {
-  name        = "${var.environment}/crm-creds/dvla-storm"
-  description = "API credentials and endpoint config for the DVLA Content Guru Storm instance"
-
-  lifecycle {
-    prevent_destroy = true
-  }
+# # Read-only lookup for the shared Storm API credentials managed in infrastructure/shared/secrets.tf
+data "aws_secretsmanager_secret" "dvla_storm_credentials" {
+  name = var.dvla_storm_secret_name
 }
 
-# Placeholder structure for DVLA CRM (manually populated in Console/CLI)
-resource "aws_secretsmanager_secret_version" "dvla_storm_val" {
-  secret_id = aws_secretsmanager_secret.dvla_storm_credentials.id
+# Initial random UUID used as the query-string token (?token=<uuid>) on inbound Storm webhooks
+resource "random_uuid" "dvla_storm_inbound_webhook_url_token" {}
+
+# Metadata container for this environment's inbound webhook token registry
+resource "aws_secretsmanager_secret" "dvla_storm_inbound_webhook_url_token" {
+  name        = "${var.environment}/crm-creds/dvla-storm-inbound-webhook-url-token"
+  description = "URL query token registry for authenticating inbound DVLA Content Guru Storm webhooks"
+}
+
+# Populates the initial { "<token>": "<caller_id>" } map read by crm-wh-token-authorizer.
+resource "aws_secretsmanager_secret_version" "dvla_storm_inbound_webhook_url_token_val" {
+  secret_id = aws_secretsmanager_secret.dvla_storm_inbound_webhook_url_token.id
   secret_string = jsonencode({
-    api_key    = "REPLACE_IN_CONSOLE"
-    account_id = "REPLACE_IN_CONSOLE"
-    base_url   = "REPLACE_IN_CONSOLE"
+    (random_uuid.dvla_storm_inbound_webhook_url_token.result) = "dvla-storm"
   })
+
+  # Ensures future terraform applies never overwrite manual token rotations.
   lifecycle {
     ignore_changes = [secret_string]
   }

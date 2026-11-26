@@ -10,8 +10,9 @@ locals {
     aws_cloudwatch_log_group.rds_init.name,
     aws_cloudwatch_log_group.rds_seeder.name,
     aws_cloudwatch_log_group.rds_tool.name,
-    module.crm_contentguru_wh_authorizer.log_group_name,
+    module.crm_wh_token_authorizer.log_group_name,
     module.crm_tool.log_group_name,
+    module.crm_wh_validator_cgstorm.log_group_name,
     module.crm_wh_router.log_group_name,
     module.client_ws_authorizer_lambda.log_group_name,
     module.client_ws_router_lambda.log_group_name,
@@ -120,4 +121,24 @@ resource "aws_cloudwatch_metric_alarm" "step_function_errors" {
   insufficient_data_actions = []
   alarm_actions             = [local.sns_topic_arn]
   treat_missing_data        = "notBreaching"
+}
+
+# ============== CRM Webhook Router DLQ ===============================
+resource "aws_cloudwatch_metric_alarm" "crm_wh_router_dlq_messages" {
+  alarm_name                = "${var.environment}-crm-wh-router-dlq-messages"
+  alarm_description         = "Alerts if new failed async webhook events are sent to the CRM webhook router DLQ"
+  comparison_operator       = "GreaterThanThreshold"
+  evaluation_periods        = 1 # Trigger on the first 5-minute window with new DLQ arrivals
+  metric_name               = "NumberOfMessagesSent"
+  namespace                 = "AWS/SQS"
+  period                    = 300   # Aggregate over 300 seconds (5 minutes) to batch burst failures into one alert
+  statistic                 = "Sum" # Reports the exact count of newly added DLQ messages in the window
+  threshold                 = 0     # Alert when 1 or more new messages enter the DLQ
+  insufficient_data_actions = []
+  alarm_actions             = [local.sns_topic_arn]
+  treat_missing_data        = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.crm_wh_router_dlq.name
+  }
 }

@@ -1,16 +1,12 @@
-"""DO NOT DELETE THIS FILE.
+"""Root pytest configuration.
 
-This file's presence at the repository root is required by pytest.
-It acts as an anchor point, automatically adding the root directory to
-Python's sys.path so that absolute imports in the test suite resolve correctly
-without ModuleNotFound errors.
+Sets default dummy AWS credentials when none are present in the environment so
+boto3 top-level client instantiations during offline unit test imports do not
+attempt local AWS SSO/CLI profile discovery.
 """
 
 import os
 
-# Set dummy AWS credentials if none exist in the environment.
-# Guarantees that boto3 top-level client instantiations during unit test imports
-# complete offline without attempting local AWS SSO/CLI profile discovery.
 os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-2")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "mock-access-key-id")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "mock-secret-access-key")

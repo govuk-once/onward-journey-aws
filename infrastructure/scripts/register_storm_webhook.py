@@ -20,6 +20,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any, Protocol
@@ -253,11 +254,16 @@ def mask_webhook_uri(uri: str) -> str:
     )
 
 
+def redact_tokens_in_text(text: str) -> str:
+    """Redact any token=<value> query parameter occurrences inside arbitrary text or JSON strings."""
+    return re.sub(r"(?i)([?&]token=)[^&\s\"'\}#\],]+", r"\1***REDACTED***", text)
+
+
 def confirm_webhook_deletion(storm_base_url: str, action_description: str) -> bool:
     """Warn the operator and require explicit 'yes' confirmation before deleting a webhook."""
     target_url = f"{storm_base_url.rstrip('/')}{STORM_WEBHOOK_PATH}"
     logger.warning(
-        "WARNING: About to %s by sending DELETE %s. "
+        "WARNING: You are about to %s by sending DELETE %s. "
         "Inbound events from Storm will stop immediately once deleted.",
         action_description,
         target_url,
@@ -314,7 +320,8 @@ def call_storm_webhook_api(
         if exc.code == 404 and method in ("GET", "DELETE"):
             return {"status_code": 404, "body": {}}
         raise StormWebhookError(
-            f"Storm API {method} {target_url} failed with HTTP {exc.code}: {error_body}"
+            f"Storm API {method} {target_url} failed with HTTP {exc.code}: "
+            f"{redact_tokens_in_text(error_body)}"
         ) from exc
     except urllib.error.URLError as exc:
         raise StormWebhookError(
@@ -386,7 +393,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         body = current["body"]
         registered_url = body.get("url") if isinstance(body, dict) else None
-        display = mask_webhook_uri(registered_url) if registered_url else body
+        display = (
+            mask_webhook_uri(registered_url)
+            if isinstance(registered_url, str) and registered_url
+            else redact_tokens_in_text(str(body))
+        )
         logger.info(
             "Current Storm webhook | status=%s | url=%s",
             current["status_code"],
@@ -461,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info(
         "Storm webhook registered successfully | status=%s | response=%s",
         result["status_code"],
-        result["body"],
+        redact_tokens_in_text(str(result["body"])),
     )
     return 0
 

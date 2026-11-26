@@ -32,6 +32,7 @@ import boto3
 
 logger = logging.getLogger("register_storm_webhook")
 
+AWS_REGION = "eu-west-2"
 STORM_WEBHOOK_PATH = "/api/v1/webhooks"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -381,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parse_args(argv)
 
-    secrets_client = boto3.client("secretsmanager")
+    secrets_client = boto3.client("secretsmanager", region_name=AWS_REGION)
     shared_secret_name = resolve_shared_secret_name()
     storm_secret = get_secret_json(secrets_client, shared_secret_name)
     storm_creds = extract_storm_credentials(storm_secret)

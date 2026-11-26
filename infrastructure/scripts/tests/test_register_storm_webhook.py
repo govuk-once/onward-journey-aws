@@ -342,6 +342,10 @@ class TestCliWorkflows:
 
         assert main([]) == 0
 
+        webhook_cli.boto3.client.assert_called_once_with(
+            "secretsmanager", region_name="eu-west-2"
+        )
+
         service_calls = [
             call
             for call in mock_terraform.runner.call_args_list

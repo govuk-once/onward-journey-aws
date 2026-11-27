@@ -1,5 +1,6 @@
 import base64
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -32,10 +33,13 @@ class TestEmptyFiles:
             assert rot.main(["--targets-file", str(f)]) == 0
             mock_drift.assert_not_called()
 
-    def test_blank_file_returns_error(self, tmp_path):
+    def test_blank_file_returns_error(self, tmp_path, capsys):
         f = tmp_path / "blank.json"
         f.write_text("", encoding="utf-8")
         assert rot.main(["--targets-file", str(f)]) == 1
+        stderr = capsys.readouterr().err
+        assert "Error:" in stderr
+        assert "Expecting value" in stderr
 
 
 class TestMultipleTargets:
@@ -95,9 +99,15 @@ class TestMultipleTargets:
     @patch("rotate_tester_passwords.sync_branch_credentials")
     @patch("rotate_tester_passwords.rotate_in_terraform")
     @patch("rotate_tester_passwords.check_for_drift")
-    @patch("rotate_tester_passwords.list_all_branches", return_value=["tester-1-aaa", "tester-4-ccc"])
+    @patch(
+        "rotate_tester_passwords.list_all_branches",
+        return_value=["tester-1-aaa", "tester-4-ccc"],
+    )
     @patch("rotate_tester_passwords.boto3.client")
-    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    @patch(
+        "rotate_tester_passwords.get_terraform_output",
+        side_effect=["app-123", "sec-123"],
+    )
     def test_prints_deduplicated_target_summary_before_apply(
         self,
         mock_output,
@@ -108,9 +118,15 @@ class TestMultipleTargets:
         mock_sync,
         capsys,
     ):
-        assert rot.main(["tester-4", "tester-1", "tester-4"]) == 0
-        stdout = capsys.readouterr().out
-        assert "Targets to rotate: tester-4, tester-1" in stdout
+        # Simulate user cancelling at the Terraform prompt; if the summary is in
+        # stdout after main() aborts here, it must have printed before apply ran.
+        mock_rotate.side_effect = subprocess.CalledProcessError(1, "terraform")
+
+        assert rot.main(["tester-4", "tester-1", "tester-4"]) == 1
+        captured = capsys.readouterr()
+        assert "Targets to rotate: tester-4, tester-1" in captured.out
+        mock_rotate.assert_called_once_with(rot.SERVICES_DIR, ["4", "1"])
+        mock_sync.assert_not_called()
 
 
 class TestLoadTargetsFromFile:
@@ -123,6 +139,12 @@ class TestLoadTargetsFromFile:
         f = tmp_path / "targets.json"
         f.write_text(json.dumps({"target": "tester-1"}), encoding="utf-8")
         with pytest.raises(ValueError, match="JSON array"):
+            rot.load_targets_from_file(f)
+
+    def test_rejects_malformed_json(self, tmp_path):
+        f = tmp_path / "targets.json"
+        f.write_text("{not valid json", encoding="utf-8")
+        with pytest.raises(json.JSONDecodeError):
             rot.load_targets_from_file(f)
 
     def test_missing_file_raises(self, tmp_path):
@@ -293,7 +315,10 @@ class TestRecoveryAndPreValidation:
     @patch("rotate_tester_passwords.check_for_drift")
     @patch("rotate_tester_passwords.list_all_branches", return_value=["tester-1-aaa"])
     @patch("rotate_tester_passwords.boto3.client")
-    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    @patch(
+        "rotate_tester_passwords.get_terraform_output",
+        side_effect=["app-123", "sec-123"],
+    )
     def test_main_aborts_before_terraform_if_target_branch_is_missing(
         self,
         mock_output,
@@ -313,26 +338,57 @@ class TestRecoveryAndPreValidation:
     @patch("rotate_tester_passwords.sync_branch_credentials")
     @patch("rotate_tester_passwords.rotate_in_terraform")
     @patch("rotate_tester_passwords.check_for_drift")
+    @patch("rotate_tester_passwords.list_all_branches")
     @patch("rotate_tester_passwords.boto3.client")
-    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
-    def test_sync_only_skips_drift_check_and_terraform_apply(
+    @patch(
+        "rotate_tester_passwords.get_terraform_output",
+        side_effect=["app-123", "sec-123"],
+    )
+    def test_sync_only_skips_preflight_and_terraform_apply(
         self,
         mock_output,
         mock_boto,
+        mock_list,
         mock_drift,
         mock_rotate,
         mock_sync,
     ):
+        mock_amplify = MagicMock()
+        mock_secrets = MagicMock()
+        mock_boto.side_effect = [mock_amplify, mock_secrets]
+
         assert rot.main(["--sync-only", "tester-1"]) == 0
+        mock_list.assert_not_called()
         mock_drift.assert_not_called()
         mock_rotate.assert_not_called()
-        mock_sync.assert_called_once()
+        mock_sync.assert_called_once_with(
+            amplify_client=mock_amplify,
+            secrets_client=mock_secrets,
+            app_id="app-123",
+            secret_id="sec-123",
+            indices=["1"],
+        )
+
+
+class TestTerraformProcessErrors:
+    @patch("rotate_tester_passwords.get_terraform_output")
+    def test_called_process_error_propagates_exit_code(self, mock_output, capsys):
+        mock_output.side_effect = subprocess.CalledProcessError(
+            returncode=3, cmd=["terraform", "output"]
+        )
+
+        assert rot.main(["tester-1"]) == 3
+        stderr = capsys.readouterr().err
+        assert "Error: Terraform command failed (exit 3)." in stderr
 
 
 class TestAwsErrorHandling:
     @patch("rotate_tester_passwords.list_all_branches")
     @patch("rotate_tester_passwords.boto3.client")
-    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    @patch(
+        "rotate_tester_passwords.get_terraform_output",
+        side_effect=["app-123", "sec-123"],
+    )
     def test_client_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
         mock_list.side_effect = ClientError(
             {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}},
@@ -346,7 +402,10 @@ class TestAwsErrorHandling:
 
     @patch("rotate_tester_passwords.list_all_branches")
     @patch("rotate_tester_passwords.boto3.client")
-    @patch("rotate_tester_passwords.get_terraform_output", side_effect=["app-123", "sec-123"])
+    @patch(
+        "rotate_tester_passwords.get_terraform_output",
+        side_effect=["app-123", "sec-123"],
+    )
     def test_botocore_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
         mock_list.side_effect = NoCredentialsError()
 
@@ -360,6 +419,11 @@ class TestCliArguments:
     def test_requires_targets_or_file(self):
         with pytest.raises(SystemExit) as exc:
             rot.main([])
+        assert exc.value.code == 2
+
+    def test_sync_only_without_targets_exits_with_usage_error(self):
+        with pytest.raises(SystemExit) as exc:
+            rot.main(["--sync-only"])
         assert exc.value.code == 2
 
     def test_rejects_both_targets_and_file(self, tmp_path):

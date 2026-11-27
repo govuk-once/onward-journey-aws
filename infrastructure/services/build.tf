@@ -3,6 +3,7 @@
 
 locals {
   # 1. Absolute paths
+  root_dir                 = abspath("${path.module}/../..")
   app_dir                  = abspath("${path.module}/../../app")
   core_staging_dir         = abspath("${path.module}/../../dist/core_layer")
   integrations_staging_dir = abspath("${path.module}/../../dist/integrations_layer")
@@ -14,7 +15,7 @@ locals {
 
   # 2. Track source code changes
   core_layer_triggers = {
-    lock_file    = filemd5("${local.app_dir}/uv.lock")
+    lock_file    = filemd5("${local.root_dir}/uv.lock")
     shared_utils = sha1(join("", [for f in fileset("${local.app_dir}/shared/utils/", "**/*.py") : filemd5("${local.app_dir}/shared/utils/${f}")]))
     build_script = sha1(local.core_build_command)
   }
@@ -24,7 +25,7 @@ locals {
     build_script = sha1(local.integrations_build_command)
   }
   agentcore_triggers = {
-    lock_file    = filemd5("${local.app_dir}/uv.lock")
+    lock_file    = filemd5("${local.root_dir}/uv.lock")
     source_file  = filemd5("${local.app_dir}/agentcore/orchestrator/orchestrator.py")
     main_file    = filemd5("${local.app_dir}/agentcore/orchestrator/main.py")
     prompts_file = filemd5("${local.app_dir}/agentcore/orchestrator/prompts.py")
@@ -43,6 +44,7 @@ locals {
 
     STAGING_DIR="${local.core_staging_dir}"
     OUTPUT_ZIP="${local.core_output_zip}"
+    ROOT_DIR="${local.root_dir}"
     APP_DIR="${local.app_dir}"
 
     # 1. Prepare staging directory
@@ -52,7 +54,7 @@ locals {
 
     # 2. INSTALL DEPENDENCIES
     echo "Installing external dependencies..."
-    cd "$APP_DIR"
+    cd "$ROOT_DIR"
 
     # Export base + lambda dependencies (excluding dev and agentcore)
     uv export --format requirements-txt --no-dev --extra lambdas -o "$STAGING_DIR/requirements.txt"
@@ -122,6 +124,7 @@ locals {
 
     STAGING_DIR="${local.agentcore_staging_dir}"
     OUTPUT_ZIP="${local.agentcore_output_zip}"
+    ROOT_DIR="${local.root_dir}"
     APP_DIR="${local.app_dir}"
 
     # Prepare staging directory
@@ -130,7 +133,7 @@ locals {
     mkdir -p "$STAGING_DIR"
 
     echo "Installing dependencies for AgentCore..."
-    cd "$APP_DIR"
+    cd "$ROOT_DIR"
 
     # Export base + agentcore dependencies (excluding dev and lambdas)
     uv export --format requirements-txt --no-dev --extra agentcore -o "$STAGING_DIR/requirements.txt"

@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 
 # Resolve app directory
-APP_ROOT = Path(__file__).resolve().parents[2]  # .../app
+REPO_ROOT = Path(__file__).resolve().parents[3]
+APP_ROOT = REPO_ROOT / "app"
 
 # Add app/shared so 'from integrations.factory import ...' resolves
 SHARED_DIR = APP_ROOT / "shared"

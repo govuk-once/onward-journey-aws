@@ -1,7 +1,7 @@
 [project]
 name = "onward-journey"
 version = "0.1.0"
-description = "GOV.UK Onward Journey backend"
+description = "GOV.UK Onward Journey"
 readme = "README.md"
 requires-python = ">=3.13.17"
 # Shared packages needed by BOTH Lambdas and the AgentCore runtime (will change when orchestrator lambda removed)
@@ -26,9 +26,6 @@ agentcore = [
     "httpx>=0.28.1",
 ]
 
-[tool.setuptools]
-packages = ["shared", "lambdas", "agentcore"]
-
 [dependency-groups]
 dev = [
     "boto3>=1.42.5",         # Pre-installed in Lambda, keep here for local IDE/Linting
@@ -48,15 +45,13 @@ filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20:bedrock_agentcore.*"
 ]
 addopts = "--tb=short --import-mode=importlib"
-testpaths = ["tests/unit"]
+testpaths = ["app/tests/unit"]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
 log_cli_date_format = "%H:%M:%S"
 pythonpath = [
     ".",
-    "..",
     "app",
-    "app/agentcore/orchestrator",
-    "agentcore/orchestrator"
+    "app/agentcore/orchestrator"
 ]

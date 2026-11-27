@@ -154,7 +154,28 @@ The Amplify frontend automatically scales the number of isolated branches based 
 All others deploy 2 branches so developers can check that the multibranch feature works while implementing changes.
 - **Dynamic credential generation:** Basic Auth credentials and WebSocket tokens are generated dynamically via Terraform `random` providers.
 - **Finding Credentials:** To retrieve the plain-text usernames and passwords for each branch, view the `${var.environment}/frontend/tester-credentials` secret in AWS Secrets Manager. URLs can be found in the Amplify section of AWS Console.
-- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. To rotate a password, you must force a replacement of the specific branch (e.g., `terraform apply -replace='aws_amplify_branch.testers["1"]'`).
+- **Rotating Credentials:** The Amplify branch resource uses `lifecycle { ignore_changes = [basic_auth_credentials] }` to prevent a perpetual Terraform diff caused by the AWS API not returning credentials. As a result, standard `terraform apply` runs will not update passwords. To rotate specific branches without destroying them or triggering a frontend rebuild, use `infrastructure/scripts/rotate_tester_passwords.py` from the repository root (the script runs a pre-flight drift check and aborts if there are unrelated pending Terraform changes):
+
+  **Passing targets directly (recommended):**
+  ```bash
+  uv run --project app python infrastructure/scripts/rotate_tester_passwords.py tester-1 tester-2
+  ```
+
+  **Using a local targets file:**
+  Copy `infrastructure/scripts/password-rotation-targets.example.json` to `infrastructure/scripts/password-rotation-targets.json` (gitignored), list the target branches (e.g. `["tester-1", "tester-2"]`), and run:
+  ```bash
+  uv run --project app python infrastructure/scripts/rotate_tester_passwords.py --targets-file infrastructure/scripts/password-rotation-targets.json
+  ```
+
+  **Recovering from a failed sync (without re-rotating passwords):**
+  ```bash
+  uv run --project app python infrastructure/scripts/rotate_tester_passwords.py --sync-only tester-1 tester-2
+  ```
+
+- **Testing the Rotation Script:** Unit tests live in `infrastructure/scripts/tests/` and run locally without AWS credentials or Terraform state:
+  ```bash
+  uv run --project app pytest infrastructure/scripts/tests/
+  ```
 ---
 
 #### Manual Build/Rebuild (Lambda Packaging)

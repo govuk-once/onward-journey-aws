@@ -29,8 +29,12 @@ class TestEmptyFiles:
     def test_empty_json_array_file_exits_cleanly_without_terraform(self, tmp_path):
         f = tmp_path / "empty.json"
         f.write_text("[]", encoding="utf-8")
-        with patch("rotate_tester_passwords.check_for_drift") as mock_drift:
+        with (
+            patch("rotate_tester_passwords.get_active_workspace") as mock_ws,
+            patch("rotate_tester_passwords.check_for_drift") as mock_drift,
+        ):
             assert rot.main(["--targets-file", str(f)]) == 0
+            mock_ws.assert_not_called()
             mock_drift.assert_not_called()
 
     def test_blank_file_returns_error(self, tmp_path, capsys):
@@ -40,6 +44,93 @@ class TestEmptyFiles:
         stderr = capsys.readouterr().err
         assert "Error:" in stderr
         assert "Expecting value" in stderr
+
+
+class TestWorkspaceAndConfirmation:
+    @patch("rotate_tester_passwords.subprocess.run")
+    def test_get_active_workspace_returns_stripped_name(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(returncode=0, stdout="  dev\n")
+        assert rot.get_active_workspace(tmp_path) == "dev"
+        mock_run.assert_called_once_with(
+            ["terraform", f"-chdir={tmp_path}", "workspace", "show"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    @pytest.mark.parametrize("bad_ws", ["default", "default\n", "", "   \n"])
+    def test_get_active_workspace_rejects_default_or_empty(self, bad_ws, tmp_path):
+        with patch(
+            "rotate_tester_passwords.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout=bad_ws),
+        ):
+            with pytest.raises(RuntimeError, match="default"):
+                rot.get_active_workspace(tmp_path)
+
+    @pytest.mark.parametrize("answer", ["yes", "YES", "  Yes  "])
+    def test_confirm_proceed_accepts_case_insensitive_yes(self, answer, capsys):
+        with patch("builtins.input", return_value=answer) as mock_input:
+            assert rot.confirm_proceed("dev", ["1", "4"]) is True
+        stdout = capsys.readouterr().out
+        assert "Active Terraform workspace: dev" in stdout
+        assert "Targets to rotate: tester-1, tester-4" in stdout
+        assert "'dev'" in mock_input.call_args.args[0]
+
+    @pytest.mark.parametrize("answer", ["no", "y", "", "nah"])
+    def test_confirm_proceed_rejects_non_yes_answers(self, answer):
+        with patch("builtins.input", return_value=answer):
+            assert rot.confirm_proceed("dev", ["1"]) is False
+
+    @pytest.mark.parametrize("exc", [EOFError, KeyboardInterrupt])
+    def test_confirm_proceed_handles_eof_and_keyboard_interrupt(self, exc):
+        with patch("builtins.input", side_effect=exc):
+            assert rot.confirm_proceed("dev", ["1"]) is False
+
+    @patch("rotate_tester_passwords.get_terraform_output")
+    @patch("builtins.input")
+    @patch("rotate_tester_passwords.subprocess.run")
+    def test_main_aborts_when_workspace_is_default(
+        self, mock_run, mock_input, mock_output, capsys
+    ):
+        mock_run.return_value = MagicMock(returncode=0, stdout="default\n")
+        assert rot.main(["tester-1"]) == 1
+        assert "default" in capsys.readouterr().err
+        mock_input.assert_not_called()
+        mock_output.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "argv,expected_summary",
+        [
+            (["tester-1", "tester-4"], "Targets to rotate: tester-1, tester-4"),
+            (
+                ["--sync-only", "tester-1"],
+                "--sync-only specified: skipping Terraform rotation for tester-1.",
+            ),
+        ],
+    )
+    def test_main_aborts_before_changes_when_confirmation_declined(
+        self, argv, expected_summary, capsys
+    ):
+        with (
+            patch(
+                "rotate_tester_passwords.get_active_workspace", return_value="prod"
+            ),
+            patch("builtins.input", return_value="no"),
+            patch("rotate_tester_passwords.get_terraform_output") as mock_output,
+            patch("rotate_tester_passwords.check_for_drift") as mock_drift,
+            patch("rotate_tester_passwords.rotate_in_terraform") as mock_rotate,
+            patch("rotate_tester_passwords.sync_branch_credentials") as mock_sync,
+        ):
+            assert rot.main(argv) == 1
+
+        stdout = capsys.readouterr().out
+        assert "Active Terraform workspace: prod" in stdout
+        assert expected_summary in stdout
+        assert "Cancelled by user; no changes made." in stdout
+        mock_output.assert_not_called()
+        mock_drift.assert_not_called()
+        mock_rotate.assert_not_called()
+        mock_sync.assert_not_called()
 
 
 class TestMultipleTargets:
@@ -108,8 +199,12 @@ class TestMultipleTargets:
         "rotate_tester_passwords.get_terraform_output",
         side_effect=["app-123", "sec-123"],
     )
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
     def test_prints_deduplicated_target_summary_before_apply(
         self,
+        mock_workspace,
+        mock_input,
         mock_output,
         mock_boto,
         mock_list,
@@ -118,12 +213,14 @@ class TestMultipleTargets:
         mock_sync,
         capsys,
     ):
-        # Simulate user cancelling at the Terraform prompt; if the summary is in
-        # stdout after main() aborts here, it must have printed before apply ran.
-        mock_rotate.side_effect = subprocess.CalledProcessError(1, "terraform")
+        # Use exit code 2 so this cannot be confused with a return-1 cancellation;
+        # if workspace + summary are in stdout after aborting inside apply, they
+        # must have printed before rotate_in_terraform ran.
+        mock_rotate.side_effect = subprocess.CalledProcessError(2, "terraform")
 
-        assert rot.main(["tester-4", "tester-1", "tester-4"]) == 1
+        assert rot.main(["tester-4", "tester-1", "tester-4"]) == 2
         captured = capsys.readouterr()
+        assert "Active Terraform workspace: dev" in captured.out
         assert "Targets to rotate: tester-4, tester-1" in captured.out
         mock_rotate.assert_called_once_with(rot.SERVICES_DIR, ["4", "1"])
         mock_sync.assert_not_called()
@@ -319,8 +416,12 @@ class TestRecoveryAndPreValidation:
         "rotate_tester_passwords.get_terraform_output",
         side_effect=["app-123", "sec-123"],
     )
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
     def test_main_aborts_before_terraform_if_target_branch_is_missing(
         self,
+        mock_workspace,
+        mock_input,
         mock_output,
         mock_boto,
         mock_list,
@@ -344,20 +445,28 @@ class TestRecoveryAndPreValidation:
         "rotate_tester_passwords.get_terraform_output",
         side_effect=["app-123", "sec-123"],
     )
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
     def test_sync_only_skips_preflight_and_terraform_apply(
         self,
+        mock_workspace,
+        mock_input,
         mock_output,
         mock_boto,
         mock_list,
         mock_drift,
         mock_rotate,
         mock_sync,
+        capsys,
     ):
         mock_amplify = MagicMock()
         mock_secrets = MagicMock()
         mock_boto.side_effect = [mock_amplify, mock_secrets]
 
         assert rot.main(["--sync-only", "tester-1"]) == 0
+        stdout = capsys.readouterr().out
+        assert "Active Terraform workspace: dev" in stdout
+        assert "--sync-only specified: skipping Terraform rotation for tester-1." in stdout
         mock_list.assert_not_called()
         mock_drift.assert_not_called()
         mock_rotate.assert_not_called()
@@ -372,7 +481,11 @@ class TestRecoveryAndPreValidation:
 
 class TestTerraformProcessErrors:
     @patch("rotate_tester_passwords.get_terraform_output")
-    def test_called_process_error_propagates_exit_code(self, mock_output, capsys):
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
+    def test_called_process_error_propagates_exit_code(
+        self, mock_workspace, mock_input, mock_output, capsys
+    ):
         mock_output.side_effect = subprocess.CalledProcessError(
             returncode=3, cmd=["terraform", "output"]
         )
@@ -389,7 +502,11 @@ class TestAwsErrorHandling:
         "rotate_tester_passwords.get_terraform_output",
         side_effect=["app-123", "sec-123"],
     )
-    def test_client_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
+    def test_client_error_exits_cleanly(
+        self, mock_workspace, mock_input, mock_output, mock_boto, mock_list, capsys
+    ):
         mock_list.side_effect = ClientError(
             {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}},
             "ListBranches",
@@ -406,7 +523,11 @@ class TestAwsErrorHandling:
         "rotate_tester_passwords.get_terraform_output",
         side_effect=["app-123", "sec-123"],
     )
-    def test_botocore_error_exits_cleanly(self, mock_output, mock_boto, mock_list, capsys):
+    @patch("builtins.input", return_value="yes")
+    @patch("rotate_tester_passwords.get_active_workspace", return_value="dev")
+    def test_botocore_error_exits_cleanly(
+        self, mock_workspace, mock_input, mock_output, mock_boto, mock_list, capsys
+    ):
         mock_list.side_effect = NoCredentialsError()
 
         assert rot.main(["tester-1"]) == 1

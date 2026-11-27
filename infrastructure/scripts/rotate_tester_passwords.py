@@ -4,7 +4,6 @@
 import argparse
 import base64
 import json
-import os
 import re
 import subprocess
 import sys
@@ -15,7 +14,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 SERVICES_DIR = Path(__file__).resolve().parent.parent / "services"
 TARGET_PATTERN = re.compile(r"tester-([1-9][0-9]*)")
-DEFAULT_REGION = "eu-west-2"
+AWS_REGION = "eu-west-2"
 
 
 def parse_targets(raw_targets: list[str]) -> list[str]:
@@ -40,6 +39,47 @@ def load_targets_from_file(path: Path) -> list[str]:
     if not isinstance(data, list):
         raise ValueError(f"{path} must contain a JSON array.")
     return parse_targets(data)
+
+
+def get_active_workspace(tf_dir: Path) -> str:
+    """Return the active Terraform workspace, aborting if it is 'default'."""
+    result = subprocess.run(
+        ["terraform", f"-chdir={tf_dir}", "workspace", "show"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    workspace = result.stdout.strip()
+    if not workspace or workspace == "default":
+        raise RuntimeError(
+            "Active Terraform workspace is 'default'. "
+            "Select a target workspace before rotating passwords."
+        )
+    return workspace
+
+
+def confirm_proceed(
+    workspace: str, indices: list[str], *, sync_only: bool = False
+) -> bool:
+    """Display the active workspace and target branches, requiring 'yes' confirmation."""
+    targets_summary = ", ".join(f"tester-{idx}" for idx in indices)
+    print(f"Active Terraform workspace: {workspace}")
+    if sync_only:
+        print(
+            f"--sync-only specified: skipping Terraform rotation for {targets_summary}."
+        )
+    else:
+        print(f"Targets to rotate: {targets_summary}")
+
+    try:
+        answer = input(
+            f"Type 'yes' to confirm proceeding in workspace '{workspace}': "
+        )
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+    return answer.strip().lower() == "yes"
 
 
 def check_for_drift(tf_dir: Path) -> None:
@@ -181,29 +221,24 @@ def main(argv: list[str] | None = None) -> int:
             print("No targets specified. Nothing to rotate.")
             return 0
 
+        workspace = get_active_workspace(SERVICES_DIR)
+        if not confirm_proceed(workspace, indices, sync_only=args.sync_only):
+            print("Cancelled by user; no changes made.")
+            return 1
+
         app_id = get_terraform_output(SERVICES_DIR, "amplify_app_id")
         secret_id = get_terraform_output(SERVICES_DIR, "tester_credentials_secret_id")
 
-        region = (
-            os.environ.get("AWS_REGION")
-            or os.environ.get("AWS_DEFAULT_REGION")
-            or DEFAULT_REGION
-        )
-        amplify_client = boto3.client("amplify", region_name=region)
-        secrets_client = boto3.client("secretsmanager", region_name=region)
+        amplify_client = boto3.client("amplify", region_name=AWS_REGION)
+        secrets_client = boto3.client("secretsmanager", region_name=AWS_REGION)
 
-        if args.sync_only:
-            targets_summary = ", ".join(f"tester-{idx}" for idx in indices)
-            print(f"--sync-only specified: skipping Terraform rotation for {targets_summary}.")
-        else:
+        if not args.sync_only:
             # Fail fast on bad targets before rotating in Terraform
             all_branches = list_all_branches(amplify_client, app_id)
             for idx in indices:
                 find_branch_name(all_branches, idx)
 
             check_for_drift(SERVICES_DIR)
-            targets_summary = ", ".join(f"tester-{idx}" for idx in indices)
-            print(f"Targets to rotate: {targets_summary}")
             rotate_in_terraform(SERVICES_DIR, indices)
 
         sync_branch_credentials(
